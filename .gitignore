@@ -1,0 +1,10 @@
+.venv
+.env
+gnn_package/data/ordinance_survey/
+gnn_package/data/
+notebooks/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.gpkg
