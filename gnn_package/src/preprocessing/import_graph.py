@@ -3,17 +3,16 @@
 import osmnx as ox
 
 
-def get_pedestrian_network(place_name, network_type="walk", to_crs="EPSG:27700"):
+def get_street_network_gdfs(place_name, to_crs="EPSG:27700"):
     """
-    Extract the walkable pedestrian network for a specified area.
+    Extract the walkable network for a specified area as GeoDataFrames.
 
     Parameters:
-    place_name (str): Name of the place (e.g., 'Berkeley, California')
-    network_type (str): Type of network to extract (default: 'walk')
+    place_name (str): Name of the place (e.g., 'Newcastle upon Tyne, UK')
     to_crs (str): Target coordinate reference system (default: 'EPSG:27700' for British National Grid)
 
     Returns:
-    G (networkx.MultiDiGraph): Network graph of pedestrian paths, projected to specified CRS
+    GeoDataFrame: Network edges as linestrings
     """
     # Configure OSMnx settings
     ox.settings.use_cache = True
@@ -27,31 +26,19 @@ def get_pedestrian_network(place_name, network_type="walk", to_crs="EPSG:27700")
     )
 
     try:
-        # Download the street network
         print(f"\nDownloading network for: {place_name}")
+        # Download and project the network
         G = ox.graph_from_place(
-            place_name,
-            network_type=network_type,
-            custom_filter=custom_filter,
-            simplify=True,
+            place_name, network_type="walk", custom_filter=custom_filter, simplify=True
         )
+        G = ox.project_graph(G, to_crs=to_crs)
 
-        # Get the original CRS
-        original_crs = G.graph["crs"]
-        print(f"Original network CRS: {original_crs}")
+        # Convert to GeoDataFrames and return only edges
+        nodes_gdf, edges_gdf = ox.graph_to_gdfs(G)
+        print(f"Network downloaded and projected to: {to_crs}")
+        print(f"Number of edges: {len(edges_gdf)}")
 
-        # Project the graph to the specified CRS
-        try:
-            G = ox.project_graph(G, to_crs=to_crs)
-            print(f"Network successfully projected to: {to_crs}")
-        except Exception as e:
-            print(f"Warning: Could not project to {to_crs}. Error: {str(e)}")
-            print("Falling back to UTM projection...")
-            # Fall back to UTM projection
-            G = ox.project_graph(G)
-            print(f"Network projected to UTM: {G.graph['crs']}")
-
-        return G
+        return edges_gdf
 
     except Exception as e:
         print(f"Error downloading network: {str(e)}")

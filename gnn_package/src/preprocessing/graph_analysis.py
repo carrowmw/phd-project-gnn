@@ -215,3 +215,48 @@ def analyze_graph_components(G, snapped_points_gdf, tolerance=1e-6):
     print(f"Maximum distance to network: {max_distance:.6f}")
 
     return result_gdf
+
+
+def validate_snapped_points(snapped_points_gdf, network_gdf, tolerance=6):
+    """
+    Validate that all snapped points exist in the network.
+
+    Parameters:
+    snapped_points_gdf (GeoDataFrame): GeoDataFrame of snapped points
+    network_gdf (GeoDataFrame): Network edges GeoDataFrame
+    tolerance (int): Number of decimal places for coordinate rounding
+
+    Returns:
+    GeoDataFrame: Only the valid points that exist in network
+    """
+    # Get all network nodes from the edges
+    network_nodes = set()
+    for idx, row in network_gdf.iterrows():
+        coords = list(row.geometry.coords)
+        for coord in coords:
+            network_nodes.add(tuple(round(x, tolerance) for x in coord))
+
+    # Validate points
+    valid_points = []
+    invalid_points = []
+
+    for idx, point in snapped_points_gdf.iterrows():
+        coords = tuple(
+            round(x, tolerance) for x in (point.geometry.x, point.geometry.y)
+        )
+        if coords in network_nodes:
+            valid_points.append(point)
+        else:
+            invalid_points.append(point.original_id)
+            print(f"Warning: Point {point.original_id} not found in network")
+
+    # Print summary
+    print("\nValidation Summary:")
+    print(f"Total points checked: {len(snapped_points_gdf)}")
+    print(f"Valid points: {len(valid_points)}")
+    print(f"Invalid points: {len(invalid_points)}")
+
+    if invalid_points:
+        print("\nInvalid point IDs:", invalid_points)
+
+    return gpd.GeoDataFrame(valid_points, crs=snapped_points_gdf.crs)
