@@ -1,7 +1,7 @@
 # gnn_package/src/preprocessing/__init__.py
 
 
-from .import_graph import get_street_network_gdfs
+from .graph_utils import get_street_network_gdfs
 from .graph_manipulation import (
     snap_points_to_network,
     connect_components,
