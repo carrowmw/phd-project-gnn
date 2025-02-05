@@ -142,3 +142,53 @@ def create_weighted_graph_from_paths(paths_gdf):
         print(f"Sizes of components: {[len(c) for c in components]}")
 
     return G
+
+
+def compute_adjacency_matrix(
+    adj_matrix: np.ndarray, sigma_squared=0.1, epsilon=0.5
+) -> np.ndarray:
+    """
+    Computes a weighted adjacency matrix from a distance matrix using a Gaussian kernel function.
+    The function first normalizes distances, then applies a Gaussian decay and thresholds weak connections.
+
+    Parameters:
+    -----------
+    adj_matrix : np.ndarray
+        Input matrix of distances between nodes
+    sigma_squared : float, default=0.1
+        Variance parameter that controls the rate of weight decay with distance.
+        Smaller values cause weights to decay more quickly, while larger values
+        preserve stronger long-range connections.
+    epsilon : float, default=0.95
+        Threshold for keeping connections. Any connection with weight below epsilon
+        is removed (set to 0). For small geographical areas, a lower value like 0.5
+        may be more appropriate to ensure connectivity.
+
+    Returns:
+    --------
+    np.ndarray
+        Weighted adjacency matrix where weights are computed using a Gaussian kernel
+        function (e^(-d²/σ²)) and thresholded by epsilon. Self-connections (diagonal
+        elements) are set to 0.
+
+    Notes:
+    ------
+    - Distances are normalized by dividing by 10000 before computation
+    - The Gaussian kernel means weights decay exponentially with squared distance
+    - Higher epsilon values lead to sparser graphs as more weak connections are removed
+    """
+    # sigma_squared is the variance of the Gaussian kernel which controls how quickly the connection strength decays with distance
+    # smaller sigma squared means weights decay more quickly with distance
+    # epsilon is the threshold for the weights
+    # a high value e.g. 0.95 means that only very strong connections are kept
+    # for small areas epsilon=0.5 will likely be fully connected
+    a = adj_matrix / 10000  # Normalize distances
+    a_squared = a * a  # Square distances
+    n = a.shape[0]
+    w_mask = np.ones([n, n]) - np.identity(n)  # Mask of ones except for the diagonal
+    w = (
+        np.exp(-a_squared / sigma_squared)
+        * (np.exp(-a_squared / sigma_squared) >= epsilon)
+        * w_mask
+    )  # Test whether the weights are greater than epsilon, apply the mask, and multiply again to return real values of weights
+    return w
