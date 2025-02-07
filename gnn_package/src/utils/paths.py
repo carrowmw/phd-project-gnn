@@ -23,6 +23,8 @@ DATA_DIR = PACKAGE_DIR / "data"
 
 # Urban Observatory data directory
 URBAN_OBSERVATORY_DATA_DIR = DATA_DIR / "urban_observatory"
+PRIVATE_SENSORS_DATA_DIR = URBAN_OBSERVATORY_DATA_DIR / "private_sensors"
+PUBLIC_SENSORS_DATA_DIR = URBAN_OBSERVATORY_DATA_DIR / "public_sensors"
 
 # Preprocessed data directories
 PREPROCESSED_DATA_DIR = DATA_DIR / "preprocessed"
