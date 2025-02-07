@@ -1,42 +1,224 @@
+import sys
+from typing import Dict, List, Tuple, Optional, NamedTuple
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Optional
+import nest_asyncio
+import asyncio
 import uoapi
 import private_uoapi
-from gnn_package import graph_utils
-from dataclasses import dataclass
+from gnn_package.src.preprocessing.graph_utils import get_sensor_name_id_map
 
 
-def get_timeseries_data_for_node(node_id):
-    """
-    Get time series data for a given node ID.
+@dataclass
+class NodeGroup:
+    """Groups of node IDs by API type"""
 
-    Parameters:
-    -----------
-    node_id : str
-        Node ID for the sensor
+    private_nodes: List[str]
+    public_nodes: List[str]
 
-    Returns:
-    --------
-    data : dict
-        Time series data
-    """
-    name_id_map = graph_utils.get_sensor_name_id_map()
-    sensor_name = name_id_map[node_id]
-    if node_id[0] == "1":
-        print(f"DEBUG: Getting data for {node_id} from Private API")
+
+@dataclass
+class APIStats:
+    attempted_calls: int = 0
+    successful_calls: int = 0
+    failed_calls: int = 0
+    errors: Dict[str, List[str]] = field(default_factory=lambda: {})
+
+
+class FetcherResponse(NamedTuple):
+    data: Dict[str, Optional[pd.Series]]
+    stats: APIStats
+
+
+class SensorDataFetcher:
+    def __init__(self):
+        self.name_id_map = get_sensor_name_id_map()  # Assuming this exists
+        self.id_name_map = {v: k for k, v in self.name_id_map.items()}
+        # Enable nested event loops for Jupyter
+        if "ipykernel" in sys.modules:
+            nest_asyncio.apply()
+        self.stats = APIStats()
+
+    def _convert_to_utc(self, series: pd.Series) -> pd.Series:
+        """Convert timestamp index to UTC if it isn't already"""
+        if not series.index.tz:
+            # If timezone naive, assume UTC
+            return pd.Series(
+                series.values,
+                index=pd.DatetimeIndex(series.index, tz=timezone.utc),
+            )
+        elif series.index.tz != timezone.utc:
+            # If different timezone, convert to UTC
+            return pd.Series(
+                series.values,
+                index=pd.DatetimeIndex(series.index).tz_convert(timezone.utc),
+            )
+        return series
+
+    def _log_error(self, node_id: str, error: str):
+        """Log error for a specific node"""
+        if node_id not in self.stats.errors:
+            self.stats.errors[node_id] = []
+        self.stats.errors[node_id].append(error)
+        self.stats.failed_calls += 1
+
+    def _group_nodes_by_api(self, node_ids: List[str]) -> NodeGroup:
+        """Group node IDs by which API they should use"""
+        private_nodes = []
+        public_nodes = []
+
+        for node_id in node_ids:
+            if node_id[0] == "1":
+                private_nodes.append(node_id)
+            elif node_id[0] in ["7", "8"]:
+                public_nodes.append(node_id)
+            else:
+                raise ValueError(f"Invalid node ID {node_id}")
+
+        return NodeGroup(private_nodes, public_nodes)
+
+    async def _fetch_private_data(
+        self, node_ids: List[str], days_back: int
+    ) -> Dict[str, pd.Series]:
+        """Fetch data for private API nodes"""
+        if not node_ids:
+            return {}
+
         private_config = private_uoapi.APIConfig()
         private_auth = private_uoapi.APIAuth(private_config)
         client = private_uoapi.APIClient(private_config, private_auth)
-        response = client.get_historical_traffic_counts(
-            locations=sensor_name, days_back=365
+
+        results = {}
+        for node_id in node_ids:
+            self.stats.attempted_calls += 1
+            sensor_name = self.id_name_map[node_id]
+            try:
+                response = client.get_historical_traffic_counts(
+                    locations=sensor_name, days_back=days_back
+                )
+                if response and "value" in response and "dt" in response:
+                    series = pd.Series(response["value"], index=response["dt"])
+                    series = self._convert_to_utc(series)
+                    results[node_id] = series
+                    self.stats.successful_calls += 1
+                else:
+                    self._log_error(node_id, "Empty or invalid response")
+                    results[node_id] = None
+            except Exception as e:
+                self._log_error(node_id, str(e))
+                results[node_id] = None
+
+        return results
+
+    async def _fetch_public_data(
+        self, node_ids: List[str], days_back: int
+    ) -> Dict[str, pd.Series]:
+        """Fetch data for public API nodes using async client"""
+        if not node_ids:
+            return {}
+
+        sensor_names = [self.id_name_map[node_id] for node_id in node_ids]
+
+        async_config = uoapi.AsyncAPIConfig(max_concurrent_requests=5)
+        async with uoapi.AsyncAPIClient(async_config) as client:
+            self.stats.attempted_calls += 1
+            responses = await client.get_sensor_data_batch(sensor_names, days_back)
+
+        results = {}
+        for node_id in node_ids:
+            sensor_name = self.id_name_map[node_id]
+            response = responses.get(sensor_name)
+
+            try:
+                if response and response.get("sensors"):
+                    data = response["sensors"][0].get("data", {}).get("Walking", [])
+                    if data:
+                        values = [obs["Value"] for obs in data]
+                        timestamps = [obs["Timestamp"] for obs in data]
+                        results[node_id] = pd.Series(
+                            values, index=pd.DatetimeIndex(timestamps)
+                        )
+                        self.stats.successful_calls += 1
+                    else:
+                        self._log_error(
+                            node_id, "No walking data available from Public API"
+                        )
+                        results[node_id] = None
+                else:
+                    self._log_error(node_id, "Empty or invalid response")
+                    results[node_id] = None
+            except Exception as e:
+                self._log_error(node_id, str(e))
+                results[node_id] = None
+
+        return results
+
+    async def _fetch_all_data(
+        self, node_ids: List[str], days_back: int
+    ) -> FetcherResponse:
+        """Fetch data from both APIs concurrently"""
+        # Reset stats for new batch
+        self.stats = APIStats()
+
+        node_groups = self._group_nodes_by_api(node_ids)
+
+        # Run both API fetches concurrently
+        private_task = self._fetch_private_data(node_groups.private_nodes, days_back)
+        public_task = self._fetch_public_data(node_groups.public_nodes, days_back)
+
+        private_results, public_results = await asyncio.gather(
+            private_task, public_task
         )
-    elif node_id[0] == "7" or "8":
-        print(f"DEBUG: Getting data for {node_id} from Public API")
-        client = uoapi.APIClient()
-        response = client.get_individual_raw_sensor_data(sensor_name, last_n_days=365)
-        data = response["sensors"][0]["data"]["Walking"]
-        return data
+
+        # Combine results
+        return FetcherResponse(
+            data={**private_results, **public_results}, stats=self.stats
+        )
+
+    def get_sensor_data_batch(
+        self, node_ids: List[str], days_back: int = 7
+    ) -> FetcherResponse:
+        """
+        Main entry point for fetching sensor data in batch
+
+        Parameters:
+        -----------
+        node_ids : List[str]
+            List of node IDs to fetch data for
+        days_back : int, optional
+            Number of days of historical data to fetch
+
+        Returns:
+        --------
+        FetcherResponse
+            Named tuple containing:
+            - data: Dict[str, Optional[pd.Series]]
+                Dictionary mapping node IDs to their time series data
+            - stats: APIStats
+                Stats on attempted, successful, and failed API calls
+        """
+        try:
+            # First try getting the current event loop
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If we're in a notebook, create a new loop
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            return loop.run_until_complete(self._fetch_all_data(node_ids, days_back))
+        except RuntimeError:
+            # Fallback if there's any issue
+            return asyncio.run(self._fetch_all_data(node_ids, days_back))
+
+    def get_timeseries_data_for_node(
+        self, node_id: str, days_back: int = 7
+    ) -> Optional[pd.Series]:
+        """
+        Get time series data for a single node (backward compatibility)
+        """
+        response = self.get_sensor_data_batch([node_id], days_back)
+        return response.get(node_id)
 
 
 @dataclass
@@ -66,6 +248,7 @@ class TimeSeriesPreprocessor:
             Number of steps to move the window
         gap_threshold : pd.Timedelta
             Maximum allowed time difference between consecutive points
+            e.g., pd.Timedelta(hours=1) for hourly data
         missing_value : float
             Value to use for marking missing data
         """

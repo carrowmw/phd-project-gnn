@@ -2,14 +2,114 @@
 
 import os
 import json
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import osmnx as ox
 import networkx as nx
-from pathlib import Path
+import geopandas as gpd
 import uoapi
 import private_uoapi
-from gnn_package import PREPROCESSED_GRAPH_DIR, URBAN_OBSERVATORY_DATA_DIR
+from shapely import wkt
+from shapely.geometry import Polygon
+from gnn_package import (
+    PREPROCESSED_GRAPH_DIR,
+    URBAN_OBSERVATORY_DATA_DIR,
+    PRIVATE_SENSORS_DATA_DIR,
+    PUBLIC_SENSORS_DATA_DIR,
+)
+
+
+def read_or_create_public_sensors_nodes():
+    FILE_PATH = PUBLIC_SENSORS_DATA_DIR / "public_sensors.shp"
+    if os.path.exists(FILE_PATH):
+        print("Reading public sensors from file")
+        public_sensors_gdf = gpd.read_file(FILE_PATH)
+        return public_sensors_gdf
+    else:
+        client = uoapi.APIClient()
+        print("Getting public sensors from API")
+        public_sensors = client.get_sensors(theme="People")
+        sensor_geometry = {
+            sensor["Sensor Name"]: sensor["Location (WKT)"]
+            for sensor in public_sensors["sensors"]
+        }
+        sensor_df = pd.DataFrame(
+            sensor_geometry.items(), columns=["location", "geometry"]
+        )
+        sensor_df["geometry"] = sensor_df["geometry"].apply(wkt.loads)
+        sensor_df["geometry"] = gpd.GeoSeries(sensor_df["geometry"])
+        print(f"DEBUG: Sensor geometry: {sensor_df['geometry']}")
+        public_sensors_gdf = gpd.GeoDataFrame(
+            sensor_df,
+            geometry="geometry",
+            crs="EPSG:4326",
+        )
+        print(f"DEBUG: Sensor geometry: {public_sensors_gdf['geometry']}")
+        print(f"DEBUG: Type of geometry: {type(public_sensors_gdf['geometry'])}")
+        public_sensors_gdf = public_sensors_gdf.to_crs("EPSG:27700")
+        print(f"DEBUG: CRS of public_sensors_gdf: {public_sensors_gdf.crs}")
+        # Add sensor IDs to the GeoDataFrame
+        sensor_name_id_map = get_sensor_name_id_map()
+        public_sensors_gdf["id"] = public_sensors_gdf["location"].apply(
+            lambda x: sensor_name_id_map[x]
+        )
+        public_sensors_gdf.to_file(FILE_PATH)
+        return public_sensors_gdf
+
+
+def read_or_create_private_sensor_nodes():
+    FILE_PATH = PRIVATE_SENSORS_DATA_DIR / "private_sensors.shp"
+    if os.path.exists(FILE_PATH):
+        print("Reading private sensors from file")
+        private_sensors_gdf = gpd.read_file(FILE_PATH)
+        return private_sensors_gdf
+    else:
+        config = private_uoapi.APIConfig()
+        auth = private_uoapi.APIAuth(config)
+        client = private_uoapi.APIClient(config, auth)
+        locations = client.get_sensor_locations()
+        private_sensors_gdf = gpd.GeoDataFrame(
+            locations["location"],
+            geometry=gpd.points_from_xy(locations["lon"], locations["lat"]),
+            crs="EPSG:4326",
+        )
+        private_sensors_gdf = private_sensors_gdf.to_crs("EPSG:27700")
+        # Add sensor IDs to the GeoDataFrame
+        sensor_name_id_map = get_sensor_name_id_map()
+        private_sensors_gdf["id"] = private_sensors_gdf["location"].apply(
+            lambda x: sensor_name_id_map[x]
+        )
+        print(f"DEBUG: Column names: {private_sensors_gdf.columns}")
+        private_sensors_gdf.to_file(FILE_PATH)
+        return private_sensors_gdf
+
+
+def get_bbox_transformed():
+    polygon_bbox = Polygon(
+        [
+            [-1.65327, 54.93188],
+            [-1.54993, 54.93188],
+            [-1.54993, 55.02084],
+            [-1.65327, 55.02084],
+        ]
+    )
+    #     polygon_bbox = Polygon(
+    #     [
+    #         [-1.61327, 54.96188],
+    #         [-1.59993, 54.96188],
+    #         [-1.59993, 54.98084],
+    #         [-1.61327, 54.98084],
+    #     ]
+    #   )
+
+    # Create a GeoDataFrame from the bounding box polygon
+    bbox_gdf = gpd.GeoDataFrame(geometry=[polygon_bbox], crs="EPSG:4326")
+
+    # Assuming your road data is in British National Grid (EPSG:27700)
+    # Transform the bbox to match the road data's CRS
+    bbox_transformed = bbox_gdf.to_crs("EPSG:27700")
+    return bbox_transformed
 
 
 def get_street_network_gdfs(place_name, to_crs="EPSG:27700"):
@@ -59,12 +159,14 @@ def get_sensor_name_id_map():
     Get the mapping between sensor names and IDs from the public
     and private Urban Observatory APIs.
 
+    location: id
+
     For the private API, where no IDs are provided, we generate
     unique IDs of the form '1XXXX' where XXXX is a zero-padded
     index (e.g. i=1 > 10001 and i=100 > 10100).
 
     Returns:
-    dict: Mapping between sensor names and IDs
+    dict: Mapping between sensor names (keys) and IDs (values)
     """
 
     if not os.path.exists(URBAN_OBSERVATORY_DATA_DIR / "sensor_name_id_map.json"):
@@ -73,14 +175,14 @@ def get_sensor_name_id_map():
         private_client = private_uoapi.APIClient(private_config, private_auth)
         private_sensors = private_client.get_sensor_locations()
         private_mapping = {
-            f"1{str(i).zfill(3)}": location
+            location: f"1{str(i).zfill(4)}"
             for i, location in enumerate(private_sensors["location"])
         }
 
         public_client = uoapi.APIClient()
         public_sensors = public_client.get_sensors(theme="People")
         public_mapping = {
-            sensor["Raw ID"]: sensor["Sensor Name"]
+            sensor["Sensor Name"]: sensor["Raw ID"]
             for sensor in public_sensors["sensors"]
         }
 
