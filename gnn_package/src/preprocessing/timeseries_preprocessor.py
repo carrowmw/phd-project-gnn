@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
+import aiohttp
 import nest_asyncio
 import asyncio
 import uoapi
@@ -24,7 +25,7 @@ class APIStats:
     attempted_calls: int = 0
     successful_calls: int = 0
     failed_calls: int = 0
-    errors: Dict[str, List[str]] = field(default_factory=lambda: {})
+    errors: Dict[str, List[str]] = field(default_factory=dict)
 
 
 class FetcherResponse(NamedTuple):
@@ -34,26 +35,36 @@ class FetcherResponse(NamedTuple):
 
 class SensorDataFetcher:
     def __init__(self):
-        self.name_id_map = get_sensor_name_id_map()  # Assuming this exists
+        self.name_id_map = get_sensor_name_id_map()
         self.id_name_map = {v: k for k, v in self.name_id_map.items()}
+        self.stats = APIStats()
+        self.lock = asyncio.Lock()  # prevent race conditions from multiple coroutines
         # Enable nested event loops for Jupyter
         if "ipykernel" in sys.modules:
             nest_asyncio.apply()
-        self.stats = APIStats()
+
+    async def __aenter__(self):
+        self._session = aiohttp.ClientSession()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        if self._session:
+            await self._session.close()
+        self._session = None
 
     def _convert_to_utc(self, series: pd.Series) -> pd.Series:
         """Convert timestamp index to UTC if it isn't already"""
-        if not series.index.tz:
-            # If timezone naive, assume UTC
-            return pd.Series(
-                series.values,
-                index=pd.DatetimeIndex(series.index, tz=timezone.utc),
-            )
+        # Ensure index is a DatetimeIndex
+        if not isinstance(series.index, pd.DatetimeIndex):
+            raise ValueError("Series index must be a DatetimeIndex")
+
+        # Localize naive timestamps to UTC
+        if series.index.tz is None:
+            series = pd.Series(series.values, index=series.index.tz_localize("UTC"))
+        # Convert to UTC if different timezone
         elif series.index.tz != timezone.utc:
-            # If different timezone, convert to UTC
-            return pd.Series(
-                series.values,
-                index=pd.DatetimeIndex(series.index).tz_convert(timezone.utc),
+            series = pd.Series(
+                series.values, index=series.index.tz_convert(timezone.utc)
             )
         return series
 
@@ -86,29 +97,77 @@ class SensorDataFetcher:
         if not node_ids:
             return {}
 
-        private_config = private_uoapi.APIConfig()
-        private_auth = private_uoapi.APIAuth(private_config)
-        client = private_uoapi.APIClient(private_config, private_auth)
-
         results = {}
-        for node_id in node_ids:
-            self.stats.attempted_calls += 1
-            sensor_name = self.id_name_map[node_id]
-            try:
-                response = client.get_historical_traffic_counts(
-                    locations=sensor_name, days_back=days_back
-                )
-                if response and "value" in response and "dt" in response:
-                    series = pd.Series(response["value"], index=response["dt"])
-                    series = self._convert_to_utc(series)
-                    results[node_id] = series
-                    self.stats.successful_calls += 1
-                else:
-                    self._log_error(node_id, "Empty or invalid response")
-                    results[node_id] = None
-            except Exception as e:
-                self._log_error(node_id, str(e))
-                results[node_id] = None
+        config = private_uoapi.APIConfig()
+
+        try:
+            # use context manager for auth and client
+            async with private_uoapi.APIAuth(config) as auth:
+                async with private_uoapi.APIClient(config, auth) as client:
+                    sem = asyncio.Semaphore(5)  # rate limiting
+
+                    async def fetch(node_id):
+                        async with sem:
+                            try:
+                                async with self.lock:
+                                    self.stats.attempted_calls += 1
+
+                                sensor_name = self.id_name_map[node_id]
+                                df = await client.get_historical_traffic_counts(
+                                    locations=sensor_name, days_back=days_back
+                                )
+                                # set the dt column as the index
+                                df.set_index("dt", inplace=True)
+                                # ensure the index is datetime
+                                df.index = pd.to_datetime(df.index)
+                                # save the index and value columns as a series
+                                series = pd.Series(df["value"].values, index=df.index)
+
+                                # print(f"DEBUG: {sensor_name} - {df}")
+                                # dt_index = pd.to_datetime(
+                                #     df["dt"],
+                                #     format="%Y-%m-%d %H:%M:%S GMT",
+                                # ).tz_localize(
+                                #     "GMT"
+                                # )  # first localize to GMT
+
+                                # if not isinstance(dt_index, pd.DatetimeIndex):
+                                #     raise ValueError(
+                                #         "Failed to parse datetime values from private API"
+                                #     )
+
+                                # # Create series with proper datetime index
+                                # series = (
+                                #     pd.Series(df["value"].values, index=dt_index),
+                                # )
+
+                                # # Now convert to UTC
+                                # series = self._convert_to_utc(series)
+                                # print(f"DEBUG: {sensor_name} - {series}")
+                                async with self.lock:
+                                    self.stats.successful_calls += 1
+                                return node_id, series
+
+                            except Exception as e:
+                                async with self.lock:
+                                    self.stats.failed_calls += 1
+                                    self.stats.errors.setdefault(node_id, []).append(
+                                        str(e)
+                                    )
+                            return node_id, None
+
+                    # Use asyncio.gather with semaphore
+                    tasks = [fetch(node_id) for node_id in node_ids]
+                    for future in asyncio.as_completed(tasks):
+                        node_id, result = await future
+                        results[node_id] = result
+        except Exception as e:
+            print(f"Error fetching private data: {e}")
+            raise
+        finally:
+            # cleanup any dangling sessions
+            if hasattr(self, "_session") and self._session:
+                await self._session.close()
 
         return results
 
@@ -119,63 +178,75 @@ class SensorDataFetcher:
         if not node_ids:
             return {}
 
-        sensor_names = [self.id_name_map[node_id] for node_id in node_ids]
+        results = {}
+        sensor_names = [self.id_name_map[nid] for nid in node_ids]
 
-        async_config = uoapi.AsyncAPIConfig(max_concurrent_requests=5)
-        async with uoapi.AsyncAPIClient(async_config) as client:
-            self.stats.attempted_calls += 1
+        async with uoapi.AsyncAPIClient(
+            uoapi.AsyncAPIConfig(max_concurrent_requests=5)
+        ) as client:
+            async with self.lock:
+                self.stats.attempted_calls += len(node_ids)
+
             responses = await client.get_sensor_data_batch(sensor_names, days_back)
 
-        results = {}
-        for node_id in node_ids:
-            sensor_name = self.id_name_map[node_id]
-            response = responses.get(sensor_name)
-
-            try:
-                if response and response.get("sensors"):
-                    data = response["sensors"][0].get("data", {}).get("Walking", [])
+            for node_id in node_ids:
+                try:
+                    sensor_name = self.id_name_map[node_id]
+                    data = (
+                        responses.get(sensor_name, {})
+                        .get("sensors", [{}])[0]
+                        .get("data", {})
+                        .get("Walking", [])
+                    )
+                    # print(data)
                     if data:
-                        values = [obs["Value"] for obs in data]
-                        timestamps = [obs["Timestamp"] for obs in data]
-                        results[node_id] = pd.Series(
-                            values, index=pd.DatetimeIndex(timestamps)
-                        )
-                        self.stats.successful_calls += 1
+                        # Convert timestamps to timezone-aware datetime index
+                        timestamps = pd.to_datetime(
+                            [x["Timestamp"] for x in data]
+                        ).tz_localize(
+                            "Europe/London"
+                        )  # Localize to observed timezone
+
+                        if not isinstance(timestamps, pd.DatetimeIndex):
+                            raise ValueError(
+                                "Failed to parse datetime values from public API"
+                            )
+
+                        # Create series with proper datetime index
+                        series = pd.Series([x["Value"] for x in data], index=timestamps)
+
+                        # Convert to UTC
+                        series = self._convert_to_utc(series)
+
+                        async with self.lock:
+                            self.stats.successful_calls += 1
+                        results[node_id] = series
                     else:
-                        self._log_error(
-                            node_id, "No walking data available from Public API"
-                        )
-                        results[node_id] = None
-                else:
-                    self._log_error(node_id, "Empty or invalid response")
-                    results[node_id] = None
-            except Exception as e:
-                self._log_error(node_id, str(e))
-                results[node_id] = None
+                        raise ValueError("No walking data")
+
+                except Exception as e:
+                    async with self.lock:
+                        self.stats.failed_calls += 1
+                        self.stats.errors.setdefault(node_id, []).append(str(e))
 
         return results
 
     async def _fetch_all_data(
         self, node_ids: List[str], days_back: int
     ) -> FetcherResponse:
-        """Fetch data from both APIs concurrently"""
-        # Reset stats for new batch
-        self.stats = APIStats()
+        self.stats = APIStats()  # Reset stats
 
-        node_groups = self._group_nodes_by_api(node_ids)
+        # Group nodes by API type
+        private = [nid for nid in node_ids if nid.startswith("1")]
+        public = [nid for nid in node_ids if nid[0] in {"7", "8"}]
 
-        # Run both API fetches concurrently
-        private_task = self._fetch_private_data(node_groups.private_nodes, days_back)
-        public_task = self._fetch_public_data(node_groups.public_nodes, days_back)
-
-        private_results, public_results = await asyncio.gather(
-            private_task, public_task
+        # Parallel fetch
+        private_data, public_data = await asyncio.gather(
+            self._fetch_private_data(private, days_back),
+            self._fetch_public_data(public, days_back),
         )
 
-        # Combine results
-        return FetcherResponse(
-            data={**private_results, **public_results}, stats=self.stats
-        )
+        return FetcherResponse(data={**private_data, **public_data}, stats=self.stats)
 
     def get_sensor_data_batch(
         self, node_ids: List[str], days_back: int = 7
@@ -203,10 +274,17 @@ class SensorDataFetcher:
             # First try getting the current event loop
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # If we're in a notebook, create a new loop
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            return loop.run_until_complete(self._fetch_all_data(node_ids, days_back))
+                # Create explicit session for notebook environment
+                async def wrapper():
+                    async with self:  # use the class's own context manager
+                        return await self._fetch_all_data(node_ids, days_back)
+
+                return loop.run_until_complete(wrapper())
+            else:
+                return loop.run_until_complete(
+                    self._fetch_all_data(node_ids, days_back)
+                )
+
         except RuntimeError:
             # Fallback if there's any issue
             return asyncio.run(self._fetch_all_data(node_ids, days_back))
