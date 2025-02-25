@@ -19,6 +19,8 @@ folium = "^0.19.4"
 mapclassify = "^2.8.1"
 uoapi = "^0.2.1"
 nest-asyncio = "^1.6.0"
+httpx = "^0.28.1"
+fastapi = "^0.115.8"
 
 
 [tool.poetry.group.dev.dependencies]

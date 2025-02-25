@@ -104,7 +104,7 @@ class SensorDataFetcher:
             # use context manager for auth and client
             async with private_uoapi.APIAuth(config) as auth:
                 async with private_uoapi.APIClient(config, auth) as client:
-                    sem = asyncio.Semaphore(5)  # rate limiting
+                    sem = asyncio.Semaphore(3)  # rate limiting
 
                     async def fetch(node_id):
                         async with sem:
