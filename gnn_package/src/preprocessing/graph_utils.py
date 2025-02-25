@@ -8,81 +8,41 @@ import pandas as pd
 import osmnx as ox
 import networkx as nx
 import geopandas as gpd
-import uoapi
 import private_uoapi
 from shapely import wkt
 from shapely.geometry import Polygon
 from gnn_package import (
     PREPROCESSED_GRAPH_DIR,
-    URBAN_OBSERVATORY_DATA_DIR,
-    PRIVATE_SENSORS_DATA_DIR,
-    PUBLIC_SENSORS_DATA_DIR,
+    SENSORS_DATA_DIR,
 )
 
 
-def read_or_create_public_sensors_nodes():
-    FILE_PATH = PUBLIC_SENSORS_DATA_DIR / "public_sensors.shp"
-    if os.path.exists(FILE_PATH):
-        print("Reading public sensors from file")
-        public_sensors_gdf = gpd.read_file(FILE_PATH)
-        return public_sensors_gdf
-    else:
-        client = uoapi.APIClient()
-        print("Getting public sensors from API")
-        public_sensors = client.get_sensors(theme="People")
-        sensor_geometry = {
-            sensor["Sensor Name"]: sensor["Location (WKT)"]
-            for sensor in public_sensors["sensors"]
-        }
-        sensor_df = pd.DataFrame(
-            sensor_geometry.items(), columns=["location", "geometry"]
-        )
-        sensor_df["geometry"] = sensor_df["geometry"].apply(wkt.loads)
-        sensor_df["geometry"] = gpd.GeoSeries(sensor_df["geometry"])
-        print(f"DEBUG: Sensor geometry: {sensor_df['geometry']}")
-        public_sensors_gdf = gpd.GeoDataFrame(
-            sensor_df,
-            geometry="geometry",
-            crs="EPSG:4326",
-        )
-        print(f"DEBUG: Sensor geometry: {public_sensors_gdf['geometry']}")
-        print(f"DEBUG: Type of geometry: {type(public_sensors_gdf['geometry'])}")
-        public_sensors_gdf = public_sensors_gdf.to_crs("EPSG:27700")
-        print(f"DEBUG: CRS of public_sensors_gdf: {public_sensors_gdf.crs}")
-        # Add sensor IDs to the GeoDataFrame
-        sensor_name_id_map = get_sensor_name_id_map()
-        public_sensors_gdf["id"] = public_sensors_gdf["location"].apply(
-            lambda x: sensor_name_id_map[x]
-        )
-        public_sensors_gdf.to_file(FILE_PATH)
-        return public_sensors_gdf
-
-
-def read_or_create_private_sensor_nodes():
-    FILE_PATH = PRIVATE_SENSORS_DATA_DIR / "private_sensors.shp"
+def read_or_create_sensor_nodes():
+    FILE_PATH = SENSORS_DATA_DIR / "sensors.shp"
     if os.path.exists(FILE_PATH):
         print("Reading private sensors from file")
-        private_sensors_gdf = gpd.read_file(FILE_PATH)
-        return private_sensors_gdf
+        sensors_gdf = gpd.read_file(FILE_PATH)
+        return sensors_gdf
     else:
-        config = private_uoapi.APIConfig()
-        auth = private_uoapi.APIAuth(config)
-        client = private_uoapi.APIClient(config, auth)
-        locations = client.get_sensor_locations()
-        private_sensors_gdf = gpd.GeoDataFrame(
+        config = private_uoapi.LSConfig()
+        auth = private_uoapi.LSAuth(config)
+        client = private_uoapi.LightsailWrapper(config, auth)
+        locations = client.get_traffic_sensors()
+        locations = pd.DataFrame(locations)
+        sensors_gdf = gpd.GeoDataFrame(
             locations["location"],
             geometry=gpd.points_from_xy(locations["lon"], locations["lat"]),
             crs="EPSG:4326",
         )
-        private_sensors_gdf = private_sensors_gdf.to_crs("EPSG:27700")
+        sensors_gdf = sensors_gdf.to_crs("EPSG:27700")
         # Add sensor IDs to the GeoDataFrame
         sensor_name_id_map = get_sensor_name_id_map()
-        private_sensors_gdf["id"] = private_sensors_gdf["location"].apply(
+        sensors_gdf["id"] = sensors_gdf["location"].apply(
             lambda x: sensor_name_id_map[x]
         )
-        print(f"DEBUG: Column names: {private_sensors_gdf.columns}")
-        private_sensors_gdf.to_file(FILE_PATH)
-        return private_sensors_gdf
+        print(f"DEBUG: Column names: {sensors_gdf.columns}")
+        sensors_gdf.to_file(FILE_PATH)
+        return sensors_gdf
 
 
 def get_bbox_transformed():
@@ -156,8 +116,7 @@ def get_street_network_gdfs(place_name, to_crs="EPSG:27700"):
 
 def get_sensor_name_id_map():
     """
-    Get the mapping between sensor names and IDs from the public
-    and private Urban Observatory APIs.
+    Create unique IDs for each sensor from the private UOAPI.
 
     location: id
 
@@ -169,41 +128,32 @@ def get_sensor_name_id_map():
     dict: Mapping between sensor names (keys) and IDs (values)
     """
 
-    if not os.path.exists(URBAN_OBSERVATORY_DATA_DIR / "sensor_name_id_map.json"):
-        private_config = private_uoapi.APIConfig()
-        private_auth = private_uoapi.APIAuth(private_config)
-        private_client = private_uoapi.APIClient(private_config, private_auth)
-        private_sensors = private_client.get_sensor_locations()
-        private_mapping = {
+    if not os.path.exists(SENSORS_DATA_DIR / "sensor_name_id_map.json"):
+        config = private_uoapi.LSConfig()
+        auth = private_uoapi.LSAuth(config)
+        client = private_uoapi.LightsailWrapper(config, auth)
+        sensors = client.get_traffic_sensors()
+        sensors = pd.DataFrame(sensors)
+        mapping = {
             location: f"1{str(i).zfill(4)}"
-            for i, location in enumerate(private_sensors["location"])
+            for i, location in enumerate(sensors["location"])
         }
-
-        public_client = uoapi.APIClient()
-        public_sensors = public_client.get_sensors(theme="People")
-        public_mapping = {
-            sensor["Sensor Name"]: sensor["Raw ID"]
-            for sensor in public_sensors["sensors"]
-        }
-
-        # Combine the two mappings
-        sensor_name_id_map = {**private_mapping, **public_mapping}
 
         with open(
-            URBAN_OBSERVATORY_DATA_DIR / "sensor_name_id_map.json",
+            SENSORS_DATA_DIR / "sensor_name_id_map.json",
             "w",
             encoding="utf-8",
         ) as f:
-            json.dump(sensor_name_id_map, f, indent=4)
+            json.dump(mapping, f, indent=4)
     else:
         with open(
-            URBAN_OBSERVATORY_DATA_DIR / "sensor_name_id_map.json",
+            SENSORS_DATA_DIR / "sensor_name_id_map.json",
             "r",
             encoding="utf-8",
         ) as f:
-            sensor_name_id_map = json.load(f)
+            mapping = json.load(f)
 
-    return sensor_name_id_map
+    return mapping
 
 
 def save_graph_data(adj_matrix, node_ids, prefix="graph"):

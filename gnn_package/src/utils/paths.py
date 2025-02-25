@@ -22,9 +22,7 @@ SRC_DIR = PACKAGE_DIR / "src"
 DATA_DIR = PACKAGE_DIR / "data"
 
 # Urban Observatory data directory
-URBAN_OBSERVATORY_DATA_DIR = DATA_DIR / "urban_observatory"
-PRIVATE_SENSORS_DATA_DIR = URBAN_OBSERVATORY_DATA_DIR / "private_sensors"
-PUBLIC_SENSORS_DATA_DIR = URBAN_OBSERVATORY_DATA_DIR / "public_sensors"
+SENSORS_DATA_DIR = DATA_DIR / "sensors"
 
 # Preprocessed data directories
 PREPROCESSED_DATA_DIR = DATA_DIR / "preprocessed"
@@ -39,7 +37,7 @@ PREPROCESSED_GRAPH_DIR = PREPROCESSED_DATA_DIR / "graphs"
 # Create directories if they don't exist
 DIRS: Dict[str, Path] = {
     "data": DATA_DIR,
-    "urban_observatory": URBAN_OBSERVATORY_DATA_DIR,
+    "sensors": SENSORS_DATA_DIR,
     "preprocessed": PREPROCESSED_DATA_DIR,
     # "interim_data": INTERIM_DATA_DIR,
     # "models": MODELS_DIR,
