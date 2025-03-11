@@ -378,19 +378,25 @@ class TimeSeriesPreprocessor:
 
         Returns:
         --------
-        X : np.ndarray
-            Array of shape (n_windows, n_nodes, window_size)
-        masks : np.ndarray
-            Binary masks of same shape as X
-        metadata : List[TimeWindow]
+        X_by_sensor : Dict[str, np.ndarray]
+            Dictionary mapping node IDs to their windowed arrays
+                Array of shape (n_windows, n_nodes, window_size)
+        masks_by_sensor : Dict[str, np.ndarray]
+            Dictionary mapping node IDs to their binary masks
+        metadata : Dict[str,List[TimeWindow]
             Metadata for each window
         """
-        all_windows = []
-        all_masks = []
-        window_metadata = []
+        X_by_sensor = {}
+        masks_by_sensor = {}
+        metadata_by_sensor = {}
 
         # Process each node's time series
         for node_id, series in time_series_dict.items():
+            # Initialize lists for this node
+            sensor_windows = []
+            sensor_masks = []
+            sensor_metadata = []
+
             # Find continuous segments
             segments = self.find_continuous_segments(series.index, series.values)
 
@@ -417,10 +423,10 @@ class TimeSeriesPreprocessor:
                     # Replace NaN with missing_value
                     window = np.where(mask, window, self.missing_value)
 
-                    all_windows.append(window)
-                    all_masks.append(mask)
+                    sensor_windows.append(window)
+                    sensor_masks.append(mask)
 
-                    window_metadata.append(
+                    sensor_metadata.append(
                         TimeWindow(
                             start_idx=start_seg + i,
                             end_idx=start_seg + i + self.window_size,
@@ -429,29 +435,59 @@ class TimeSeriesPreprocessor:
                         )
                     )
 
-        # Stack all windows
-        X = np.stack(all_windows)
-        masks = np.stack(all_masks)
+                # Only add if we found windows for this sensor
+                if sensor_windows:
+                    X_by_sensor[node_id] = np.stack(sensor_windows)
+                    masks_by_sensor[node_id] = np.stack(sensor_masks)
+                    metadata_by_sensor[node_id] = sensor_metadata
 
-        return X, masks, window_metadata
+        return X_by_sensor, masks_by_sensor, metadata_by_sensor
 
     def prepare_batch_data(
-        self, X: np.ndarray, masks: np.ndarray, adj_matrix: np.ndarray
+        self,
+        X_by_sensor: Dict[str, np.ndarray],
+        masks_by_sensor: Dict[str, np.ndarray],
+        adj_matrix: np.ndarray,
+        node_ids: List[str],
     ) -> Dict[str, np.ndarray]:
         """
         Prepare data for GNN training.
 
+        Parameters:
+        -----------
+        X_by_sensor : Dict[str, np.ndarray]
+            Dictionary mapping sensor IDs to their window arrays
+        masks_by_sensor : Dict[str, np.ndarray]
+            Dictionary mapping sensor IDs to their mask arrays
+        adj_matrix : np.ndarray
+            Adjacency matrix
+        node_ids : List[str]
+            List of node IDs in the same order as in the adjacency matrix
+
         Returns:
         --------
         dict containing:
-            - node_features: Time series windows
+            - node_features: Organized time series windows
             - adjacency: Adjacency matrix
             - mask: Binary mask for missing values
         """
+        # Organize features in the same order as the adjacency matrix
+        features = []
+        masks = []
+
+        for node_id in node_ids:
+            if node_id in X_by_sensor:
+                features.append(X_by_sensor[node_id])
+                masks.append(masks_by_sensor[node_id])
+            else:
+                # Handle missing sensors
+                # You might want to create a dummy placeholder or skip
+                pass
+
         return {
-            "node_features": X,
+            "node_features": features,  # Now a list of arrays organized by sensor
             "adjacency": adj_matrix,
-            "mask": masks.astype(np.float32),
+            "mask": masks,  # Also organized by sensor
         }
 
 
