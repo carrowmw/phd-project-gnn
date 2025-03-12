@@ -365,7 +365,9 @@ class TimeSeriesPreprocessor:
 
     def create_windows(
         self, time_series_dict: Dict[str, pd.Series], standardize: bool = True
-    ) -> Tuple[np.ndarray, np.ndarray, List[TimeWindow]]:
+    ) -> Tuple[
+        Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, List[TimeWindow]]
+    ]:
         """
         Create windowed data with masks for missing values.
 
@@ -437,8 +439,8 @@ class TimeSeriesPreprocessor:
 
                 # Only add if we found windows for this sensor
                 if sensor_windows:
-                    X_by_sensor[node_id] = np.stack(sensor_windows)
-                    masks_by_sensor[node_id] = np.stack(sensor_masks)
+                    X_by_sensor[node_id] = np.array(sensor_windows)
+                    masks_by_sensor[node_id] = np.array(sensor_masks)
                     metadata_by_sensor[node_id] = sensor_metadata
 
         return X_by_sensor, masks_by_sensor, metadata_by_sensor
