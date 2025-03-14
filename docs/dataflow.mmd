@@ -1,0 +1,61 @@
+flowchart TD
+    subgraph Input["Input Data"]
+        sensor_data["Sensor Data (time_series_dict)"]
+        graph_data["Graph Data (adj_matrix, node_ids)"]
+    end
+
+    subgraph Preproc["Preprocessing"]
+        preprocessor["TimeSeriesPreprocessor"]
+        compute_adj["compute_adjacency_matrix"]
+        sensor_data --> preprocessor
+        graph_data --> compute_adj
+
+        preprocessor --> windows_creation["create_windows()"]
+        windows_creation --> data_dict["X_by_sensor, masks_by_sensor, metadata_by_sensor"]
+
+        compute_adj --> weighted_adj["weighted_adj"]
+    end
+
+    subgraph DataLoad["DataLoading"]
+        dataset["SpatioTemporalDataset"]
+        dataloader["DataLoader"]
+
+        data_dict --> dataset
+        weighted_adj --> dataset
+
+        dataset --> dataset_getitem["__getitem__()"]
+        dataset_getitem --> item["Single Item (x, x_mask, y, y_mask)"]
+
+        dataset --> dataloader
+        dataloader --> collate_fn["collate_fn()"]
+        collate_fn --> batch["Batch (x:[batch,nodes,seq_len], adj)"]
+    end
+
+    subgraph TrainingProcess["Training"]
+        trainer["STGNNTrainer"]
+        model["STGNN Model"]
+
+        batch --> trainer
+        trainer --> train_epoch["train_epoch()"]
+
+        train_epoch --> reshape["Reshape tensors if needed"]
+        reshape --> model
+
+        model --> forward["forward() - Expects [batch,nodes,seq_len,features]"]
+        forward --> loss["Compute Loss"]
+        loss --> backprop["Backpropagation"]
+    end
+
+    subgraph OutputStage["Output"]
+        backprop --> trained_model["Trained Model"]
+        trained_model --> save["Save Model"]
+    end
+
+    %% Add class styling
+    classDef data fill:#f9f,stroke:#333,stroke-width:1px;
+    classDef process fill:#bbf,stroke:#333,stroke-width:1px;
+    classDef component fill:#bfb,stroke:#333,stroke-width:1px;
+
+    class sensor_data,graph_data,data_dict,weighted_adj,item,batch data;
+    class preprocessor,compute_adj,windows_creation,dataset_getitem,collate_fn,train_epoch,forward,loss,backprop process;
+    class dataset,dataloader,trainer,model,trained_model component;

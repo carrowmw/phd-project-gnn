@@ -16,7 +16,6 @@ from .graph_computation import (
 )
 
 from .timeseries_preprocessor import (
-    SensorDataFetcher,
     TimeSeriesPreprocessor,
 )
 
@@ -28,6 +27,5 @@ __all__ = [
     "connect_components",
     "create_adjacency_matrix",
     "compute_adjacency_matrix",
-    "SensorDataFetcher",
     "TimeSeriesPreprocessor",
 ]
