@@ -1,61 +1,30 @@
 flowchart TD
-    subgraph Input["Input Data"]
-        sensor_data["Sensor Data (time_series_dict)"]
-        graph_data["Graph Data (adj_matrix, node_ids)"]
+    subgraph Data_Collection
+        A[Private UOAPI] --> |Get Sensor Locations| B[sensor_locations]
+        A --> |Get Traffic Data| C[count_data]
+        C --> |Convert to DataFrame| D[counts_df]
+        D --> |Transform to time series dict| E[results_containing_data]
     end
 
-    subgraph Preproc["Preprocessing"]
-        preprocessor["TimeSeriesPreprocessor"]
-        compute_adj["compute_adjacency_matrix"]
-        sensor_data --> preprocessor
-        graph_data --> compute_adj
-
-        preprocessor --> windows_creation["create_windows()"]
-        windows_creation --> data_dict["X_by_sensor, masks_by_sensor, metadata_by_sensor"]
-
-        compute_adj --> weighted_adj["weighted_adj"]
+    subgraph Graph_Processing
+        F[Load Graph Data] --> |"load_graph_data(prefix='25022025_test')"| G[adj_matrix, node_ids]
+        G --> |"compute_adjacency_matrix()"| H[weighted_adj]
     end
 
-    subgraph DataLoad["DataLoading"]
-        dataset["SpatioTemporalDataset"]
-        dataloader["DataLoader"]
-
-        data_dict --> dataset
-        weighted_adj --> dataset
-
-        dataset --> dataset_getitem["__getitem__()"]
-        dataset_getitem --> item["Single Item (x, x_mask, y, y_mask)"]
-
-        dataset --> dataloader
-        dataloader --> collate_fn["collate_fn()"]
-        collate_fn --> batch["Batch (x:[batch,nodes,seq_len], adj)"]
+    subgraph Data_Preprocessing
+        E --> |"TimeSeriesPreprocessor.create_windows()"| I[X_by_sensor, masks_by_sensor]
+        I --> |"Filter valid nodes"| J[valid_sensors]
+        J --> |"Create subgraph for valid nodes"| K[valid_adj, valid_node_ids]
+        K --> |"Split data into train/val"| L[train/val datasets]
+        L --> |"create_dataloader()"| M[train_loader, val_loader]
     end
 
-    subgraph TrainingProcess["Training"]
-        trainer["STGNNTrainer"]
-        model["STGNN Model"]
-
-        batch --> trainer
-        trainer --> train_epoch["train_epoch()"]
-
-        train_epoch --> reshape["Reshape tensors if needed"]
-        reshape --> model
-
-        model --> forward["forward() - Expects [batch,nodes,seq_len,features]"]
-        forward --> loss["Compute Loss"]
-        loss --> backprop["Backpropagation"]
+    subgraph Model_Training
+        M --> |"train_model()"| N[STGNN model]
+        N --> |"Train each epoch"| O[Trained model]
+        O --> |"Save model"| P[stgnn_model.pth]
     end
 
-    subgraph OutputStage["Output"]
-        backprop --> trained_model["Trained Model"]
-        trained_model --> save["Save Model"]
-    end
-
-    %% Add class styling
-    classDef data fill:#f9f,stroke:#333,stroke-width:1px;
-    classDef process fill:#bbf,stroke:#333,stroke-width:1px;
-    classDef component fill:#bfb,stroke:#333,stroke-width:1px;
-
-    class sensor_data,graph_data,data_dict,weighted_adj,item,batch data;
-    class preprocessor,compute_adj,windows_creation,dataset_getitem,collate_fn,train_epoch,forward,loss,backprop process;
-    class dataset,dataloader,trainer,model,trained_model component;
+    B -.-> E
+    G -.-> K
+    H -.-> K

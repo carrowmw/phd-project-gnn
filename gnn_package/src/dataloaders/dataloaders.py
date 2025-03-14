@@ -141,15 +141,15 @@ def collate_fn(batch):
         # Reshape mask to match input shape
         x_mask = x_mask[:, :, : x.shape[2], :]
 
-    print(f"DEBUG: Processed x shape: {x.shape}")
-    print(f"DEBUG: Processed x_mask shape: {x_mask.shape}")
-    print(f"DEBUG: Processed y shape: {y.shape}")
-    print(f"DEBUG: Processed y_mask shape: {y_mask.shape}")
+    # print(f"DEBUG: Processed x shape: {x.shape}")
+    # print(f"DEBUG: Processed x_mask shape: {x_mask.shape}")
+    # print(f"DEBUG: Processed y shape: {y.shape}")
+    # print(f"DEBUG: Processed y_mask shape: {y_mask.shape}")
 
     # All samples have the same adjacency matrix
     adj = batch[0]["adj"]
 
-    print(f"Batch shape: {x.shape}")  # Should be [batch, num_nodes, seq_len, 1]
+    print(f"DEBUG: Batch shape: {x.shape}")  # Should be [batch, num_nodes, seq_len, 1]
 
     return {
         "x": x,
