@@ -31,6 +31,7 @@ class GraphConvolution(nn.Module):
         x: Node features [batch_size, num_nodes, in_features]
         adj: Adjacency matrix [num_nodes, num_nodes]
         """
+        # print(f"DEBUG: GraphConvolution.forward - x shape: {x.shape}")
         # First transform node features
         support = torch.matmul(x, self.weight)  # [batch_size, num_nodes, out_features]
 
@@ -48,7 +49,9 @@ class GraphConvolution(nn.Module):
 
         # Propagate node features using normalized adjacency
         output = torch.matmul(normalized_adj, support)
+        # print(f"DEBUG: GraphConvolution.forward - output shape: {output.shape}")
 
+        # Add bias if needed)
         if self.bias is not None:
             return output + self.bias
         else:
@@ -89,45 +92,53 @@ class TemporalGCN(nn.Module):
         adj: Adjacency matrix [num_nodes, num_nodes]
         mask: Mask for valid values [batch_size, num_nodes, seq_len]
         """
-        batch_size, num_nodes, seq_len, feat_dim = x.size()
+        batch_size, num_nodes, seq_len, features = x.size()
 
-        # Process each time step with GCN
-        gcn_outputs = []
+        # Process each time step through the GCN layers
+        outputs = []
         for t in range(seq_len):
-            # Get features at current time step
-            x_t = x[:, :, t, :]  # [batch_size, num_nodes, input_dim]
+            # Get features at this time step
+            x_t = x[:, :, t, :]  # [batch_size, num_nodes, features]
 
-            # Apply graph convolution
-            h = F.relu(self.gc1(x_t, adj))
-            h = self.dropout(h)
-            h = F.relu(self.gc2(h, adj))
-            h = self.dropout(h)
+            # Apply GC layers
+            h = self.gc1(x_t, adj)  # First GC layer
+            h = F.relu(h)  # Activation
+            h = self.dropout(h)  # Apply dropout
+            h = self.gc2(h, adj)  # Second GC layer
 
-            gcn_outputs.append(h)
+            outputs.append(h)
 
-        # Stack GCN outputs along time dimension
-        gcn_out = torch.stack(
-            gcn_outputs, dim=2
+        # Stack outputs along time dimension
+        out_stacked = torch.stack(
+            outputs, dim=2
         )  # [batch_size, num_nodes, seq_len, hidden_dim]
 
-        # Reshape for RNN: combine batch and nodes
-        rnn_in = gcn_out.reshape(batch_size * num_nodes, seq_len, -1)
+        # Reshape for GRU: [batch_size * num_nodes, seq_len, hidden_dim]
+        out_gru = out_stacked.view(batch_size * num_nodes, seq_len, -1)
 
-        # Apply RNN
-        rnn_out, _ = self.gru(rnn_in)
+        # Apply GRU for temporal modeling
+        out_gru, _ = self.gru(out_gru)
 
-        # Reshape back
-        rnn_out = rnn_out.reshape(batch_size, num_nodes, seq_len, -1)
+        # Reshape back: [batch_size, num_nodes, seq_len, hidden_dim]
+        out_reshaped = out_gru.view(batch_size, num_nodes, seq_len, -1)
 
-        # Apply output layer
-        out = self.fc_out(rnn_out)
+        # Apply final FC layer for each time step
+        out_final = self.fc_out(out_reshaped)
 
         # Apply mask if provided
         if mask is not None:
-            mask = mask.unsqueeze(-1)  # Add feature dimension
-            out = out * mask  # Zero out invalid positions
+            # Ensure mask has right shape
+            if len(mask.shape) == 3:  # [batch, nodes, seq_len]
+                mask = mask.unsqueeze(-1)  # Add feature dimension
 
-        return out
+            # Expand mask if needed
+            if mask.shape[3] == 1 and out_final.shape[3] > 1:
+                mask = mask.expand(-1, -1, -1, out_final.shape[3])
+
+            # Apply mask
+            out_final = out_final * mask
+
+        return out_final
 
 
 class STGNN(nn.Module):
@@ -169,6 +180,11 @@ class STGNN(nn.Module):
         Predictions [batch_size, num_nodes, horizon, output_dim]
         """
         batch_size, num_nodes, seq_len, _ = x.size()
+        print(f"DEBUG: STGNN.forward - input shape: {x.shape}")
+
+        # Enocde the input sequence
+        encoded = self.encoder(x, adj, x_mask)
+        print(f"STGNN.forward - encoded shape: {encoded.shape}")
 
         # Encode the input sequence
         encoded = self.encoder(x, adj, x_mask)
@@ -214,9 +230,17 @@ class STGNNTrainer:
             y_mask = batch["y_mask"].to(self.device)
             adj = batch["adj"].to(self.device)
 
+            print(
+                f"DEBUG: STGNNTrainer.train_epoch before model forward - x shape: {x.shape}, x_mask shape: {x_mask.shape}"
+            )
+
             # Forward pass
             self.optimizer.zero_grad()
             y_pred = self.model(x, adj, x_mask)
+
+            print(
+                f"DEBUG: STGNNTrainer.train_epoch after model forward - y_pred shape: {y_pred.shape}, y shape: {y.shape}"
+            )
 
             # Compute loss on valid points only
             loss = self.criterion(y_pred, y)

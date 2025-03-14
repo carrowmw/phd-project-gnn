@@ -39,7 +39,9 @@ def preprocess_data(
         - adj_matrix: Adjacency matrix
         - node_ids: List of node IDs
     """
+
     print("Loading graph data...")
+
     adj_matrix, node_ids, metadata = preprocessing.load_graph_data(
         prefix=graph_prefix, return_df=False
     )
