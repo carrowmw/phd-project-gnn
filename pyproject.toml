@@ -22,10 +22,15 @@ nest-asyncio = "^1.6.0"
 httpx = "^0.28.1"
 fastapi = "^0.115.8"
 tqdm = "^4.67.1"
+seaborn = "^0.13.2"
+private-uoapi = {path = "/Users/administrator/Code/python/private-uo-api", develop = true}
 
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"
+umap = "^0.1.1"
+osmnx = "^2.0.1"
+nbstripout = "^0.8.1"
 
 [build-system]
 requires = ["poetry-core"]

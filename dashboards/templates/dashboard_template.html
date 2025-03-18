@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Sensor Window Analysis Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .dashboard-header {
+            background-color: #4C78A8;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .dashboard-section {
+            padding: 20px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        h1 {
+            margin: 0;
+        }
+
+        h2 {
+            color: #2C3E50;
+            margin-top: 0;
+        }
+
+        .viz-container {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Sensor Time Window Analysis Dashboard</h1>
+            <p>Window Size: {{window_size}} time steps</p>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>Data Availability Overview</h2>
+            <p>This heatmap shows when data is available across all sensors. Darker blue indicates data availability.
+            </p>
+            <div class="viz-container">
+                {{data_avail_fig}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>Time Windows for Top Sensor (ID: {{top_sensor}})</h2>
+            <p>This visualization shows the raw data for the sensor with the most data points, highlighting continuous
+                segments and example windows.</p>
+            <div class="viz-container">
+                {{top_sensor_fig}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>Window Count Distribution</h2>
+            <p>This bar chart shows the number of available windows for each sensor.</p>
+            <div class="viz-container">
+                {{window_counts_fig}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>Daily Traffic Patterns</h2>
+            <p>These heatmaps show the average traffic patterns by hour of day and day of week for top sensors.</p>
+            <div class="viz-container">
+                {{daily_patterns_fig}}
+            </div>
+        </div>
+
+        <!-- PCA Section - Will be included conditionally -->
+        {{#pca_fig}}
+        <div class="dashboard-section">
+            <h2>PCA of Sensor Windows</h2>
+            <p>This scatter plot shows a 2D representation of the window patterns across sensors using Principal
+                Component Analysis.</p>
+            <div class="viz-container">
+                {{pca_fig}}
+            </div>
+        </div>
+        {{/pca_fig}}
+    </div>
+</body>
+
+</html>

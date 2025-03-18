@@ -26,13 +26,16 @@ class GraphConvolution(nn.Module):
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
-    def forward(self, x, adj):
+    def forward(self, x, adj, mask=None):
         """
         x: Node features [batch_size, num_nodes, in_features]
         adj: Adjacency matrix [num_nodes, num_nodes]
         """
         # print(f"DEBUG: GraphConvolution.forward - x shape: {x.shape}")
         # First transform node features
+        if mask is not None:
+            x = x * mask
+
         support = torch.matmul(x, self.weight)  # [batch_size, num_nodes, out_features]
 
         # Then propagate using normalized adjacency matrix
