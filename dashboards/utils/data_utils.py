@@ -1,3 +1,4 @@
+import json
 import pickle
 import numpy as np
 import pandas as pd
@@ -32,3 +33,9 @@ def find_continuous_segments(
         segments.append((start_idx, len(time_index)))
 
     return segments
+
+
+# Load sensor location data from file
+def load_sensor_geojson(file_path="dashboards/data/sensors.geojson"):
+    with open(file_path, "r", encoding="utf8") as f:
+        return json.load(f)

@@ -2,104 +2,305 @@
 <html>
 
 <head>
-    <title>Sensor Window Analysis Dashboard</title>
+    <title>Sensor Analysis Dashboard</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #343a40;
         }
 
         .dashboard-container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             background-color: white;
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
         }
 
         .dashboard-header {
-            background-color: #4C78A8;
+            background: linear-gradient(135deg, #4c78a8 0%, #345d8a 100%);
             color: white;
-            padding: 20px;
+            padding: 25px;
             text-align: center;
         }
 
         .dashboard-section {
-            padding: 20px;
-            margin-bottom: 20px;
-            border-bottom: 1px solid #eee;
+            padding: 25px;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #e9ecef;
         }
 
         h1 {
             margin: 0;
+            font-size: 2.2rem;
+            font-weight: 600;
         }
 
         h2 {
             color: #2C3E50;
             margin-top: 0;
+            font-size: 1.8rem;
+            font-weight: 500;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eaeaea;
+        }
+
+        .dashboard-description {
+            max-width: 800px;
+            margin: 15px auto;
+            font-size: 1.1rem;
+            opacity: 0.9;
         }
 
         .viz-container {
             margin-top: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-tabs {
+            display: flex;
+            background-color: #f1f3f5;
+            padding: 0;
+            margin: 0;
+            list-style: none;
+            overflow-x: auto;
+            white-space: nowrap;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .nav-tabs li {
+            margin: 0;
+        }
+
+        .nav-tabs li a {
+            display: inline-block;
+            padding: 12px 20px;
+            text-decoration: none;
+            color: #495057;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .nav-tabs li a:hover {
+            background-color: #e9ecef;
+            border-bottom: 3px solid #4c78a8;
+            color: #4c78a8;
+        }
+
+        .nav-tabs li a.active {
+            background-color: white;
+            border-bottom: 3px solid #4c78a8;
+            color: #4c78a8;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 25px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .dashboard-footer {
+            background-color: #343a40;
+            color: white;
+            text-align: center;
+            padding: 15px;
+            font-size: 0.9rem;
+        }
+
+        .dashboard-footer a {
+            color: #9ec5fe;
+            text-decoration: none;
+        }
+
+        .dashboard-footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-header {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+            }
+
+            .dashboard-section {
+                padding: 15px;
+            }
         }
     </style>
+
+    <!-- Include any necessary JavaScript for tab switching -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Tab switching functionality
+            const tabLinks = document.querySelectorAll('.nav-tabs a');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabLinks.forEach(link => {
+                link.addEventListener('click', function (e) {
+                    e.preventDefault();
+
+                    // Deactivate all tabs
+                    tabLinks.forEach(l => l.classList.remove('active'));
+                    tabContents.forEach(c => c.classList.remove('active'));
+
+                    // Activate clicked tab
+                    this.classList.add('active');
+                    const targetTab = document.querySelector(this.getAttribute('href'));
+                    if (targetTab) {
+                        targetTab.classList.add('active');
+                    }
+                });
+            });
+
+            // Activate first tab by default
+            if (tabLinks.length > 0) {
+                tabLinks[0].click();
+            }
+        });
+    </script>
 </head>
 
 <body>
     <div class="dashboard-container">
         <div class="dashboard-header">
-            <h1>Sensor Time Window Analysis Dashboard</h1>
-            <p>Window Size: {{window_size}} time steps</p>
-        </div>
-
-        <div class="dashboard-section">
-            <h2>Data Availability Overview</h2>
-            <p>This heatmap shows when data is available across all sensors. Darker blue indicates data availability.
+            <h1>Traffic Sensor Analysis Dashboard</h1>
+            <p class="dashboard-description">
+                Interactive visualization and analysis of traffic sensor data with advanced analytics for pattern
+                recognition and data quality assessment.
             </p>
-            <div class="viz-container">
-                {{data_avail_fig}}
+        </div>
+
+        <!-- Tab Navigation -->
+        <ul class="nav-tabs">
+            <li><a href="#overview-tab" class="active">Overview</a></li>
+            <li><a href="#sensor-analysis-tab">Sensor Analysis</a></li>
+            <li><a href="#data-quality-tab">Data Quality</a></li>
+            <li><a href="#patterns-tab">Traffic Patterns</a></li>
+            <li><a href="#advanced-tab">Advanced Analysis</a></li>
+        </ul>
+
+        <!-- Tab Content -->
+        <!-- OVERVIEW TAB -->
+        <div id="overview-tab" class="tab-content active">
+            <div class="dashboard-section">
+                <h2>Sensor Map</h2>
+                <p>Geographic distribution of sensors colored by data completeness percentage.</p>
+                <div class="viz-container">
+                    {{sensor_map_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Data Availability</h2>
+                <p>Heatmap showing when data is available across sensors over time.</p>
+                <div class="viz-container">
+                    {{data_avail_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Sensors Comparison</h2>
+                <p>Interactive comparison of traffic patterns from top sensors.</p>
+                <div class="viz-container">
+                    {{sensors_comparison_fig}}
+                </div>
             </div>
         </div>
 
-        <div class="dashboard-section">
-            <h2>Time Windows for Top Sensor (ID: {{top_sensor}})</h2>
-            <p>This visualization shows the raw data for the sensor with the most data points, highlighting continuous
-                segments and example windows.</p>
-            <div class="viz-container">
-                {{top_sensor_fig}}
+        <!-- SENSOR ANALYSIS TAB -->
+        <div id="sensor-analysis-tab" class="tab-content">
+            <div class="dashboard-section">
+                <h2>Top Sensor Analysis (ID: {{top_sensor}})</h2>
+                <p>Detailed analysis of data from the sensor with the most readings.</p>
+                <div class="viz-container">
+                    {{top_sensor_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Calendar Heatmap</h2>
+                <p>Traffic patterns by day of week and hour of day for the top sensor.</p>
+                <div class="viz-container">
+                    {{calendar_heatmap_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Window Count Distribution</h2>
+                <p>Number of available time windows (size={{window_size}}) for each sensor.</p>
+                <div class="viz-container">
+                    {{window_counts_fig}}
+                </div>
             </div>
         </div>
 
-        <div class="dashboard-section">
-            <h2>Window Count Distribution</h2>
-            <p>This bar chart shows the number of available windows for each sensor.</p>
-            <div class="viz-container">
-                {{window_counts_fig}}
+        <!-- DATA QUALITY TAB -->
+        <div id="data-quality-tab" class="tab-content">
+            <div class="dashboard-section">
+                <h2>Completeness Trend</h2>
+                <p>How data completeness changes over time across all sensors.</p>
+                <div class="viz-container">
+                    {{completeness_trend_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Monthly Coverage Matrix</h2>
+                <p>Monthly data coverage percentage for top sensors.</p>
+                <div class="viz-container">
+                    {{coverage_matrix_fig}}
+                </div>
             </div>
         </div>
 
-        <div class="dashboard-section">
-            <h2>Daily Traffic Patterns</h2>
-            <p>These heatmaps show the average traffic patterns by hour of day and day of week for top sensors.</p>
-            <div class="viz-container">
-                {{daily_patterns_fig}}
+        <!-- TRAFFIC PATTERNS TAB -->
+        <div id="patterns-tab" class="tab-content">
+            <div class="dashboard-section">
+                <h2>Daily Traffic Patterns</h2>
+                <p>Average traffic patterns by hour of day and day of week for top sensors.</p>
+                <div class="viz-container">
+                    {{daily_patterns_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Weekday vs. Weekend Profiles</h2>
+                <p>Comparison of traffic patterns between weekdays and weekends.</p>
+                <div class="viz-container">
+                    {{time_of_day_fig}}
+                </div>
             </div>
         </div>
 
-        <!-- PCA Section - Will be included conditionally -->
-        {{#pca_fig}}
-        <div class="dashboard-section">
-            <h2>PCA of Sensor Windows</h2>
-            <p>This scatter plot shows a 2D representation of the window patterns across sensors using Principal
-                Component Analysis.</p>
-            <div class="viz-container">
-                {{pca_fig}}
+        <!-- ADVANCED ANALYSIS TAB -->
+        <div id="advanced-tab" class="tab-content">
+            <div class="dashboard-section">
+                <h2>Sensor Clustering</h2>
+                <p>Clustering of sensors based on similar traffic patterns.</p>
+                <div class="viz-container">
+                    {{sensor_clustering_fig}}
+                </div>
             </div>
         </div>
-        {{/pca_fig}}
+
+        <div class="dashboard-footer">
+            <p>Traffic Sensor Analysis Dashboard | Created with Python and Plotly using data from <a href="https://newcastle.urbanobservatory.ac.uk/">Urban Observatory</a> | <a href="https://carrow.me.uk">Carrow Morris-Wiltshire</a> 2025</p>
+        </div>
     </div>
 </body>
 

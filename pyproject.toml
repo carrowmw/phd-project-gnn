@@ -31,6 +31,7 @@ pytest = "^8.3.4"
 umap = "^0.1.1"
 osmnx = "^2.0.1"
 nbstripout = "^0.8.1"
+gitingest = "^0.1.4"
 
 [build-system]
 requires = ["poetry-core"]
