@@ -17,29 +17,8 @@ def preprocess_data(
 ):
     """
     Load and preprocess graph and sensor data for training
-
-    Parameters:
-    -----------
-    graph_prefix : str
-        Prefix for the graph data files
-    days_back : int
-        Number of days of sensor data to fetch
-    window_size : int
-        Size of the sliding window for time series
-    horizon : int
-        Number of future time steps to predict
-    batch_size : int
-        Batch size for the dataloader
-
-    Returns:
-    --------
-    dict containing:
-        - train_loader: DataLoader for training data
-        - val_loader: DataLoader for validation data
-        - adj_matrix: Adjacency matrix
-        - node_ids: List of node IDs
+    with support for varying window counts per sensor
     """
-
     print("Loading graph data...")
 
     adj_matrix, node_ids, metadata = preprocessing.load_graph_data(
@@ -80,38 +59,34 @@ def preprocess_data(
     valid_adj = weighted_adj[valid_indices, :][:, valid_indices]
     valid_node_ids = [node_ids[idx] for idx in valid_indices]
 
-    # Split data into train and validation
-    dataset_sizes = {node_id: len(windows) for node_id, windows in X_by_sensor.items()}
-    min_windows = min(dataset_sizes.values())
+    # For each sensor, split its data into train and validation
+    X_train_by_sensor = {}
+    X_val_by_sensor = {}
+    masks_train_by_sensor = {}
+    masks_val_by_sensor = {}
 
-    if min_windows < 10:
-        print(f"Warning: Very few windows available (minimum {min_windows}).")
-        train_size = int(min_windows * 0.8)
-        val_size = min_windows - train_size
-    else:
-        train_size = int(min_windows * 0.8)
-        val_size = min_windows - train_size
+    # print("DEBUG: Splitting data into train and validation sets:")
+    for node_id in valid_sensors:
+        n_windows = len(X_by_sensor[node_id])
+        train_size = int(n_windows * 0.8)
 
-    print(f"Using {train_size} windows for training, {val_size} for validation")
+        X_train_by_sensor[node_id] = X_by_sensor[node_id][:train_size]
+        X_val_by_sensor[node_id] = X_by_sensor[node_id][train_size:]
 
-    # Trim all datasets to have the same number of windows
-    X_train_by_sensor = {
-        node_id: windows[:train_size] for node_id, windows in X_by_sensor.items()
-    }
-    X_val_by_sensor = {
-        node_id: windows[train_size : train_size + val_size]
-        for node_id, windows in X_by_sensor.items()
-    }
+        masks_train_by_sensor[node_id] = masks_by_sensor[node_id][:train_size]
+        masks_val_by_sensor[node_id] = masks_by_sensor[node_id][train_size:]
 
-    masks_train_by_sensor = {
-        node_id: masks[:train_size] for node_id, masks in masks_by_sensor.items()
-    }
-    masks_val_by_sensor = {
-        node_id: masks[train_size : train_size + val_size]
-        for node_id, masks in masks_by_sensor.items()
-    }
+        # print(
+        #     f"DEBUG:  {node_id}: {train_size} train windows, {n_windows - train_size} validation windows"
+        # )
 
-    # Create dataloaders
+    # Calculate total windows
+    total_train = sum(len(windows) for windows in X_train_by_sensor.values())
+    total_val = sum(len(windows) for windows in X_val_by_sensor.values())
+    print(f"Total training windows: {total_train}")
+    print(f"Total validation windows: {total_val}")
+
+    # Create dataloaders with the updated implementation
     train_loader = create_dataloader(
         X_train_by_sensor,
         masks_train_by_sensor,

@@ -6,41 +6,66 @@ import torch.nn.functional as F
 
 
 class GraphConvolution(nn.Module):
-    """
-    Simple Graph Convolution layer, similar to https://arxiv.org/abs/1609.02907
-    """
-
     def __init__(self, in_features, out_features, bias=True):
+        """
+        Initialize the GraphConvolution layer.
+
+        Parameters:
+        -----------
+        in_features : int
+            Number of input features per node
+        out_features : int
+            Number of output features per node
+        bias : bool, optional
+            Whether to include bias term
+        """
         super(GraphConvolution, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
+
+        # Define learnable parameters
         self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
         if bias:
             self.bias = nn.Parameter(torch.FloatTensor(out_features))
         else:
             self.register_parameter("bias", None)
+
+        # Initialize parameters
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.kaiming_uniform_(self.weight)
+        """Initialize weights using Glorot initialization"""
+        nn.init.xavier_uniform_(self.weight)
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
     def forward(self, x, adj, mask=None):
         """
-        x: Node features [batch_size, num_nodes, in_features]
+        x: Node features [batch_size, num_nodes, in_features] or [batch_size, in_features]
         adj: Adjacency matrix [num_nodes, num_nodes]
+        mask: Mask for valid values [batch_size, num_nodes, 1] or [batch_size, 1]
         """
-        # print(f"DEBUG: GraphConvolution.forward - x shape: {x.shape}")
-        # First transform node features
+        # First, we need to handle missing values (marked as -1)
+        # Create a binary mask where 1 = valid data, 0 = missing data (-1)
+        missing_mask = (x != -1.0).float()
+
+        # Apply the mask and replace missing values with zeros for computation
+        # (zeros won't contribute to the convolution)
+        x_masked = x * missing_mask
+
+        # If a separate mask is provided, combine it with the missing mask
         if mask is not None:
-            x = x * mask
+            combined_mask = missing_mask * mask
+        else:
+            combined_mask = missing_mask
 
-        support = torch.matmul(x, self.weight)  # [batch_size, num_nodes, out_features]
+        # Transform node features
+        support = torch.matmul(x_masked, self.weight)
 
-        # Then propagate using normalized adjacency matrix
+        # Propagate using normalized adjacency matrix
         # Add identity to allow self-loops
         adj_with_self = adj + torch.eye(adj.size(0), device=adj.device)
+
         # Normalize adjacency matrix
         rowsum = adj_with_self.sum(dim=1)
         d_inv_sqrt = torch.pow(rowsum, -0.5)
@@ -52,19 +77,57 @@ class GraphConvolution(nn.Module):
 
         # Propagate node features using normalized adjacency
         output = torch.matmul(normalized_adj, support)
-        # print(f"DEBUG: GraphConvolution.forward - output shape: {output.shape}")
 
-        # Add bias if needed)
+        # Re-apply mask to ensure missing values stay missing
+        output = output * combined_mask
+
+        # Add bias if needed
         if self.bias is not None:
             return output + self.bias
         else:
             return output
 
 
+class AttentionLayer(nn.Module):
+    """
+    Attention layer to focus on most relevant nodes and timestamps.
+    """
+
+    def __init__(self, input_dim):
+        super(AttentionLayer, self).__init__()
+        self.attention = nn.Linear(input_dim, 1)
+
+    def forward(self, x, mask=None):
+        """
+        x: Input tensor [batch_size, seq_len/num_nodes, features]
+        mask: Binary mask [batch_size, seq_len/num_nodes, 1]
+        """
+        # Calculate attention scores
+        attention_scores = self.attention(x)  # [batch_size, seq_len/num_nodes, 1]
+
+        # Apply mask if provided (set scores to a large negative value)
+        if mask is not None:
+            # Convert -1 values to mask
+            if len(mask.shape) == len(x.shape):
+                mask = (mask != -1).float() * (x != -1).float()
+            else:
+                mask = (x != -1).float()
+
+            # Set masked positions to large negative value
+            attention_scores = attention_scores.masked_fill(mask == 0, -1e9)
+
+        # Apply softmax to get attention weights
+        attention_weights = F.softmax(attention_scores, dim=1)
+
+        # Apply attention to input
+        context = torch.sum(x * attention_weights, dim=1)
+
+        return context, attention_weights
+
+
 class TemporalGCN(nn.Module):
     """
-    Temporal Graph Convolutional Network layer that combines
-    graph convolutions with GRU for temporal dynamics
+    Temporal Graph Convolutional Network with attention for missing data.
     """
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers=1, dropout=0.2):
@@ -73,6 +136,10 @@ class TemporalGCN(nn.Module):
         # Graph Convolutional layers
         self.gc1 = GraphConvolution(input_dim, hidden_dim)
         self.gc2 = GraphConvolution(hidden_dim, hidden_dim)
+
+        # Attention layers
+        self.node_attention = AttentionLayer(hidden_dim)
+        self.temporal_attention = AttentionLayer(hidden_dim)
 
         # Recurrent layer for temporal patterns
         self.gru = nn.GRU(
@@ -93,60 +160,75 @@ class TemporalGCN(nn.Module):
         """
         x: Node features [batch_size, num_nodes, seq_len, input_dim]
         adj: Adjacency matrix [num_nodes, num_nodes]
-        mask: Mask for valid values [batch_size, num_nodes, seq_len]
+        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim]
         """
         batch_size, num_nodes, seq_len, features = x.size()
 
         # Process each time step through the GCN layers
         outputs = []
+
         for t in range(seq_len):
             # Get features at this time step
             x_t = x[:, :, t, :]  # [batch_size, num_nodes, features]
 
-            # Apply GC layers
-            h = self.gc1(x_t, adj)  # First GC layer
+            # Create mask for this timestep
+            if mask is not None:
+                mask_t = mask[:, :, t, :]  # [batch_size, num_nodes, features]
+            else:
+                mask_t = None
+
+            # Apply GC layers with explicit handling of missing values
+            h = self.gc1(x_t, adj, mask_t)  # First GC layer
             h = F.relu(h)  # Activation
             h = self.dropout(h)  # Apply dropout
-            h = self.gc2(h, adj)  # Second GC layer
+            h = self.gc2(h, adj, mask_t)  # Second GC layer
 
-            outputs.append(h)
+            # Store the processed features for this timestep
+            outputs.append(h)  # [batch_size, num_nodes, hidden_dim]
 
         # Stack outputs along time dimension
-        out_stacked = torch.stack(
-            outputs, dim=2
-        )  # [batch_size, num_nodes, seq_len, hidden_dim]
+        # This gives us [batch_size, num_nodes, seq_len, hidden_dim]
+        temporal_features = torch.stack(outputs, dim=2)
 
-        # Reshape for GRU: [batch_size * num_nodes, seq_len, hidden_dim]
-        out_gru = out_stacked.view(batch_size * num_nodes, seq_len, -1)
+        # Process each node's temporal sequence with GRU
+        node_outputs = []
 
-        # Apply GRU for temporal modeling
-        out_gru, _ = self.gru(out_gru)
+        for n in range(num_nodes):
+            # Get temporal data for this node across all batches
+            # Shape: [batch_size, seq_len, hidden_dim]
+            node_temporal_data = temporal_features[:, n, :, :]
 
-        # Reshape back: [batch_size, num_nodes, seq_len, hidden_dim]
-        out_reshaped = out_gru.view(batch_size, num_nodes, seq_len, -1)
+            # Pass through GRU
+            # Output shape: [batch_size, seq_len, hidden_dim]
+            node_gru_out, _ = self.gru(node_temporal_data)
 
-        # Apply final FC layer for each time step
-        out_final = self.fc_out(out_reshaped)
+            # Add to collected outputs
+            node_outputs.append(node_gru_out)
 
-        # Apply mask if provided
+        # Stack back to full tensor
+        # Shape: [batch_size, num_nodes, seq_len, hidden_dim]
+        gru_output = torch.stack(node_outputs, dim=1)
+
+        # Apply final FC layer for output
+        # Shape: [batch_size, num_nodes, seq_len, output_dim]
+        out = self.fc_out(gru_output)
+
+        # Apply mask if provided to ensure missing values stay missing
         if mask is not None:
             # Ensure mask has right shape
-            if len(mask.shape) == 3:  # [batch, nodes, seq_len]
-                mask = mask.unsqueeze(-1)  # Add feature dimension
-
-            # Expand mask if needed
-            if mask.shape[3] == 1 and out_final.shape[3] > 1:
-                mask = mask.expand(-1, -1, -1, out_final.shape[3])
+            if mask.shape[-1] == 1 and out.shape[-1] > 1:
+                # Expand last dimension if needed
+                mask = mask.expand(-1, -1, -1, out.shape[-1])
 
             # Apply mask
-            out_final = out_final * mask
+            out = out * mask
 
-        return out_final
+        return out
 
 
 class STGNN(nn.Module):
     """
-    Spatio-Temporal Graph Neural Network for traffic prediction
+    Spatio-Temporal Graph Neural Network with attention for traffic prediction
     """
 
     def __init__(
@@ -175,45 +257,39 @@ class STGNN(nn.Module):
 
     def forward(self, x, adj, x_mask=None):
         """
-        x: Input features [batch_size, num_nodes, input_seq_len, input_dim]
+        x: Input features [batch_size, num_nodes, seq_len, input_dim]
         adj: Adjacency matrix [num_nodes, num_nodes]
-        x_mask: Mask for input [batch_size, num_nodes, input_seq_len]
+        x_mask: Mask for input [batch_size, num_nodes, seq_len, input_dim]
 
         Returns:
         Predictions [batch_size, num_nodes, horizon, output_dim]
         """
-        batch_size, num_nodes, seq_len, _ = x.size()
-        print(f"DEBUG: STGNN.forward - input shape: {x.shape}")
+        # Check for proper shape
+        assert len(x.shape) == 4, f"Expected 4D input but got shape {x.shape}"
 
-        # Enocde the input sequence
-        encoded = self.encoder(x, adj, x_mask)
-        print(f"STGNN.forward - encoded shape: {encoded.shape}")
+        batch_size, num_nodes, seq_len, _ = x.size()
 
         # Encode the input sequence
+        # Output shape: [batch_size, num_nodes, seq_len, hidden_dim]
         encoded = self.encoder(x, adj, x_mask)
 
         # Use the last time step for each node to predict future
-        last_hidden = encoded[:, :, -1, :]  # [batch_size, num_nodes, hidden_dim]
+        # Shape: [batch_size, num_nodes, hidden_dim]
+        last_hidden = encoded[:, :, -1, :]
 
         # Predict future values
-        future_flat = self.decoder(
-            last_hidden
-        )  # [batch_size, num_nodes, output_dim * horizon]
+        # Shape: [batch_size, num_nodes, output_dim * horizon]
+        future_flat = self.decoder(last_hidden)
 
         # Reshape to separate time steps
+        # Shape: [batch_size, num_nodes, horizon, output_dim]
         predictions = future_flat.reshape(batch_size, num_nodes, self.horizon, -1)
 
         return predictions
 
 
 class STGNNTrainer:
-    def __init__(
-        self,
-        model,
-        optimizer,
-        criterion,
-        device="mps" if torch.backends.mps.is_available() else "cpu",
-    ):
+    def __init__(self, model, optimizer, criterion, device):
         self.model = model.to(device)
         self.optimizer = optimizer
         self.criterion = criterion
@@ -233,22 +309,25 @@ class STGNNTrainer:
             y_mask = batch["y_mask"].to(self.device)
             adj = batch["adj"].to(self.device)
 
+            # Print shapes for debugging
+            print(f"Batch shapes: x={x.shape}, y={y.shape}")
             print(
-                f"DEBUG: STGNNTrainer.train_epoch before model forward - x shape: {x.shape}, x_mask shape: {x_mask.shape}"
+                f"Mask non-zero values: {x_mask.sum().item()} out of {x_mask.numel()}"
             )
 
             # Forward pass
             self.optimizer.zero_grad()
             y_pred = self.model(x, adj, x_mask)
 
-            print(
-                f"DEBUG: STGNNTrainer.train_epoch after model forward - y_pred shape: {y_pred.shape}, y shape: {y.shape}"
-            )
-
             # Compute loss on valid points only
             loss = self.criterion(y_pred, y)
             if y_mask is not None:
-                loss = (loss * y_mask).sum() / y_mask.sum()
+                # Count non-zero elements in mask
+                mask_sum = y_mask.sum()
+                if mask_sum > 0:
+                    loss = (loss * y_mask).sum() / mask_sum
+                else:
+                    loss = torch.tensor(0.0, device=self.device)
 
             # Backward pass
             loss.backward()
@@ -257,10 +336,10 @@ class STGNNTrainer:
             total_loss += loss.item()
             num_batches += 1
 
-        return total_loss / num_batches
+        return total_loss / max(1, num_batches)
 
     def evaluate(self, dataloader):
-        """Evaluate model on a dataset"""
+        """Evaluate the model on a validation or test set"""
         self.model.eval()
         total_loss = 0
         num_batches = 0
@@ -280,12 +359,17 @@ class STGNNTrainer:
                 # Compute loss on valid points only
                 loss = self.criterion(y_pred, y)
                 if y_mask is not None:
-                    loss = (loss * y_mask).sum() / y_mask.sum()
+                    # Count non-zero elements in mask
+                    mask_sum = y_mask.sum()
+                    if mask_sum > 0:
+                        loss = (loss * y_mask).sum() / mask_sum
+                    else:
+                        loss = torch.tensor(0.0, device=self.device)
 
                 total_loss += loss.item()
                 num_batches += 1
 
-        return total_loss / num_batches
+        return total_loss / max(1, num_batches)
 
 
 # Example usage

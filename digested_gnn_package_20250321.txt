@@ -426,125 +426,119 @@ class SpatioTemporalDataset(Dataset):
         self.window_size = window_size
         self.horizon = horizon
 
-        # Determine the number of windows available for each node
-        self.window_counts = {
-            node_id: len(windows) for node_id, windows in X_by_sensor.items()
-        }
-        self.min_windows = min(self.window_counts.values()) if self.window_counts else 0
+        # Create flattened index mapping (node_id, window_idx)
+        self.sample_indices = []
+        for node_id in self.node_ids:
+            if node_id in X_by_sensor:
+                windows = X_by_sensor[node_id]
+                for window_idx in range(len(windows)):
+                    self.sample_indices.append((node_id, window_idx))
 
-        # Create a mapping of window indices
-        self.window_indices = list(range(self.min_windows))
-
-        # # Create index mapping for faster access
-        # self.sample_indices = []
-        # for node_id, windows in X_by_sensor.items():
-        #     node_idx = node_ids.index(node_id)
-        #     for window_idx in range(len(windows)):
-        #         self.sample_indices.append((node_id, node_idx, window_idx))
+        print(
+            f"Created dataset with {len(self.sample_indices)} total samples across {len(node_ids)} nodes"
+        )
 
     def __len__(self):
-        return (
-            self.min_windows
-        )  # Each batch will contian all nodes for specific window index
+        return len(self.sample_indices)
 
-    def __getitem__(self, window_idx):
-        """
-        Returns data for all nodes at a specific window index.
-        """
-        # Get data for all nodes at this window index
-        x_windows = []
-        x_masks = []
-        y_windows = []
-        y_masks = []
-        node_indices = []
+    def __getitem__(self, idx):
+        # Get the node_id and window_idx for this sample
+        node_id, window_idx = self.sample_indices[idx]
 
-        for i, node_id in enumerate(self.node_ids):
-            if node_id in self.X_by_sensor:
-                # Get input window (history)
-                x_window = self.X_by_sensor[node_id][
-                    window_idx, : self.window_size - self.horizon
-                ]
-                x_mask = self.masks_by_sensor[node_id][
-                    window_idx, : self.window_size - self.horizon
-                ]
+        # Get node index in adjacency matrix
+        node_idx = self.node_ids.index(node_id)
 
-                # Get target window (future)
-                y_window = self.X_by_sensor[node_id][window_idx, -self.horizon :]
-                y_mask = self.masks_by_sensor[node_id][window_idx, -self.horizon :]
+        # Get input window (history) and target window (future)
+        x_window = self.X_by_sensor[node_id][
+            window_idx, : self.window_size - self.horizon
+        ]
+        x_mask = self.masks_by_sensor[node_id][
+            window_idx, : self.window_size - self.horizon
+        ]
 
-                # Add to lists
-                x_windows.append(x_window)
-                x_masks.append(x_mask)
-                y_windows.append(y_window)
-                y_masks.append(y_mask)
-                node_indices.append(i)
-
-        # Stack all node data
-        x = torch.FloatTensor(np.array(x_windows))
-        x_mask = torch.FloatTensor(np.array(x_masks))
-        y = torch.FloatTensor(np.array(y_windows))
-        y_mask = torch.FloatTensor(np.array(y_masks))
+        y_window = self.X_by_sensor[node_id][window_idx, -self.horizon :]
+        y_mask = self.masks_by_sensor[node_id][window_idx, -self.horizon :]
 
         return {
-            "x": x,
-            "x_mask": x_mask,
-            "y": y,
-            "y_mask": y_mask,
-            "node_idx": node_indices,
+            "x": torch.FloatTensor(x_window),
+            "x_mask": torch.FloatTensor(x_mask),
+            "y": torch.FloatTensor(y_window),
+            "y_mask": torch.FloatTensor(y_mask),
+            "node_idx": node_idx,
             "adj": self.adj_matrix,
         }
 
 
 def collate_fn(batch):
     """
-    Custom collate function to handle graph data.
+    Custom collate function to handle samples from different nodes. Maitains node dimensions.
+
+    Parameters:
+    ----------
+    batch : List[Dict]
+        List of samples from the dataset.
+    Returns:
+    -------
+    Dict
+        x : Tensor [batch_size, seq_len, 1],
+        x_mask : Tensor [batch_size, seq_len, 1],
+        y : Tensor [batch_size, horizon, 1],
+        y_mask : Tensor [batch_size, horizon, 1],
+        node_indices : Tensor [batch_size],
+        adj : Tensor [batch_size, num_nodes, num_nodes],
+
     """
-    # With the modified dataset, each batch item already contains all nodes
-    # We just need to add the batch dimension and ensure 4D shape
+    # Get unique node indices in this batch
+    node_indices = sorted(list(set(item["node_idx"] for item in batch)))
+    node_idx_map = {idx: i for i, idx in enumerate(node_indices)}
 
-    # Stack batch items
-    x = torch.stack([item["x"] for item in batch])  # [batch, num_nodes, seq_len]
-    x_mask = torch.stack([item["x_mask"] for item in batch])
-    y = torch.stack([item["y"] for item in batch])
-    y_mask = torch.stack([item["y_mask"] for item in batch])
+    # Get window dimensions
+    seq_len = len(batch[0]["x"])
+    horizon = len(batch[0]["y"])
 
-    print(f"DEBUG: Raw x shape: {x.shape}")
-    print(f"DEBUG: Raw x_mask shape: {x_mask.shape}")
+    # Create batch_size counter from window groups
+    window_groups = {}
+    for item in batch:
+        window_idx = item.get("window_idx", 0)  # Default to 0 if not present
+        if window_idx not in window_groups:
+            window_groups[window_idx] = []
+        window_groups[window_idx].append(item)
 
-    # Add feature dimension if needed
-    if len(x.shape) == 3:  # [batch, num_nodes, seq_len]
-        x = x.unsqueeze(-1)  # [batch, num_nodes, seq_len, 1]
-    if len(x_mask.shape) == 3:
-        x_mask = x_mask.unsqueeze(-1)
-    if len(y.shape) == 3:
-        y = y.unsqueeze(-1)
-    if len(y_mask.shape) == 3:
-        y_mask = y_mask.unsqueeze(-1)
+    batch_size = len(window_groups)
+    num_nodes = len(node_indices)
 
-    # Make sure mask has the same shape as input
-    if x_mask.shape != x.shape:
-        print(
-            f"WARNING: Mask shape {x_mask.shape} does not match input shape {x.shape}"
-        )
-        # Reshape mask to match input shape
-        x_mask = x_mask[:, :, : x.shape[2], :]
+    # Print batch size and number of nodes for debugging
+    print(f"DEBUG: Executing collate_fn with {len(batch)} items")
+    print(f"DEBUG: Batch size: {batch_size}, Number of nodes: {num_nodes}")
 
-    # print(f"DEBUG: Processed x shape: {x.shape}")
-    # print(f"DEBUG: Processed x_mask shape: {x_mask.shape}")
-    # print(f"DEBUG: Processed y shape: {y.shape}")
-    # print(f"DEBUG: Processed y_mask shape: {y_mask.shape}")
+    # Initialize tensors with proper dimensions
+    x = torch.full((batch_size, num_nodes, seq_len, 1), -1.0)
+    x_mask = torch.zeros((batch_size, num_nodes, seq_len, 1))
+    y = torch.full((batch_size, num_nodes, horizon, 1), -1.0)
+    y_mask = torch.zeros((batch_size, num_nodes, horizon, 1))
 
-    # All samples have the same adjacency matrix
+    # Fill tensors
+    for batch_idx, (window_idx, items) in enumerate(window_groups.items()):
+        for item in items:
+            node_pos = node_idx_map[item["node_idx"]]
+
+            # Add data and masks
+            x[batch_idx, node_pos, :, 0] = item["x"]
+            x_mask[batch_idx, node_pos, :, 0] = item["x_mask"]
+            y[batch_idx, node_pos, :, 0] = item["y"]
+            y_mask[batch_idx, node_pos, :, 0] = item["y_mask"]
+
+    # Extract adjacency for these specific nodes
     adj = batch[0]["adj"]
-
-    print(f"DEBUG: Batch shape: {x.shape}")  # Should be [batch, num_nodes, seq_len, 1]
+    batch_adj = adj[node_indices][:, node_indices]
 
     return {
         "x": x,
         "x_mask": x_mask,
         "y": y,
         "y_mask": y_mask,
-        "adj": adj,
+        "node_indices": torch.tensor(node_indices),
+        "adj": batch_adj,
     }
 
 
@@ -559,17 +553,19 @@ def create_dataloader(
     shuffle,
 ):
     """
-    Create a DataLoader for the SpatioTemporalDataset.
+    Create a DataLoader that can handle varying numbers of windows per sensor.
     """
     dataset = SpatioTemporalDataset(
         X_by_sensor, masks_by_sensor, adj_matrix, node_ids, window_size, horizon
     )
+
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         collate_fn=collate_fn,
     )
+
     return dataloader
 
 
@@ -595,41 +591,66 @@ import torch.nn.functional as F
 
 
 class GraphConvolution(nn.Module):
-    """
-    Simple Graph Convolution layer, similar to https://arxiv.org/abs/1609.02907
-    """
-
     def __init__(self, in_features, out_features, bias=True):
+        """
+        Initialize the GraphConvolution layer.
+
+        Parameters:
+        -----------
+        in_features : int
+            Number of input features per node
+        out_features : int
+            Number of output features per node
+        bias : bool, optional
+            Whether to include bias term
+        """
         super(GraphConvolution, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
+
+        # Define learnable parameters
         self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
         if bias:
             self.bias = nn.Parameter(torch.FloatTensor(out_features))
         else:
             self.register_parameter("bias", None)
+
+        # Initialize parameters
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.kaiming_uniform_(self.weight)
+        """Initialize weights using Glorot initialization"""
+        nn.init.xavier_uniform_(self.weight)
         if self.bias is not None:
             nn.init.zeros_(self.bias)
 
     def forward(self, x, adj, mask=None):
         """
-        x: Node features [batch_size, num_nodes, in_features]
+        x: Node features [batch_size, num_nodes, in_features] or [batch_size, in_features]
         adj: Adjacency matrix [num_nodes, num_nodes]
+        mask: Mask for valid values [batch_size, num_nodes, 1] or [batch_size, 1]
         """
-        # print(f"DEBUG: GraphConvolution.forward - x shape: {x.shape}")
-        # First transform node features
+        # First, we need to handle missing values (marked as -1)
+        # Create a binary mask where 1 = valid data, 0 = missing data (-1)
+        missing_mask = (x != -1.0).float()
+
+        # Apply the mask and replace missing values with zeros for computation
+        # (zeros won't contribute to the convolution)
+        x_masked = x * missing_mask
+
+        # If a separate mask is provided, combine it with the missing mask
         if mask is not None:
-            x = x * mask
+            combined_mask = missing_mask * mask
+        else:
+            combined_mask = missing_mask
 
-        support = torch.matmul(x, self.weight)  # [batch_size, num_nodes, out_features]
+        # Transform node features
+        support = torch.matmul(x_masked, self.weight)
 
-        # Then propagate using normalized adjacency matrix
+        # Propagate using normalized adjacency matrix
         # Add identity to allow self-loops
         adj_with_self = adj + torch.eye(adj.size(0), device=adj.device)
+
         # Normalize adjacency matrix
         rowsum = adj_with_self.sum(dim=1)
         d_inv_sqrt = torch.pow(rowsum, -0.5)
@@ -641,19 +662,57 @@ class GraphConvolution(nn.Module):
 
         # Propagate node features using normalized adjacency
         output = torch.matmul(normalized_adj, support)
-        # print(f"DEBUG: GraphConvolution.forward - output shape: {output.shape}")
 
-        # Add bias if needed)
+        # Re-apply mask to ensure missing values stay missing
+        output = output * combined_mask
+
+        # Add bias if needed
         if self.bias is not None:
             return output + self.bias
         else:
             return output
 
 
+class AttentionLayer(nn.Module):
+    """
+    Attention layer to focus on most relevant nodes and timestamps.
+    """
+
+    def __init__(self, input_dim):
+        super(AttentionLayer, self).__init__()
+        self.attention = nn.Linear(input_dim, 1)
+
+    def forward(self, x, mask=None):
+        """
+        x: Input tensor [batch_size, seq_len/num_nodes, features]
+        mask: Binary mask [batch_size, seq_len/num_nodes, 1]
+        """
+        # Calculate attention scores
+        attention_scores = self.attention(x)  # [batch_size, seq_len/num_nodes, 1]
+
+        # Apply mask if provided (set scores to a large negative value)
+        if mask is not None:
+            # Convert -1 values to mask
+            if len(mask.shape) == len(x.shape):
+                mask = (mask != -1).float() * (x != -1).float()
+            else:
+                mask = (x != -1).float()
+
+            # Set masked positions to large negative value
+            attention_scores = attention_scores.masked_fill(mask == 0, -1e9)
+
+        # Apply softmax to get attention weights
+        attention_weights = F.softmax(attention_scores, dim=1)
+
+        # Apply attention to input
+        context = torch.sum(x * attention_weights, dim=1)
+
+        return context, attention_weights
+
+
 class TemporalGCN(nn.Module):
     """
-    Temporal Graph Convolutional Network layer that combines
-    graph convolutions with GRU for temporal dynamics
+    Temporal Graph Convolutional Network with attention for missing data.
     """
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers=1, dropout=0.2):
@@ -662,6 +721,10 @@ class TemporalGCN(nn.Module):
         # Graph Convolutional layers
         self.gc1 = GraphConvolution(input_dim, hidden_dim)
         self.gc2 = GraphConvolution(hidden_dim, hidden_dim)
+
+        # Attention layers
+        self.node_attention = AttentionLayer(hidden_dim)
+        self.temporal_attention = AttentionLayer(hidden_dim)
 
         # Recurrent layer for temporal patterns
         self.gru = nn.GRU(
@@ -688,36 +751,51 @@ class TemporalGCN(nn.Module):
 
         # Process each time step through the GCN layers
         outputs = []
+        temporal_attn_weights = []
+
         for t in range(seq_len):
             # Get features at this time step
             x_t = x[:, :, t, :]  # [batch_size, num_nodes, features]
 
-            # Apply GC layers
-            h = self.gc1(x_t, adj)  # First GC layer
+            # Create mask for this timestep
+            if mask is not None:
+                mask_t = mask[:, :, t].unsqueeze(-1)  # [batch_size, num_nodes, 1]
+            else:
+                mask_t = None
+
+            # Apply GC layers with explicit handling of missing values
+            h = self.gc1(x_t, adj, mask_t)  # First GC layer
             h = F.relu(h)  # Activation
             h = self.dropout(h)  # Apply dropout
-            h = self.gc2(h, adj)  # Second GC layer
+            h = self.gc2(h, adj, mask_t)  # Second GC layer
 
-            outputs.append(h)
+            # Apply node attention to focus on important nodes
+            h_node_attn, node_attn_weights = self.node_attention(h, mask_t)
+
+            outputs.append(h_node_attn)
 
         # Stack outputs along time dimension
-        out_stacked = torch.stack(
-            outputs, dim=2
-        )  # [batch_size, num_nodes, seq_len, hidden_dim]
+        out_stacked = torch.stack(outputs, dim=1)  # [batch_size, seq_len, hidden_dim]
 
-        # Reshape for GRU: [batch_size * num_nodes, seq_len, hidden_dim]
-        out_gru = out_stacked.view(batch_size * num_nodes, seq_len, -1)
+        # Create a temporal mask from the original mask
+        if mask is not None:
+            # Average across nodes to get temporal mask
+            temporal_mask = (
+                (mask.mean(dim=1) > 0).float().unsqueeze(-1)
+            )  # [batch_size, seq_len, 1]
+        else:
+            temporal_mask = None
 
-        # Apply GRU for temporal modeling
-        out_gru, _ = self.gru(out_gru)
+        # Apply temporal attention
+        context, temp_attn_weights = self.temporal_attention(out_stacked, temporal_mask)
 
-        # Reshape back: [batch_size, num_nodes, seq_len, hidden_dim]
-        out_reshaped = out_gru.view(batch_size, num_nodes, seq_len, -1)
+        # Reshape for GRU: [batch_size, seq_len, hidden_dim]
+        out_gru, _ = self.gru(out_stacked)
 
-        # Apply final FC layer for each time step
-        out_final = self.fc_out(out_reshaped)
+        # Apply final FC layer for output
+        out_final = self.fc_out(out_gru)
 
-        # Apply mask if provided
+        # Apply mask if provided to ensure missing values stay missing
         if mask is not None:
             # Ensure mask has right shape
             if len(mask.shape) == 3:  # [batch, nodes, seq_len]
@@ -735,7 +813,7 @@ class TemporalGCN(nn.Module):
 
 class STGNN(nn.Module):
     """
-    Spatio-Temporal Graph Neural Network for traffic prediction
+    Spatio-Temporal Graph Neural Network with attention for traffic prediction
     """
 
     def __init__(
@@ -771,12 +849,15 @@ class STGNN(nn.Module):
         Returns:
         Predictions [batch_size, num_nodes, horizon, output_dim]
         """
-        batch_size, num_nodes, seq_len, _ = x.size()
-        print(f"DEBUG: STGNN.forward - input shape: {x.shape}")
+        # x: [batch_size, num_nodes, input_seq_len, input_dim]
+        assert (
+            len(x.shape) == 4
+        ), "Input x must be 4D: [batch_size, num_nodes, seq_len, input_dim]"
+        assert (
+            len(adj.shape) == 2
+        ), "Adjacency matrix must be 2D: [num_nodes, num_nodes]"
 
-        # Enocde the input sequence
-        encoded = self.encoder(x, adj, x_mask)
-        print(f"STGNN.forward - encoded shape: {encoded.shape}")
+        batch_size, num_nodes, seq_len, _ = x.size()
 
         # Encode the input sequence
         encoded = self.encoder(x, adj, x_mask)
@@ -796,13 +877,7 @@ class STGNN(nn.Module):
 
 
 class STGNNTrainer:
-    def __init__(
-        self,
-        model,
-        optimizer,
-        criterion,
-        device="mps" if torch.backends.mps.is_available() else "cpu",
-    ):
+    def __init__(self, model, optimizer, criterion, device):
         self.model = model.to(device)
         self.optimizer = optimizer
         self.criterion = criterion
@@ -821,23 +896,32 @@ class STGNNTrainer:
             y = batch["y"].to(self.device)
             y_mask = batch["y_mask"].to(self.device)
             adj = batch["adj"].to(self.device)
+            node_indices = batch["node_indices"].to(self.device)
 
+            # Print shapes for debugging
             print(
-                f"DEBUG: STGNNTrainer.train_epoch before model forward - x shape: {x.shape}, x_mask shape: {x_mask.shape}"
+                f"Batch shapes: x={x.shape}, x_mask={x_mask.shape}, y={y.shape}, y_mask={y_mask.shape}"
             )
+            print(
+                f"Non-zero values in mask: {x_mask.sum().item()} out of {x_mask.numel()}"
+            )
+
+            # Extract adjacency for the specific nodes in this batch
+            batch_adj = adj[node_indices][:, node_indices]
 
             # Forward pass
             self.optimizer.zero_grad()
-            y_pred = self.model(x, adj, x_mask)
-
-            print(
-                f"DEBUG: STGNNTrainer.train_epoch after model forward - y_pred shape: {y_pred.shape}, y shape: {y.shape}"
-            )
+            y_pred = self.model(x, batch_adj, x_mask)
 
             # Compute loss on valid points only
             loss = self.criterion(y_pred, y)
             if y_mask is not None:
-                loss = (loss * y_mask).sum() / y_mask.sum()
+                # Count non-zero elements in mask
+                mask_sum = y_mask.sum()
+                if mask_sum > 0:
+                    loss = (loss * y_mask).sum() / mask_sum
+                else:
+                    loss = torch.tensor(0.0, device=self.device)
 
             # Backward pass
             loss.backward()
@@ -846,35 +930,7 @@ class STGNNTrainer:
             total_loss += loss.item()
             num_batches += 1
 
-        return total_loss / num_batches
-
-    def evaluate(self, dataloader):
-        """Evaluate model on a dataset"""
-        self.model.eval()
-        total_loss = 0
-        num_batches = 0
-
-        with torch.no_grad():
-            for batch in dataloader:
-                # Move data to device
-                x = batch["x"].to(self.device)
-                x_mask = batch["x_mask"].to(self.device)
-                y = batch["y"].to(self.device)
-                y_mask = batch["y_mask"].to(self.device)
-                adj = batch["adj"].to(self.device)
-
-                # Forward pass
-                y_pred = self.model(x, adj, x_mask)
-
-                # Compute loss on valid points only
-                loss = self.criterion(y_pred, y)
-                if y_mask is not None:
-                    loss = (loss * y_mask).sum() / y_mask.sum()
-
-                total_loss += loss.item()
-                num_batches += 1
-
-        return total_loss / num_batches
+        return total_loss / max(1, num_batches)
 
 
 # Example usage
@@ -2719,29 +2775,8 @@ def preprocess_data(
 ):
     """
     Load and preprocess graph and sensor data for training
-
-    Parameters:
-    -----------
-    graph_prefix : str
-        Prefix for the graph data files
-    days_back : int
-        Number of days of sensor data to fetch
-    window_size : int
-        Size of the sliding window for time series
-    horizon : int
-        Number of future time steps to predict
-    batch_size : int
-        Batch size for the dataloader
-
-    Returns:
-    --------
-    dict containing:
-        - train_loader: DataLoader for training data
-        - val_loader: DataLoader for validation data
-        - adj_matrix: Adjacency matrix
-        - node_ids: List of node IDs
+    with support for varying window counts per sensor
     """
-
     print("Loading graph data...")
 
     adj_matrix, node_ids, metadata = preprocessing.load_graph_data(
@@ -2782,38 +2817,34 @@ def preprocess_data(
     valid_adj = weighted_adj[valid_indices, :][:, valid_indices]
     valid_node_ids = [node_ids[idx] for idx in valid_indices]
 
-    # Split data into train and validation
-    dataset_sizes = {node_id: len(windows) for node_id, windows in X_by_sensor.items()}
-    min_windows = min(dataset_sizes.values())
+    # For each sensor, split its data into train and validation
+    X_train_by_sensor = {}
+    X_val_by_sensor = {}
+    masks_train_by_sensor = {}
+    masks_val_by_sensor = {}
 
-    if min_windows < 10:
-        print(f"Warning: Very few windows available (minimum {min_windows}).")
-        train_size = int(min_windows * 0.8)
-        val_size = min_windows - train_size
-    else:
-        train_size = int(min_windows * 0.8)
-        val_size = min_windows - train_size
+    # print("DEBUG: Splitting data into train and validation sets:")
+    for node_id in valid_sensors:
+        n_windows = len(X_by_sensor[node_id])
+        train_size = int(n_windows * 0.8)
 
-    print(f"Using {train_size} windows for training, {val_size} for validation")
+        X_train_by_sensor[node_id] = X_by_sensor[node_id][:train_size]
+        X_val_by_sensor[node_id] = X_by_sensor[node_id][train_size:]
 
-    # Trim all datasets to have the same number of windows
-    X_train_by_sensor = {
-        node_id: windows[:train_size] for node_id, windows in X_by_sensor.items()
-    }
-    X_val_by_sensor = {
-        node_id: windows[train_size : train_size + val_size]
-        for node_id, windows in X_by_sensor.items()
-    }
+        masks_train_by_sensor[node_id] = masks_by_sensor[node_id][:train_size]
+        masks_val_by_sensor[node_id] = masks_by_sensor[node_id][train_size:]
 
-    masks_train_by_sensor = {
-        node_id: masks[:train_size] for node_id, masks in masks_by_sensor.items()
-    }
-    masks_val_by_sensor = {
-        node_id: masks[train_size : train_size + val_size]
-        for node_id, masks in masks_by_sensor.items()
-    }
+        # print(
+        #     f"DEBUG:  {node_id}: {train_size} train windows, {n_windows - train_size} validation windows"
+        # )
 
-    # Create dataloaders
+    # Calculate total windows
+    total_train = sum(len(windows) for windows in X_train_by_sensor.values())
+    total_val = sum(len(windows) for windows in X_val_by_sensor.values())
+    print(f"Total training windows: {total_train}")
+    print(f"Total validation windows: {total_val}")
+
+    # Create dataloaders with the updated implementation
     train_loader = create_dataloader(
         X_train_by_sensor,
         masks_train_by_sensor,
