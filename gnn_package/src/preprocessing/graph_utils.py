@@ -9,12 +9,12 @@ import osmnx as ox
 import networkx as nx
 import geopandas as gpd
 import private_uoapi
-from shapely import wkt
 from shapely.geometry import Polygon
-from gnn_package import (
+from gnn_package.config.paths import (
     PREPROCESSED_GRAPH_DIR,
     SENSORS_DATA_DIR,
 )
+from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 
 
 def read_or_create_sensor_nodes():
@@ -112,48 +112,6 @@ def get_street_network_gdfs(place_name, to_crs="EPSG:27700"):
     except Exception as e:
         print(f"Error downloading network: {str(e)}")
         raise
-
-
-def get_sensor_name_id_map():
-    """
-    Create unique IDs for each sensor from the private UOAPI.
-
-    location: id
-
-    For the private API, where no IDs are provided, we generate
-    unique IDs of the form '1XXXX' where XXXX is a zero-padded
-    index (e.g. i=1 > 10001 and i=100 > 10100).
-
-    Returns:
-    dict: Mapping between sensor names (keys) and IDs (values)
-    """
-
-    if not os.path.exists(SENSORS_DATA_DIR / "sensor_name_id_map.json"):
-        config = private_uoapi.LSConfig()
-        auth = private_uoapi.LSAuth(config)
-        client = private_uoapi.LightsailWrapper(config, auth)
-        sensors = client.get_traffic_sensors()
-        sensors = pd.DataFrame(sensors)
-        mapping = {
-            location: f"1{str(i).zfill(4)}"
-            for i, location in enumerate(sensors["location"])
-        }
-
-        with open(
-            SENSORS_DATA_DIR / "sensor_name_id_map.json",
-            "w",
-            encoding="utf-8",
-        ) as f:
-            json.dump(mapping, f, indent=4)
-    else:
-        with open(
-            SENSORS_DATA_DIR / "sensor_name_id_map.json",
-            "r",
-            encoding="utf-8",
-        ) as f:
-            mapping = json.load(f)
-
-    return mapping
 
 
 def save_graph_data(adj_matrix, node_ids, prefix="graph"):

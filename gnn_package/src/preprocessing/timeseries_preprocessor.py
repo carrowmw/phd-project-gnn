@@ -196,3 +196,62 @@ class TimeSeriesPreprocessor:
             "adjacency": adj_matrix,
             "mask": masks,  # Also organized by sensor
         }
+
+
+def resample_sensor_data(time_series_dict, freq="15min", fill_value=-1.0):
+    """
+    Resample all sensor time series to a consistent frequency and fill gaps.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to their time series data
+    freq : str
+        Pandas frequency string (e.g., '15min', '1H')
+    fill_value : float
+        Value to use for filling gaps
+
+    Returns:
+    --------
+    dict
+        Dictionary with resampled time series
+    """
+    # Find global min and max dates
+    all_dates = []
+    for series in time_series_dict.values():
+        if len(series) > 0:
+            all_dates.extend(series.index)
+
+    global_min = min(all_dates)
+    global_max = max(all_dates)
+
+    # Create common date range
+    date_range = pd.date_range(start=global_min, end=global_max, freq=freq)
+
+    # Resample each sensor's data
+    resampled_dict = {}
+
+    for sensor_id, series in time_series_dict.items():
+        # Skip empty series
+        if series is None or len(series) == 0:
+            continue
+
+        # Create a Series with the full date range
+        resampled = pd.Series(index=date_range, dtype=float)
+
+        # Use original values where available (handle duplicates by taking the mean)
+        grouper = series.groupby(series.index)
+        non_duplicate_series = grouper.mean()
+
+        # Align with the resampled index
+        resampled[non_duplicate_series.index] = non_duplicate_series
+
+        # Fill gaps with fill_value
+        resampled = resampled.fillna(fill_value)
+
+        resampled_dict[sensor_id] = resampled
+
+    print(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
+    print(f"Each sensor now has {len(date_range)} data points")
+
+    return resampled_dict

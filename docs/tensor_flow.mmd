@@ -1,0 +1,42 @@
+flowchart TD
+    subgraph DataLoader
+        A[Input Data] --> B[SpatioTemporalDataset]
+        B --> C["collate_fn()"]
+        C -->|"x [batch, seq, 1]"| D[DataLoader Output]
+        C -->|"x_mask [batch, seq, 1]"| D
+        C -->|"y [batch, horizon, 1]"| D
+        C -->|"y_mask [batch, horizon, 1]"| D
+        C -->|"node_indices [batch]"| D
+        C -->|"adj [nodes, nodes]"| D
+    end
+
+    D --> E["STGNNTrainer.train_epoch()"]
+
+    subgraph STGNNTrainer
+        E -->|"x, adj, x_mask"| F["STGNN.forward()"]
+        F -->|"y_pred"| G["Loss Computation"]
+        G --> H["Backward + Optimizer Step"]
+    end
+
+    subgraph STGNN["STGNN Model"]
+        F -->|"x [batch, nodes, seq, features]"| I["TemporalGCN.forward()"]
+        I -->|"encoded [batch, nodes, seq, hidden]"| J["Last Hidden State + Decoder"]
+        J -->|"predictions [batch, nodes, horizon, features]"| F
+
+        subgraph TemporalGCN
+            I -->|"For each timestep"| K["Per-timestep processing"]
+            K -->|"x_t [batch, nodes, features]"| L["GraphConvolution.forward()"]
+            L -->|"h [batch, nodes, hidden]"| M["Node Attention"]
+            M -->|"h_node_attn [batch, hidden]"| N["Stack outputs"]
+            N -->|"out_stacked [batch, seq, hidden]"| O["Temporal Attention"]
+            O --> P["GRU + Output Layer"]
+            P -->|"out_final [batch, nodes, seq, features]"| I
+        end
+    end
+
+    classDef shapeCheck fill:#f9a,stroke:#333,stroke-width:2px;
+    classDef noShapeCheck fill:#bdf,stroke:#333,stroke-width:1px;
+
+    class F shapeCheck;
+    class I shapeCheck;
+    class K,L,M,N,O,P noShapeCheck;

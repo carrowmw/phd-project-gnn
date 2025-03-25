@@ -309,11 +309,11 @@ class STGNNTrainer:
             y_mask = batch["y_mask"].to(self.device)
             adj = batch["adj"].to(self.device)
 
-            # Print shapes for debugging
-            print(f"Batch shapes: x={x.shape}, y={y.shape}")
-            print(
-                f"Mask non-zero values: {x_mask.sum().item()} out of {x_mask.numel()}"
-            )
+            # # Print shapes for debugging
+            # print(f"DEBUG: Batch shapes: x={x.shape}, y={y.shape}")
+            # print(
+            #     f"DEBUG: Mask non-zero values: {x_mask.sum().item()} out of {x_mask.numel()}"
+            # )
 
             # Forward pass
             self.optimizer.zero_grad()

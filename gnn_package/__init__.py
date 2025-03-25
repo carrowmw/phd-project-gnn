@@ -1,5 +1,7 @@
-from .src.utils import paths, data_utils
-from .src.utils.paths import *
+from .config import paths
+from .src.utils import data_utils, sensor_utils
+
+from .config.paths import *
 from .src import preprocessing
 from .src import dataloaders
 from .src import models

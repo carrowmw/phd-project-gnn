@@ -10,7 +10,7 @@ experiment:
 # Data configuration
 data:
   start_date: "2024-02-18 00:00:00"
-  end_date: "2025-02-18 00:00:00"
+  end_date: "2024-03-18 00:00:00"
   graph_prefix: "25022025_test"
   window_size: 24  # Input window size (time steps)
   horizon: 6  # Prediction horizon (time steps)

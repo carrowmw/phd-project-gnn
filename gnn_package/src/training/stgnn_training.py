@@ -1,19 +1,28 @@
 # gnn_package/src/models/train_stgnn.py
 
+import sys
 import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from torch.utils.data import random_split
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
-from gnn_package import preprocessing
+from gnn_package.src import preprocessing
 from gnn_package.src.dataloaders import create_dataloader
 from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
 
 
 def preprocess_data(
-    data, graph_prefix="graph", window_size=24, horizon=6, batch_size=32
+    data=None,
+    data_file=None,
+    graph_prefix="graph",
+    window_size=24,
+    horizon=6,
+    stride=1,
+    batch_size=32,
+    sigma_squared=0.1,
+    epsilon=0.5,
 ):
     """
     Load and preprocess graph and sensor data for training
@@ -27,23 +36,43 @@ def preprocess_data(
 
     # Compute graph weights using Gaussian kernel
     weighted_adj = preprocessing.compute_adjacency_matrix(
-        adj_matrix, sigma_squared=0.1, epsilon=0.5
+        adj_matrix, sigma_squared=sigma_squared, epsilon=epsilon
     )
 
     print(
         f"Loaded adjacency matrix of shape {adj_matrix.shape} with {len(node_ids)} nodes"
     )
 
+    # Load sensor data if not provided
+    if data is None:
+        if data_file is None:
+            raise ValueError(
+                "Either data or data_file must be provided to load sensor data."
+            )
+
+        try:
+            data = preprocessing.load_sensor_data(data_file)
+        except FileNotFoundError as e:
+            print(e)
+            print("Please run 'python fetch_sensor_data.py' first to fetch the data.")
+            sys.exit(1)
+
+    resampled_data = preprocessing.resample_sensor_data(
+        data, freq="15min", fill_value=-1.0
+    )
+
     # Create windows for time series
     print(f"Creating windows with size={window_size}, horizon={horizon}...")
     processor = preprocessing.TimeSeriesPreprocessor(
         window_size=window_size,
-        stride=1,
+        stride=stride,
         gap_threshold=pd.Timedelta(minutes=15),
         missing_value=-1.0,
     )
 
-    X_by_sensor, masks_by_sensor, metadata_by_sensor = processor.create_windows(data)
+    X_by_sensor, masks_by_sensor, metadata_by_sensor = processor.create_windows(
+        resampled_data
+    )
 
     # Get list of sensors with valid windows
     valid_sensors = list(X_by_sensor.keys())
@@ -65,8 +94,10 @@ def preprocess_data(
     masks_train_by_sensor = {}
     masks_val_by_sensor = {}
 
-    # print("DEBUG: Splitting data into train and validation sets:")
-    for node_id in valid_sensors:
+    # Add progress bar for splitting data
+    for node_id in tqdm(
+        valid_sensors, desc="Splitting data into train/validation sets"
+    ):
         n_windows = len(X_by_sensor[node_id])
         train_size = int(n_windows * 0.8)
 
@@ -76,16 +107,13 @@ def preprocess_data(
         masks_train_by_sensor[node_id] = masks_by_sensor[node_id][:train_size]
         masks_val_by_sensor[node_id] = masks_by_sensor[node_id][train_size:]
 
-        # print(
-        #     f"DEBUG:  {node_id}: {train_size} train windows, {n_windows - train_size} validation windows"
-        # )
-
     # Calculate total windows
     total_train = sum(len(windows) for windows in X_train_by_sensor.values())
     total_val = sum(len(windows) for windows in X_val_by_sensor.values())
     print(f"Total training windows: {total_train}")
     print(f"Total validation windows: {total_val}")
 
+    print("Creating dataloaders...")
     # Create dataloaders with the updated implementation
     train_loader = create_dataloader(
         X_train_by_sensor,
@@ -117,6 +145,96 @@ def preprocess_data(
     }
 
 
+class TqdmSTGNNTrainer(STGNNTrainer):
+    """
+    Extension of STGNNTrainer that adds progress bars using tqdm
+    """
+
+    def train_epoch(self, dataloader):
+        """Train for one epoch with progress bar"""
+        self.model.train()
+        total_loss = 0
+        num_batches = 0
+
+        # Create progress bar for batches
+        pbar = tqdm(dataloader, desc="Training batches", leave=False)
+
+        for batch in pbar:
+            # Move data to device
+            x = batch["x"].to(self.device)
+            x_mask = batch["x_mask"].to(self.device)
+            y = batch["y"].to(self.device)
+            y_mask = batch["y_mask"].to(self.device)
+            adj = batch["adj"].to(self.device)
+
+            # Forward pass
+            self.optimizer.zero_grad()
+            y_pred = self.model(x, adj, x_mask)
+
+            # Compute loss on valid points only
+            loss = self.criterion(y_pred, y)
+            if y_mask is not None:
+                # Count non-zero elements in mask
+                mask_sum = y_mask.sum()
+                if mask_sum > 0:
+                    loss = (loss * y_mask).sum() / mask_sum
+                else:
+                    loss = torch.tensor(0.0, device=self.device)
+
+            # Backward pass
+            loss.backward()
+            self.optimizer.step()
+
+            batch_loss = loss.item()
+            total_loss += batch_loss
+            num_batches += 1
+
+            # Update progress bar with current batch loss
+            pbar.set_postfix({"batch_loss": f"{batch_loss:.6f}"})
+
+        return total_loss / max(1, num_batches)
+
+    def evaluate(self, dataloader):
+        """Evaluate the model on a validation or test set with progress bar"""
+        self.model.eval()
+        total_loss = 0
+        num_batches = 0
+
+        with torch.no_grad():
+            # Create progress bar for validation batches
+            pbar = tqdm(dataloader, desc="Validation batches", leave=False)
+
+            for batch in pbar:
+                # Move data to device
+                x = batch["x"].to(self.device)
+                x_mask = batch["x_mask"].to(self.device)
+                y = batch["y"].to(self.device)
+                y_mask = batch["y_mask"].to(self.device)
+                adj = batch["adj"].to(self.device)
+
+                # Forward pass
+                y_pred = self.model(x, adj, x_mask)
+
+                # Compute loss on valid points only
+                loss = self.criterion(y_pred, y)
+                if y_mask is not None:
+                    # Count non-zero elements in mask
+                    mask_sum = y_mask.sum()
+                    if mask_sum > 0:
+                        loss = (loss * y_mask).sum() / mask_sum
+                    else:
+                        loss = torch.tensor(0.0, device=self.device)
+
+                batch_loss = loss.item()
+                total_loss += batch_loss
+                num_batches += 1
+
+                # Update progress bar with current batch loss
+                pbar.set_postfix({"batch_loss": f"{batch_loss:.6f}"})
+
+        return total_loss / max(1, num_batches)
+
+
 def train_model(
     data_loaders,
     input_dim=1,
@@ -129,7 +247,7 @@ def train_model(
     patience=10,
 ):
     """
-    Train the STGNN model
+    Train the STGNN model with progress bars
 
     Parameters:
     -----------
@@ -175,17 +293,20 @@ def train_model(
     # Mean Squared Error loss
     criterion = torch.nn.MSELoss(reduction="none")
 
-    # Create trainer
-    trainer = STGNNTrainer(model, optimizer, criterion, device)
+    # Create trainer with tqdm support
+    trainer = TqdmSTGNNTrainer(model, optimizer, criterion, device)
 
-    # Training loop with early stopping
+    # Training loop with early stopping and overall progress bar
     train_losses = []
     val_losses = []
     best_val_loss = float("inf")
     best_model = None
     no_improve_count = 0
 
-    for epoch in range(num_epochs):
+    # Use trange for overall epoch progress
+    epochs_pbar = trange(num_epochs, desc="Training progress")
+
+    for epoch in epochs_pbar:
         # Train
         train_loss = trainer.train_epoch(data_loaders["train_loader"])
         train_losses.append(train_loss)
@@ -194,8 +315,13 @@ def train_model(
         val_loss = trainer.evaluate(data_loaders["val_loader"])
         val_losses.append(val_loss)
 
-        print(
-            f"Epoch {epoch+1}/{num_epochs}: Train Loss: {train_loss:.6f}, Val Loss: {val_loss:.6f}"
+        # Update progress bar with current metrics
+        epochs_pbar.set_postfix(
+            {
+                "train_loss": f"{train_loss:.6f}",
+                "val_loss": f"{val_loss:.6f}",
+                "no_improve": no_improve_count,
+            }
         )
 
         # Check for improvement
@@ -261,7 +387,8 @@ def predict_and_evaluate(model, dataloader, device=None):
     all_masks = []
 
     with torch.no_grad():
-        for batch in dataloader:
+        # Add progress bar for evaluation
+        for batch in tqdm(dataloader, desc="Evaluating model"):
             # Move data to device
             x = batch["x"].to(device)
             x_mask = batch["x_mask"].to(device)

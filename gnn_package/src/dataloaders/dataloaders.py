@@ -126,7 +126,7 @@ def collate_fn(batch):
     batch_size = len(window_groups)
     num_nodes = len(all_node_indices)
 
-    print(f"Creating batch with dimensions: {batch_size} windows, {num_nodes} nodes")
+    # print(f"DEBUG: Creating batch with dimensions: {batch_size} windows, {num_nodes} nodes")
 
     # Initialize tensors with proper dimensions
     x = torch.full((batch_size, num_nodes, seq_len, 1), -1.0)

@@ -471,45 +471,50 @@ class SpatioTemporalDataset(Dataset):
 
 def collate_fn(batch):
     """
-    Custom collate function to handle samples from different nodes. Maitains node dimensions.
+    Custom collate function that creates batches of multiple time windows,
+    each containing data for all nodes present in the batch.
 
     Parameters:
     ----------
     batch : List[Dict]
         List of samples from the dataset.
+
     Returns:
     -------
     Dict
-        x : Tensor [batch_size, seq_len, 1],
-        x_mask : Tensor [batch_size, seq_len, 1],
-        y : Tensor [batch_size, horizon, 1],
-        y_mask : Tensor [batch_size, horizon, 1],
-        node_indices : Tensor [batch_size],
-        adj : Tensor [batch_size, num_nodes, num_nodes],
-
+        x : Tensor [batch_size, num_nodes, seq_len, 1]
+        x_mask : Tensor [batch_size, num_nodes, seq_len, 1]
+        y : Tensor [batch_size, num_nodes, horizon, 1]
+        y_mask : Tensor [batch_size, num_nodes, horizon, 1]
+        node_indices : Tensor [num_nodes]
+        adj : Tensor [num_nodes, num_nodes]
     """
-    # Get unique node indices in this batch
-    node_indices = sorted(list(set(item["node_idx"] for item in batch)))
-    node_idx_map = {idx: i for i, idx in enumerate(node_indices)}
+    # Get all unique node indices in this batch
+    all_node_indices = sorted(list(set(item["node_idx"] for item in batch)))
+    node_idx_map = {idx: i for i, idx in enumerate(all_node_indices)}
 
     # Get window dimensions
     seq_len = len(batch[0]["x"])
     horizon = len(batch[0]["y"])
 
-    # Create batch_size counter from window groups
+    # Group samples by window_idx
+    # We'll use the relative position in the batch to create window groups
+    # This way, we'll create multiple windows in a batch
+    max_windows_per_batch = 32  # Maximum windows in a batch
     window_groups = {}
-    for item in batch:
-        window_idx = item.get("window_idx", 0)  # Default to 0 if not present
-        if window_idx not in window_groups:
-            window_groups[window_idx] = []
-        window_groups[window_idx].append(item)
 
+    for i, item in enumerate(batch):
+        # Assign a window group based on position in batch
+        window_group = i % max_windows_per_batch
+        if window_group not in window_groups:
+            window_groups[window_group] = []
+        window_groups[window_group].append(item)
+
+    # Calculate batch dimensions
     batch_size = len(window_groups)
-    num_nodes = len(node_indices)
+    num_nodes = len(all_node_indices)
 
-    # Print batch size and number of nodes for debugging
-    print(f"DEBUG: Executing collate_fn with {len(batch)} items")
-    print(f"DEBUG: Batch size: {batch_size}, Number of nodes: {num_nodes}")
+    print(f"Creating batch with dimensions: {batch_size} windows, {num_nodes} nodes")
 
     # Initialize tensors with proper dimensions
     x = torch.full((batch_size, num_nodes, seq_len, 1), -1.0)
@@ -518,11 +523,11 @@ def collate_fn(batch):
     y_mask = torch.zeros((batch_size, num_nodes, horizon, 1))
 
     # Fill tensors
-    for batch_idx, (window_idx, items) in enumerate(window_groups.items()):
+    for batch_idx, items in enumerate(window_groups.values()):
         for item in items:
             node_pos = node_idx_map[item["node_idx"]]
 
-            # Add data and masks
+            # Add data and masks (add feature dimension)
             x[batch_idx, node_pos, :, 0] = item["x"]
             x_mask[batch_idx, node_pos, :, 0] = item["x_mask"]
             y[batch_idx, node_pos, :, 0] = item["y"]
@@ -530,14 +535,14 @@ def collate_fn(batch):
 
     # Extract adjacency for these specific nodes
     adj = batch[0]["adj"]
-    batch_adj = adj[node_indices][:, node_indices]
+    batch_adj = adj[all_node_indices][:, all_node_indices]
 
     return {
         "x": x,
         "x_mask": x_mask,
         "y": y,
         "y_mask": y_mask,
-        "node_indices": torch.tensor(node_indices),
+        "node_indices": torch.tensor(all_node_indices),
         "adj": batch_adj,
     }
 
@@ -745,13 +750,12 @@ class TemporalGCN(nn.Module):
         """
         x: Node features [batch_size, num_nodes, seq_len, input_dim]
         adj: Adjacency matrix [num_nodes, num_nodes]
-        mask: Mask for valid values [batch_size, num_nodes, seq_len]
+        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim]
         """
         batch_size, num_nodes, seq_len, features = x.size()
 
         # Process each time step through the GCN layers
         outputs = []
-        temporal_attn_weights = []
 
         for t in range(seq_len):
             # Get features at this time step
@@ -759,7 +763,7 @@ class TemporalGCN(nn.Module):
 
             # Create mask for this timestep
             if mask is not None:
-                mask_t = mask[:, :, t].unsqueeze(-1)  # [batch_size, num_nodes, 1]
+                mask_t = mask[:, :, t, :]  # [batch_size, num_nodes, features]
             else:
                 mask_t = None
 
@@ -769,46 +773,47 @@ class TemporalGCN(nn.Module):
             h = self.dropout(h)  # Apply dropout
             h = self.gc2(h, adj, mask_t)  # Second GC layer
 
-            # Apply node attention to focus on important nodes
-            h_node_attn, node_attn_weights = self.node_attention(h, mask_t)
-
-            outputs.append(h_node_attn)
+            # Store the processed features for this timestep
+            outputs.append(h)  # [batch_size, num_nodes, hidden_dim]
 
         # Stack outputs along time dimension
-        out_stacked = torch.stack(outputs, dim=1)  # [batch_size, seq_len, hidden_dim]
+        # This gives us [batch_size, num_nodes, seq_len, hidden_dim]
+        temporal_features = torch.stack(outputs, dim=2)
 
-        # Create a temporal mask from the original mask
-        if mask is not None:
-            # Average across nodes to get temporal mask
-            temporal_mask = (
-                (mask.mean(dim=1) > 0).float().unsqueeze(-1)
-            )  # [batch_size, seq_len, 1]
-        else:
-            temporal_mask = None
+        # Process each node's temporal sequence with GRU
+        node_outputs = []
 
-        # Apply temporal attention
-        context, temp_attn_weights = self.temporal_attention(out_stacked, temporal_mask)
+        for n in range(num_nodes):
+            # Get temporal data for this node across all batches
+            # Shape: [batch_size, seq_len, hidden_dim]
+            node_temporal_data = temporal_features[:, n, :, :]
 
-        # Reshape for GRU: [batch_size, seq_len, hidden_dim]
-        out_gru, _ = self.gru(out_stacked)
+            # Pass through GRU
+            # Output shape: [batch_size, seq_len, hidden_dim]
+            node_gru_out, _ = self.gru(node_temporal_data)
+
+            # Add to collected outputs
+            node_outputs.append(node_gru_out)
+
+        # Stack back to full tensor
+        # Shape: [batch_size, num_nodes, seq_len, hidden_dim]
+        gru_output = torch.stack(node_outputs, dim=1)
 
         # Apply final FC layer for output
-        out_final = self.fc_out(out_gru)
+        # Shape: [batch_size, num_nodes, seq_len, output_dim]
+        out = self.fc_out(gru_output)
 
         # Apply mask if provided to ensure missing values stay missing
         if mask is not None:
             # Ensure mask has right shape
-            if len(mask.shape) == 3:  # [batch, nodes, seq_len]
-                mask = mask.unsqueeze(-1)  # Add feature dimension
-
-            # Expand mask if needed
-            if mask.shape[3] == 1 and out_final.shape[3] > 1:
-                mask = mask.expand(-1, -1, -1, out_final.shape[3])
+            if mask.shape[-1] == 1 and out.shape[-1] > 1:
+                # Expand last dimension if needed
+                mask = mask.expand(-1, -1, -1, out.shape[-1])
 
             # Apply mask
-            out_final = out_final * mask
+            out = out * mask
 
-        return out_final
+        return out
 
 
 class STGNN(nn.Module):
@@ -842,35 +847,32 @@ class STGNN(nn.Module):
 
     def forward(self, x, adj, x_mask=None):
         """
-        x: Input features [batch_size, num_nodes, input_seq_len, input_dim]
+        x: Input features [batch_size, num_nodes, seq_len, input_dim]
         adj: Adjacency matrix [num_nodes, num_nodes]
-        x_mask: Mask for input [batch_size, num_nodes, input_seq_len]
+        x_mask: Mask for input [batch_size, num_nodes, seq_len, input_dim]
 
         Returns:
         Predictions [batch_size, num_nodes, horizon, output_dim]
         """
-        # x: [batch_size, num_nodes, input_seq_len, input_dim]
-        assert (
-            len(x.shape) == 4
-        ), "Input x must be 4D: [batch_size, num_nodes, seq_len, input_dim]"
-        assert (
-            len(adj.shape) == 2
-        ), "Adjacency matrix must be 2D: [num_nodes, num_nodes]"
+        # Check for proper shape
+        assert len(x.shape) == 4, f"Expected 4D input but got shape {x.shape}"
 
         batch_size, num_nodes, seq_len, _ = x.size()
 
         # Encode the input sequence
+        # Output shape: [batch_size, num_nodes, seq_len, hidden_dim]
         encoded = self.encoder(x, adj, x_mask)
 
         # Use the last time step for each node to predict future
-        last_hidden = encoded[:, :, -1, :]  # [batch_size, num_nodes, hidden_dim]
+        # Shape: [batch_size, num_nodes, hidden_dim]
+        last_hidden = encoded[:, :, -1, :]
 
         # Predict future values
-        future_flat = self.decoder(
-            last_hidden
-        )  # [batch_size, num_nodes, output_dim * horizon]
+        # Shape: [batch_size, num_nodes, output_dim * horizon]
+        future_flat = self.decoder(last_hidden)
 
         # Reshape to separate time steps
+        # Shape: [batch_size, num_nodes, horizon, output_dim]
         predictions = future_flat.reshape(batch_size, num_nodes, self.horizon, -1)
 
         return predictions
@@ -896,22 +898,16 @@ class STGNNTrainer:
             y = batch["y"].to(self.device)
             y_mask = batch["y_mask"].to(self.device)
             adj = batch["adj"].to(self.device)
-            node_indices = batch["node_indices"].to(self.device)
 
             # Print shapes for debugging
+            print(f"Batch shapes: x={x.shape}, y={y.shape}")
             print(
-                f"Batch shapes: x={x.shape}, x_mask={x_mask.shape}, y={y.shape}, y_mask={y_mask.shape}"
+                f"Mask non-zero values: {x_mask.sum().item()} out of {x_mask.numel()}"
             )
-            print(
-                f"Non-zero values in mask: {x_mask.sum().item()} out of {x_mask.numel()}"
-            )
-
-            # Extract adjacency for the specific nodes in this batch
-            batch_adj = adj[node_indices][:, node_indices]
 
             # Forward pass
             self.optimizer.zero_grad()
-            y_pred = self.model(x, batch_adj, x_mask)
+            y_pred = self.model(x, adj, x_mask)
 
             # Compute loss on valid points only
             loss = self.criterion(y_pred, y)
@@ -929,6 +925,39 @@ class STGNNTrainer:
 
             total_loss += loss.item()
             num_batches += 1
+
+        return total_loss / max(1, num_batches)
+
+    def evaluate(self, dataloader):
+        """Evaluate the model on a validation or test set"""
+        self.model.eval()
+        total_loss = 0
+        num_batches = 0
+
+        with torch.no_grad():
+            for batch in dataloader:
+                # Move data to device
+                x = batch["x"].to(self.device)
+                x_mask = batch["x_mask"].to(self.device)
+                y = batch["y"].to(self.device)
+                y_mask = batch["y_mask"].to(self.device)
+                adj = batch["adj"].to(self.device)
+
+                # Forward pass
+                y_pred = self.model(x, adj, x_mask)
+
+                # Compute loss on valid points only
+                loss = self.criterion(y_pred, y)
+                if y_mask is not None:
+                    # Count non-zero elements in mask
+                    mask_sum = y_mask.sum()
+                    if mask_sum > 0:
+                        loss = (loss * y_mask).sum() / mask_sum
+                    else:
+                        loss = torch.tensor(0.0, device=self.device)
+
+                total_loss += loss.item()
+                num_batches += 1
 
         return total_loss / max(1, num_batches)
 

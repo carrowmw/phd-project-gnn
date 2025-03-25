@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>GNN Tensor Flow Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .dashboard-header {
+            background-color: #4C78A8;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .dashboard-section {
+            padding: 20px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        h1 {
+            margin: 0;
+        }
+
+        h2 {
+            color: #2C3E50;
+            margin-top: 0;
+        }
+
+        .viz-container {
+            margin-top: 20px;
+        }
+
+        .tensor-transformation {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+
+        .arrow {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+
+        .tensor-info {
+            font-family: monospace;
+            background-color: #f0f0f0;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+
+        .tensor-info pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>GNN Tensor Flow Dashboard</h1>
+            <p>Visualizing Data Transformations Through the Pipeline</p>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>Pipeline Overview</h2>
+            <p>This dashboard visualizes how data transforms as it flows through the GNN pipeline:</p>
+            <div class="tensor-transformation">
+                <div class="tensor-info">
+                    <pre>Raw Time Series Data → Find Continuous Segments → Create Windows → Compute Adjacency Weights → Batch Data → Model Forward Pass</pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{raw_data_title}}</h2>
+            <p>Starting point: time series data with missing values (shown as gaps).</p>
+            <div class="viz-container">
+                {{raw_data_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{segments_title}}</h2>
+            <p>Identifying continuous segments in the time series data without significant gaps.</p>
+            <div class="viz-container">
+                {{segments_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{windows_title}}</h2>
+            <p>Creating fixed-size windows from continuous segments, standardizing values, and tracking missing data
+                with masks.</p>
+            <div class="viz-container">
+                {{windows_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{adjacency_title}}</h2>
+            <p>Converting distance matrix to weighted adjacency matrix using Gaussian kernel.</p>
+            <div class="viz-container">
+                {{adjacency_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{batch_title}}</h2>
+            <p>Organizing data into batches for model training with shape transformations.</p>
+            <div class="viz-container">
+                {{batch_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{model_title}}</h2>
+            <p>Visualizing the STGNN model architecture that processes the tensor data.</p>
+            <div class="viz-container">
+                {{model_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>Tensor Shape Transformations</h2>
+            <p>Summary of how tensor shapes change through the pipeline:</p>
+
+            <div class="tensor-transformation">
+                <div class="tensor-info">
+                    <pre>Raw Time Series: Series[time] → shape: (n_timestamps,)</pre>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="tensor-info">
+                    <pre>Windowed Data: X_by_sensor[node_id] → shape: (n_windows, window_size)</pre>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="tensor-info">
+                    <pre>Batched Data: x → shape: (batch_size, num_nodes, seq_len, features)</pre>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="tensor-info">
+                    <pre>Model Output: predictions → shape: (batch_size, num_nodes, horizon, features)</pre>
+                </div>
+            </div>
+
+            <div class="tensor-transformation">
+                <div class="tensor-info">
+                    <pre>Raw Adjacency Matrix → shape: (num_nodes, num_nodes)</pre>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="tensor-info">
+                    <pre>Weighted Adjacency Matrix → shape: (num_nodes, num_nodes)</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
