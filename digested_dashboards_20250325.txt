@@ -1,0 +1,4588 @@
+Directory structure:
+└── dashboards/
+    ├── __init__.py
+    ├── digester.sh
+    ├── data/
+    ├── eda/
+    │   ├── __init__.py
+    │   ├── __main__.py
+    │   ├── __pycache__/
+    │   ├── components/
+    │   │   ├── __init__.py
+    │   │   ├── calendar_heatmap.py
+    │   │   ├── completeness_trend.py
+    │   │   ├── counts_bar.py
+    │   │   ├── daily_patterns.py
+    │   │   ├── heatmap.py
+    │   │   ├── monthly_data_coverage.py
+    │   │   ├── sensor_clustering.py
+    │   │   ├── sensor_map.py
+    │   │   ├── traffic_comparison.py
+    │   │   ├── traffic_profile.py
+    │   │   ├── window_segments.py
+    │   │   └── __pycache__/
+    │   ├── templates/
+    │   │   ├── __init__.py
+    │   │   └── dashboard_template.html
+    │   └── utils/
+    │       ├── __init__.py
+    │       ├── data_utils.py
+    │       ├── template_utils.py
+    │       └── __pycache__/
+    └── tensor_flow/
+        ├── __init__.py
+        ├── __main__.py
+        ├── __pycache__/
+        ├── components/
+        │   ├── __init__.py
+        │   ├── adjacency_plot.py
+        │   ├── batch_plot.py
+        │   ├── model_plot.py
+        │   ├── segments_plot.py
+        │   ├── time_series_plot.py
+        │   ├── windows_plot.py
+        │   └── __pycache__/
+        ├── templates/
+        │   └── layout.html
+        └── utils/
+            ├── __init__.py
+            ├── data_utils.py
+            └── __pycache__/
+
+================================================
+File: __init__.py
+================================================
+
+
+
+================================================
+File: digester.sh
+================================================
+#!/bin/bash
+
+# digester.sh - Script to ingest codebase while excluding large files and data files
+# Dependencies: gitingest, nbstripout
+
+set -e  # Exit on error
+
+# Configuration
+MAX_FILE_SIZE_KB=500  # Set maximum file size to 500 KB
+MAX_FILE_SIZE_BYTES=$((MAX_FILE_SIZE_KB * 1024))
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+OUTPUT_FILE="$PROJECT_ROOT/digested_dashboards_$(date +%Y%m%d).txt"
+
+# Check if gitingest is installed
+if ! command -v gitingest &> /dev/null; then
+    echo "Error: gitingest is not installed. Please install it first."
+    echo "Install with: pip install gitingest"
+    exit 1
+fi
+
+# Check if nbstripout is installed
+if ! command -v nbstripout &> /dev/null; then
+    echo "Warning: nbstripout is not installed. Notebooks will not be processed."
+    echo "Consider installing with: pip install nbstripout"
+    PROCESS_NOTEBOOKS=false
+else
+    PROCESS_NOTEBOOKS=true
+fi
+
+# Process notebooks if nbstripout is available
+if [ "$PROCESS_NOTEBOOKS" = true ]; then
+    echo "Processing notebooks with nbstripout..."
+    find "$SCRIPT_DIR" -name "*.ipynb" -exec nbstripout {} \;
+fi
+
+echo "Starting codebase ingestion from gnn_package directory..."
+echo "- Max file size: ${MAX_FILE_SIZE_KB}KB"
+echo "- Output will be saved to: ${OUTPUT_FILE}"
+
+# Run gitingest on the gnn_package directory
+gitingest "$SCRIPT_DIR" \
+    -s "${MAX_FILE_SIZE_BYTES}" \
+    --exclude-pattern="*.pkl" \
+    --exclude-pattern="*.npy" \
+    --exclude-pattern="*.csv" \
+    --exclude-pattern="*.parquet" \
+    --exclude-pattern="*.json" \
+    --exclude-pattern="*.gz" \
+    --exclude-pattern="*.zip" \
+    --exclude-pattern="*.tar" \
+    --exclude-pattern="*.h5" \
+    --exclude-pattern="*.hdf5" \
+    --exclude-pattern="*.pyc" \
+    --exclude-pattern="__pycache__/" \
+    --exclude-pattern=".ipynb_checkpoints/" \
+    --exclude-pattern="cache/" \
+    --exclude-pattern="*/cache/*" \
+    --exclude-pattern="*.so" \
+    --exclude-pattern="*.o" \
+    --exclude-pattern="*.a" \
+    --exclude-pattern="*.dll" \
+    --exclude-pattern="*.geojson" \
+    --exclude-pattern="*.shp" \
+    --exclude-pattern="*.shx" \
+    --exclude-pattern="*.dbf" \
+    --exclude-pattern="*.prj" \
+    --exclude-pattern="*.cpg" \
+    --exclude-pattern="*.pth" \
+    --exclude-pattern="*.pt" \
+    --exclude-pattern="*.ckpt" \
+    --exclude-pattern="*.bin" \
+    --exclude-pattern="*.png" \
+    --exclude-pattern="*.jpg" \
+    --exclude-pattern="*.jpeg" \
+    --exclude-pattern="*.gif" \
+    --exclude-pattern="*.svg" \
+    --exclude-pattern="*.ico" \
+    --exclude-pattern="*.pdf" \
+    --exclude-pattern="*index.html" \
+    --output="$OUTPUT_FILE"
+
+echo "Nom nom, digestion complete! Output saved to $OUTPUT_FILE"
+
+
+
+================================================
+File: eda/__init__.py
+================================================
+
+
+
+================================================
+File: eda/__main__.py
+================================================
+# Create a multi-page dashboard using HTML and Plotly
+from pathlib import Path
+from datetime import datetime
+from plotly.io import to_html
+import plotly.io as pio
+
+from .components import (
+    interactive_data_availability,
+    create_calendar_heatmap,
+    create_completeness_trend,
+    create_sensors_comparison,
+    create_sensor_clustering,
+    interactive_sensor_windows,
+    create_monthly_coverage_matrix,
+    visualize_daily_patterns,
+    create_sensors_map,
+    create_time_of_day_profiles,
+    interactive_window_counts,
+)
+
+from .utils import load_data, load_template, render_template, get_template_path
+
+from gnn_package.config import ExperimentConfig
+
+
+def compute_completeness(time_series_dict):
+    """
+    Compute data completeness for each sensor.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to time series data
+
+    Returns:
+    --------
+    dict
+        Dictionary mapping sensor IDs to completeness percentage (0-1)
+    """
+    try:
+        config = ExperimentConfig(
+            "/Users/administrator/Code/python/phd-project-gnn/config.yml"
+        )
+        start_date = datetime.strptime(config.data.start_date, "%Y-%m-%d %H:%M:%S")
+        end_date = datetime.strptime(config.data.end_date, "%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        print(f"Warning: Could not load config file, using default dates: {e}")
+        # Fallback to using min and max dates from the data
+        all_dates = []
+        for series in time_series_dict.values():
+            if len(series) > 0:
+                all_dates.extend(series.index.tolist())
+        if all_dates:
+            start_date = min(all_dates)
+            end_date = max(all_dates)
+        else:
+            raise ValueError("No data available to compute completeness")
+
+    days_between = (end_date - start_date).total_seconds() / (60 * 60 * 24)
+    expected_records = days_between * 24 * 4  # 15-minute intervals = 4 per hour
+    print(f"Total days between start and end date: {days_between}")
+
+    completeness_dict = {}
+    for sensor_id, series in time_series_dict.items():
+        # Remove duplicates to ensure accurate count
+        series = series[~series.index.duplicated(keep="first")]
+        completeness_dict[sensor_id] = len(series) / expected_records
+
+    return completeness_dict
+
+
+# Create a comprehensive dashboard combining multiple visualizations
+def create_sensor_window_dashboard(data_file="test_data_1mnth.pkl", window_size=24):
+    """Create a comprehensive dashboard for analyzing sensor time windows"""
+    # Load the data
+    time_series_dict = load_data(data_file)
+
+    # Identify sensors with most data points for individual analysis
+    sensor_data_counts = {
+        sensor_id: len(series) for sensor_id, series in time_series_dict.items()
+    }
+    top_sensor = max(sensor_data_counts, key=sensor_data_counts.get)
+
+    # Set theme
+    pio.templates.default = "plotly_white"
+
+    # Compute data completeness
+    completeness_dict = compute_completeness(time_series_dict)
+
+    # Create individual visualizations
+    # 1. Sensor map with completeness data
+    sensor_map_fig = create_sensors_map(completeness_dict)
+
+    # 2. Sensor availability and patterns
+    data_avail_fig = interactive_data_availability(time_series_dict)
+    top_sensor_fig = interactive_sensor_windows(
+        time_series_dict, top_sensor, window_size
+    )
+    window_counts_fig = interactive_window_counts(time_series_dict, window_size)
+    daily_patterns_fig = visualize_daily_patterns(time_series_dict, n_sensors=4)
+
+    # 3. New visualizations
+    try:
+        # Calendar heatmap for top sensor
+        calendar_heatmap_fig = create_calendar_heatmap(time_series_dict, top_sensor)
+    except Exception as e:
+        print(f"Could not create calendar heatmap: {e}")
+        calendar_heatmap_fig = None
+
+    try:
+        # Time of day profiles
+        time_of_day_fig = create_time_of_day_profiles(time_series_dict)
+    except Exception as e:
+        print(f"Could not create time of day profiles: {e}")
+        time_of_day_fig = None
+
+    try:
+        # Completeness trend
+        completeness_trend_fig = create_completeness_trend(time_series_dict)
+    except Exception as e:
+        print(f"Could not create completeness trend: {e}")
+        completeness_trend_fig = None
+
+    try:
+        # Top sensors comparison
+        sensors_comparison_fig = create_sensors_comparison(time_series_dict)
+    except Exception as e:
+        print(f"Could not create sensors comparison: {e}")
+        sensors_comparison_fig = None
+
+    try:
+        # Monthly coverage matrix
+        coverage_matrix_fig = create_monthly_coverage_matrix(time_series_dict)
+    except Exception as e:
+        print(f"Could not create coverage matrix: {e}")
+        coverage_matrix_fig = None
+
+    try:
+        # Sensor clustering
+        sensor_clustering_fig = create_sensor_clustering(time_series_dict)
+    except Exception as e:
+        print(f"Could not create sensor clustering: {e}")
+        sensor_clustering_fig = None
+
+    # Load the template
+    template_path = get_template_path("dashboard_template.html")
+    template = load_template(template_path)
+
+    # Prepare context with all variables for the template
+    context = {
+        "window_size": window_size,
+        "top_sensor": top_sensor,
+        "sensor_map_fig": to_html(
+            sensor_map_fig, include_plotlyjs="cdn", full_html=False
+        ),
+        "data_avail_fig": to_html(
+            data_avail_fig, include_plotlyjs="cdn", full_html=False
+        ),
+        "top_sensor_fig": to_html(
+            top_sensor_fig, include_plotlyjs="cdn", full_html=False
+        ),
+        "window_counts_fig": to_html(
+            window_counts_fig, include_plotlyjs="cdn", full_html=False
+        ),
+        "daily_patterns_fig": to_html(
+            daily_patterns_fig, include_plotlyjs="cdn", full_html=False
+        ),
+        "calendar_heatmap_fig": (
+            to_html(calendar_heatmap_fig, include_plotlyjs="cdn", full_html=False)
+            if calendar_heatmap_fig
+            else None
+        ),
+        "time_of_day_fig": (
+            to_html(time_of_day_fig, include_plotlyjs="cdn", full_html=False)
+            if time_of_day_fig
+            else None
+        ),
+        "completeness_trend_fig": (
+            to_html(completeness_trend_fig, include_plotlyjs="cdn", full_html=False)
+            if completeness_trend_fig
+            else None
+        ),
+        "sensors_comparison_fig": (
+            to_html(sensors_comparison_fig, include_plotlyjs="cdn", full_html=False)
+            if sensors_comparison_fig
+            else None
+        ),
+        "coverage_matrix_fig": (
+            to_html(coverage_matrix_fig, include_plotlyjs="cdn", full_html=False)
+            if coverage_matrix_fig
+            else None
+        ),
+        "sensor_clustering_fig": (
+            to_html(sensor_clustering_fig, include_plotlyjs="cdn", full_html=False)
+            if sensor_clustering_fig
+            else None
+        ),
+    }
+
+    # Render the template
+    html_content = render_template(template, context)
+
+    # Return the HTML content
+    return html_content
+
+
+if __name__ == "__main__":
+    # Create the dashboard
+    dashboard_html = create_sensor_window_dashboard(
+        data_file="dashboards/data/test_data_1mnth.pkl", window_size=24
+    )
+
+    # Save to a file
+    output_path = Path(__file__).parent / "index.html"
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(dashboard_html)
+
+    print(f"Dashboard created: {output_path}")
+
+
+
+
+================================================
+File: eda/components/__init__.py
+================================================
+from .calendar_heatmap import create_calendar_heatmap
+from .completeness_trend import create_completeness_trend
+from .counts_bar import interactive_window_counts
+from .daily_patterns import visualize_daily_patterns
+from .heatmap import interactive_data_availability
+from .monthly_data_coverage import create_monthly_coverage_matrix
+from .sensor_clustering import create_sensor_clustering
+from .sensor_map import create_sensors_map
+from .traffic_comparison import create_sensors_comparison
+from .traffic_profile import create_time_of_day_profiles
+from .window_segments import interactive_sensor_windows
+
+__all__ = [
+    "create_calendar_heatmap",
+    "create_completeness_trend",
+    "interactive_window_counts",
+    "visualize_daily_patterns",
+    "interactive_data_availability",
+    "create_sensors_comparison",
+    "create_sensor_clustering",
+    "create_sensors_map",
+    "create_sensors_comparison",
+    "create_time_of_day_profiles",
+    "interactive_sensor_windows",
+]
+
+
+
+================================================
+File: eda/components/calendar_heatmap.py
+================================================
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+import calendar
+from datetime import datetime
+
+
+def create_calendar_heatmap(time_series_dict, sensor_id=None):
+    """
+    Create a calendar heatmap showing data patterns by day of week and hour.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to their time series data
+    sensor_id : str, optional
+        Specific sensor to visualize. If None, uses the sensor with most data.
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Calendar heatmap figure
+    """
+    # If no sensor_id provided, use the one with most data points
+    if sensor_id is None:
+        sensor_data_counts = {
+            sensor_id: len(series) for sensor_id, series in time_series_dict.items()
+        }
+        sensor_id = max(sensor_data_counts, key=sensor_data_counts.get)
+
+    # Get the time series for this sensor
+    series = time_series_dict.get(sensor_id)
+    if series is None or len(series) == 0:
+        return go.Figure().update_layout(
+            title=f"No data available for sensor {sensor_id}"
+        )
+
+    # Extract hour and day of week
+    df = pd.DataFrame(
+        {
+            "value": series.values,
+            "hour": series.index.hour,
+            "day_of_week": series.index.dayofweek,
+            "date": series.index.date,
+        }
+    )
+
+    # Group by hour and day of week, and calculate mean value
+    pivot_data = df.pivot_table(
+        values="value", index="day_of_week", columns="hour", aggfunc="mean"
+    ).fillna(0)
+
+    # Days in order (0=Monday in pandas)
+    days = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ]
+
+    # Create heatmap
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=pivot_data.values,
+            x=list(range(24)),  # 24 hours
+            y=days,
+            colorscale="YlOrRd",
+            zmin=0,
+            zmax=max(1, pivot_data.values.max()),  # Ensure non-zero upper bound
+            hoverongaps=False,
+            colorbar=dict(title="Avg Traffic Count", titleside="right"),
+            hovertemplate="Hour: %{x}<br>Day: %{y}<br>Avg Value: %{z:.1f}<extra></extra>",
+        )
+    )
+
+    # Calculate data coverage percentage
+    total_slots = 24 * 7
+    filled_slots = np.count_nonzero(pivot_data.values)
+    coverage_pct = filled_slots / total_slots * 100
+
+    # Update layout
+    fig.update_layout(
+        title=f"Traffic Patterns by Day & Hour - Sensor {sensor_id} (Data Coverage: {coverage_pct:.1f}%)",
+        xaxis_title="Hour of Day",
+        yaxis_title="Day of Week",
+        xaxis=dict(
+            tickmode="array",
+            tickvals=list(range(24)),
+            ticktext=[f"{h:02d}:00" for h in range(24)],
+        ),
+        height=500,
+        margin=dict(l=50, r=50, t=80, b=50),
+    )
+
+    return fig
+
+
+
+================================================
+File: eda/components/completeness_trend.py
+================================================
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+
+def create_completeness_trend(time_series_dict):
+    """
+    Create a visualization showing how data completeness trends over time.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to their time series data
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Completeness trend figure
+    """
+    # Get the time range from all sensors
+    all_timestamps = set()
+    for sensor_id, series in time_series_dict.items():
+        all_timestamps.update(series.index)
+
+    if not all_timestamps:
+        return go.Figure().update_layout(title="No data available")
+
+    # Get the min and max date to establish the full range
+    min_date = min(all_timestamps).date()
+    max_date = max(all_timestamps).date()
+
+    # Calculate expected readings per day (assuming 15-min intervals = 96 per day)
+    expected_per_day = 96
+
+    # Create date range
+    date_range = pd.date_range(min_date, max_date, freq="D")
+
+    # Initialize a DataFrame to store completeness by date
+    completeness_df = pd.DataFrame(index=date_range)
+
+    # Process each sensor
+    for sensor_id, series in time_series_dict.items():
+        # Count readings per day
+        daily_counts = series.groupby(series.index.date).size()
+
+        # Calculate completeness percentage
+        completeness = daily_counts / expected_per_day * 100
+
+        # Add to the DataFrame
+        completeness_df[sensor_id] = completeness
+
+    # Calculate overall completeness (average across all sensors)
+    completeness_df["overall_avg"] = completeness_df.mean(axis=1)
+
+    # Calculate the 7-day rolling average for smoothing
+    completeness_df["rolling_avg"] = (
+        completeness_df["overall_avg"].rolling(window=7, min_periods=1).mean()
+    )
+
+    # Create the figure
+    fig = go.Figure()
+
+    # Add the individual sensor completeness as light traces
+    for sensor_id in time_series_dict.keys():
+        fig.add_trace(
+            go.Scatter(
+                x=completeness_df.index,
+                y=completeness_df[sensor_id],
+                mode="lines",
+                line=dict(width=0.5, color="rgba(180,180,180,0.3)"),
+                name=sensor_id,
+                showlegend=False,
+            )
+        )
+
+    # Add the overall average
+    fig.add_trace(
+        go.Scatter(
+            x=completeness_df.index,
+            y=completeness_df["overall_avg"],
+            mode="lines",
+            line=dict(width=1, color="rgba(31, 119, 180, 0.8)"),
+            name="Daily Average",
+        )
+    )
+
+    # Add the rolling average
+    fig.add_trace(
+        go.Scatter(
+            x=completeness_df.index,
+            y=completeness_df["rolling_avg"],
+            mode="lines",
+            line=dict(width=3, color="rgb(31, 119, 180)"),
+            name="7-Day Rolling Average",
+        )
+    )
+
+    # Update layout
+    fig.update_layout(
+        title="Data Completeness Trend Over Time",
+        xaxis_title="Date",
+        yaxis_title="Completeness (%)",
+        yaxis=dict(
+            range=[0, 105], tickvals=[0, 25, 50, 75, 100]  # 0-100% with a little margin
+        ),
+        height=500,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+    )
+
+    # Add a horizontal reference line at 100%
+    fig.add_shape(
+        type="line",
+        x0=min_date,
+        x1=max_date,
+        y0=100,
+        y1=100,
+        line=dict(
+            color="rgba(0,100,0,0.5)",
+            width=1,
+            dash="dash",
+        ),
+    )
+
+    # Add annotation for 100% line
+    fig.add_annotation(
+        x=min_date + (max_date - min_date) * 0.02,  # Slightly offset from left edge
+        y=100,
+        text="100% Complete",
+        showarrow=False,
+        yshift=10,
+        font=dict(size=10, color="rgba(0,100,0,0.7)"),
+    )
+
+    return fig
+
+
+
+================================================
+File: eda/components/counts_bar.py
+================================================
+import pandas as pd
+import plotly.express as px
+from dashboards.eda.utils import find_continuous_segments
+
+
+# Create a window count bar chart
+def interactive_window_counts(time_series_dict, window_size=24, n_sensors=20):
+    """Create an interactive bar chart of window counts by sensor"""
+    # Count windows per sensor
+    window_counts = {}
+
+    for sensor_id, series in time_series_dict.items():
+        # Find segments without large gaps
+        segments = find_continuous_segments(series.index, series.values)
+
+        # Count windows
+        total_windows = 0
+        for start_seg, end_seg in segments:
+            segment_len = end_seg - start_seg
+            total_windows += max(0, segment_len - window_size + 1)
+
+        window_counts[sensor_id] = total_windows
+
+    # Sort by window count
+    sorted_counts = sorted(window_counts.items(), key=lambda x: x[1], reverse=True)[
+        :n_sensors
+    ]
+
+    # Create a DataFrame
+    count_df = pd.DataFrame(sorted_counts, columns=["sensor_id", "window_count"])
+
+    # Create a bar chart
+    fig = px.bar(
+        count_df,
+        x="sensor_id",
+        y="window_count",
+        title=f"Number of Available Windows (size={window_size}) by Sensor",
+        labels={"sensor_id": "Sensor ID", "window_count": "Number of Windows"},
+        color="window_count",
+        color_continuous_scale=px.colors.sequential.Viridis,
+    )
+
+    fig.update_layout(height=600, xaxis_tickangle=-45)
+
+    return fig
+
+
+
+================================================
+File: eda/components/daily_patterns.py
+================================================
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+
+# Create a heatmap of daily patterns
+def visualize_daily_patterns(time_series_dict, n_sensors=6):
+    """Create a heatmap of daily patterns for top sensors"""
+    # Identify sensors with most data points
+    sensor_data_counts = {
+        sensor_id: len(series) for sensor_id, series in time_series_dict.items()
+    }
+    top_sensors = sorted(sensor_data_counts, key=sensor_data_counts.get, reverse=True)[
+        :n_sensors
+    ]
+
+    # Create subplots
+    fig = make_subplots(
+        rows=n_sensors,
+        cols=1,
+        subplot_titles=[
+            f"Sensor {sensor_id} - Daily Pattern" for sensor_id in top_sensors
+        ],
+        vertical_spacing=0.08,
+    )
+
+    # Process each sensor
+    for i, sensor_id in enumerate(top_sensors):
+        series = time_series_dict[sensor_id]
+
+        # Create a DataFrame with hour and day of week
+        df = pd.DataFrame(
+            {
+                "value": series.values,
+                "hour": series.index.hour,
+                "day_of_week": series.index.dayofweek,
+            }
+        )
+
+        # Group by hour and day of week
+        pivot_data = df.pivot_table(
+            values="value", index="day_of_week", columns="hour", aggfunc="mean"
+        ).fillna(0)
+
+        # Create heatmap
+        heatmap = go.Heatmap(
+            z=pivot_data.values,
+            x=pivot_data.columns,
+            y=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+            colorscale="Viridis",
+            showscale=(i == 0),  # Only show colorbar for first heatmap
+        )
+
+        fig.add_trace(heatmap, row=i + 1, col=1)
+
+        # Update axes
+        fig.update_xaxes(
+            title_text="Hour of Day" if i == n_sensors - 1 else "", row=i + 1, col=1
+        )
+        fig.update_yaxes(title_text="Day of Week", row=i + 1, col=1)
+
+    # Update layout
+    fig.update_layout(
+        height=250 * n_sensors, title_text="Daily Traffic Patterns Across Sensors"
+    )
+
+    return fig
+
+
+
+================================================
+File: eda/components/heatmap.py
+================================================
+import numpy as np
+import pandas as pd
+import plotly.express as px
+
+
+# Create an interactive data availability heatmap
+def interactive_data_availability(time_series_dict):
+    """Create an interactive heatmap showing data availability across sensors over time"""
+    # Get all unique timestamps from all sensors
+    all_timestamps = set()
+    for sensor_id, series in time_series_dict.items():
+        all_timestamps.update(series.index)
+
+    all_timestamps = sorted(all_timestamps)
+
+    # Create a DataFrame with all timestamps and fill with NaN
+    data_matrix = pd.DataFrame(index=all_timestamps)
+
+    # For each sensor, add a column to the DataFrame
+    for sensor_id, series in time_series_dict.items():
+        data_matrix[sensor_id] = np.nan
+        # Only fill in data that exists
+        data_matrix.loc[series.index, sensor_id] = 1
+
+    # Resample to a lower resolution for better visualization if too many datapoints
+    if len(all_timestamps) > 1000:
+        data_matrix = data_matrix.resample("1h").mean()
+
+    # Convert to long format for plotly
+    data_long = data_matrix.reset_index().melt(
+        id_vars="index", var_name="sensor_id", value_name="has_data"
+    )
+
+    # Create the heatmap with plotly
+    fig = px.density_heatmap(
+        data_long,
+        x="index",
+        y="sensor_id",
+        z="has_data",
+        color_continuous_scale=[
+            [0, "rgba(255,255,255,0)"],  # Transparent for NaN
+            [0.5, "rgba(222,235,247,1)"],  # Light blue
+            [1, "rgba(49,130,189,1)"],  # Dark blue
+        ],
+        title="Data Availability Across Sensors (Interactive)",
+        labels={
+            "index": "Date",
+            "sensor_id": "Sensor ID",
+            "has_data": "Data Available",
+        },
+    )
+
+    # Update layout
+    fig.update_layout(
+        height=800,
+        xaxis_title="Date",
+        yaxis_title="Sensor ID",
+        title_x=0.5,
+        coloraxis_showscale=False,
+    )
+
+    return fig
+
+
+
+================================================
+File: eda/components/monthly_data_coverage.py
+================================================
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+import calendar
+from datetime import datetime
+
+
+def create_monthly_coverage_matrix(time_series_dict, n_sensors=20):
+    """
+    Create a matrix showing monthly data coverage for top sensors.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to their time series data
+    n_sensors : int
+        Number of top sensors to include
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Monthly coverage matrix figure
+    """
+    # Find sensors with most data points
+    sensor_data_counts = {
+        sensor_id: len(series) for sensor_id, series in time_series_dict.items()
+    }
+    top_sensors = sorted(sensor_data_counts, key=sensor_data_counts.get, reverse=True)[
+        :n_sensors
+    ]
+
+    # Get the time range
+    all_dates = []
+    for series in time_series_dict.values():
+        if len(series) > 0:
+            all_dates.extend(series.index.tolist())
+
+    if not all_dates:
+        return go.Figure().update_layout(title="No data available")
+
+    min_date = min(all_dates).date()
+    max_date = max(all_dates).date()
+
+    # Create month-year list
+    unique_months = set()
+    current_date = pd.Timestamp(min_date)
+    while current_date <= pd.Timestamp(max_date):
+        unique_months.add((current_date.year, current_date.month))
+        current_date += pd.DateOffset(months=1)
+
+    month_labels = [f"{calendar.month_name[m]} {y}" for y, m in sorted(unique_months)]
+    month_keys = sorted(unique_months)
+
+    # Expected readings per day and per month
+    readings_per_day = 96  # 15-minute intervals
+
+    # Initialize coverage matrix
+    coverage_matrix = np.zeros((len(top_sensors), len(month_keys)))
+
+    # Calculate coverage for each sensor and month
+    for i, sensor_id in enumerate(top_sensors):
+        series = time_series_dict[sensor_id]
+
+        # Group by year and month
+        ym_counts = series.groupby([series.index.year, series.index.month]).size()
+
+        # Calculate days in each month-year for expected total readings
+        for j, (year, month) in enumerate(month_keys):
+            # Calculate days in this month
+            if (year, month) in ym_counts.index:
+                # Get number of days in this month
+                days_in_month = calendar.monthrange(year, month)[1]
+                expected_readings = days_in_month * readings_per_day
+
+                # Calculate coverage percentage
+                coverage_matrix[i, j] = min(
+                    100, ym_counts[(year, month)] / expected_readings * 100
+                )
+
+    # Create heatmap
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=coverage_matrix,
+            x=month_labels,
+            y=[f"Sensor {sensor_id}" for sensor_id in top_sensors],
+            colorscale=[
+                [0, "rgb(247, 247, 247)"],  # Very light gray for 0%
+                [0.2, "rgb(224, 224, 255)"],  # Very light blue for 20%
+                [0.5, "rgb(150, 150, 255)"],  # Light blue for 50%
+                [0.8, "rgb(67, 67, 255)"],  # Medium blue for 80%
+                [1, "rgb(0, 0, 180)"],  # Dark blue for 100%
+            ],
+            zmin=0,
+            zmax=100,
+            colorbar=dict(
+                title="Coverage %",
+                tickvals=[0, 25, 50, 75, 100],
+                ticktext=["0%", "25%", "50%", "75%", "100%"],
+            ),
+            hovertemplate="Sensor: %{y}<br>Month: %{x}<br>Coverage: %{z:.1f}%<extra></extra>",
+        )
+    )
+
+    # Update layout
+    fig.update_layout(
+        title="Monthly Data Coverage Matrix (Top Sensors)",
+        xaxis_title="Month",
+        yaxis_title="Sensor",
+        height=600,
+        margin=dict(l=150),  # More space for sensor labels
+        xaxis=dict(tickangle=45, type="category"),
+    )
+
+    return fig
+
+
+
+================================================
+File: eda/components/sensor_clustering.py
+================================================
+import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+
+
+def create_sensor_clustering(time_series_dict, n_clusters=4):
+    """
+    Create a visualization of sensors clustered by their traffic patterns.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to their time series data
+    n_clusters : int
+        Number of clusters to identify
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Sensor clustering figure
+    """
+    # First, create feature vectors for each sensor
+    features = []
+    sensor_ids = []
+
+    for sensor_id, series in time_series_dict.items():
+        if len(series) < 24:  # Skip sensors with very little data
+            continue
+
+        # Create a DataFrame with time components
+        df = pd.DataFrame(
+            {
+                "value": series.values,
+                "hour": series.index.hour,
+                "day_of_week": series.index.dayofweek,
+            }
+        )
+
+        # Create hourly profile (average by hour of day)
+        hourly_profile = (
+            df.groupby("hour")["value"].mean().reindex(range(24)).fillna(0).values
+        )
+
+        # Create day of week profile
+        dow_profile = (
+            df.groupby("day_of_week")["value"].mean().reindex(range(7)).fillna(0).values
+        )
+
+        # Create weekend vs weekday ratio feature
+        weekday_avg = df[df["day_of_week"] < 5]["value"].mean() or 0
+        weekend_avg = df[df["day_of_week"] >= 5]["value"].mean() or 0
+        weekend_ratio = weekend_avg / weekday_avg if weekday_avg > 0 else 0
+
+        # Create morning vs evening ratio
+        morning = df[(df["hour"] >= 6) & (df["hour"] < 12)]["value"].mean() or 0
+        evening = df[(df["hour"] >= 16) & (df["hour"] < 22)]["value"].mean() or 0
+        ampm_ratio = morning / evening if evening > 0 else 0
+
+        # Combine all features
+        feature_vector = np.concatenate(
+            [
+                hourly_profile,  # 24 features
+                dow_profile,  # 7 features
+                [weekend_ratio, ampm_ratio],  # 2 additional features
+            ]
+        )
+
+        features.append(feature_vector)
+        sensor_ids.append(sensor_id)
+
+    if len(features) < n_clusters:
+        return go.Figure().update_layout(
+            title=f"Not enough data for clustering. Need at least {n_clusters} sensors with sufficient data."
+        )
+
+    # Convert to numpy array
+    X = np.array(features)
+
+    # Normalize features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Apply K-means clustering
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    clusters = kmeans.fit_predict(X_scaled)
+
+    # Apply PCA for visualization
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+
+    # Create a DataFrame for plotting
+    plot_df = pd.DataFrame(
+        {
+            "sensor_id": sensor_ids,
+            "cluster": clusters.astype(str),
+            "pc1": X_pca[:, 0],
+            "pc2": X_pca[:, 1],
+        }
+    )
+
+    # Create scatter plot of clusters
+    fig = px.scatter(
+        plot_df,
+        x="pc1",
+        y="pc2",
+        color="cluster",
+        hover_name="sensor_id",
+        title=f"Sensor Clustering Based on Traffic Patterns (k={n_clusters})",
+        labels={
+            "pc1": f"Principal Component 1 ({pca.explained_variance_ratio_[0]:.1%} variance)",
+            "pc2": f"Principal Component 2 ({pca.explained_variance_ratio_[1]:.1%} variance)",
+            "cluster": "Cluster",
+        },
+    )
+
+    # Add cluster centroids
+    centroids_pca = pca.transform(kmeans.cluster_centers_)
+
+    fig.add_trace(
+        go.Scatter(
+            x=centroids_pca[:, 0],
+            y=centroids_pca[:, 1],
+            mode="markers",
+            marker=dict(symbol="x", size=12, color="black", line=dict(width=2)),
+            name="Cluster Centroids",
+            hoverinfo="skip",
+        )
+    )
+
+    # Add annotations for cluster numbers
+    for i, (x, y) in enumerate(centroids_pca):
+        fig.add_annotation(
+            x=x,
+            y=y,
+            text=f"{i}",
+            showarrow=False,
+            yshift=15,
+            font=dict(size=14, color="black"),
+        )
+
+    # Update layout
+    fig.update_layout(height=600, legend_title="Cluster", hovermode="closest")
+
+    return fig
+
+
+
+================================================
+File: eda/components/sensor_map.py
+================================================
+import plotly.express as px
+import pandas as pd
+import numpy as np
+from private_uoapi import LightsailWrapper, LSAuth, LSConfig
+import geopandas as gpd
+from gnn_package.src.preprocessing import get_sensor_name_id_map
+
+
+def create_sensors_map(completeness_dict):
+    """
+    Create an interactive map of sensor locations colored by data completeness.
+    Includes bounds to prevent excessive panning and ensures the map loads properly.
+    Fixed zoom level for better visibility of Newcastle upon Tyne area.
+
+    Parameters:
+    -----------
+    completeness_dict : dict
+        Dictionary mapping sensor IDs to their completeness percentage (0-1)
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Interactive map with sensors
+    """
+    try:
+        # Try to read the shapefile
+        shapefile_path = "/Users/administrator/Code/python/phd-project-gnn/gnn_package/data/sensors/sensors.shp"
+        gdf = gpd.read_file(shapefile_path)
+
+        # Check the CRS - crucial step!
+        print(f"Original GeoDataFrame CRS: {gdf.crs}")
+
+        # If the data is in UK National Grid (EPSG:27700), convert to WGS84 (EPSG:4326)
+        if gdf.crs == "EPSG:27700" or str(gdf.crs).find("27700") >= 0:
+            print("Converting from EPSG:27700 (UK National Grid) to EPSG:4326 (WGS84)")
+            gdf = gdf.to_crs("EPSG:4326")
+
+        # Extract coordinates to a regular pandas DataFrame without geometry objects
+        lat_values = []
+        lon_values = []
+        for point in gdf["geometry"]:
+            # After conversion, y should be latitude and x should be longitude
+            lat_values.append(float(point.y))
+            lon_values.append(float(point.x))
+
+        # Verify coordinates are in reasonable lat/lon range
+        print(
+            f"Coordinate range - Lat: {min(lat_values)} to {max(lat_values)}, Lon: {min(lon_values)} to {max(lon_values)}"
+        )
+
+        # Create a clean DataFrame without geometry objects
+        df = pd.DataFrame(
+            {"location": gdf["location"].tolist(), "lat": lat_values, "lon": lon_values}
+        )
+
+    except Exception as e:
+        print(f"Error reading or processing shapefile: {e}")
+        print("Attempting to fetch data from API instead...")
+
+        # Fallback to using the API
+        config = LSConfig()
+        auth = LSAuth(config)
+        client = LightsailWrapper(config, auth)
+        locations = client.get_traffic_sensors()
+
+        # Create a regular DataFrame (not GeoDataFrame)
+        df = pd.DataFrame(locations)
+
+    # Calculate center and bounds with appropriate lat/lon coordinates
+    # If we have lat/lon values in df, use them
+    if "lat" in df.columns and "lon" in df.columns and len(df) > 0:
+        center_lat = np.mean(df["lat"])
+        center_lon = np.mean(df["lon"])
+
+        # Calculate appropriate zoom level based on the spread of data
+        lat_range = max(df["lat"]) - min(df["lat"])
+        lon_range = max(df["lon"]) - min(df["lon"])
+
+        # Adjust zoom based on geographic spread (smaller range = higher zoom)
+        # These values are calibrated for the Newcastle area
+        if max(lat_range, lon_range) < 0.05:
+            zoom_level = 13  # Very localized data
+        elif max(lat_range, lon_range) < 0.1:
+            zoom_level = 12  # Small area
+        elif max(lat_range, lon_range) < 0.3:
+            zoom_level = 11  # Medium area (typical for Newcastle)
+        else:
+            zoom_level = 10  # Larger area
+
+        print(
+            f"Auto-calculated zoom level: {zoom_level} based on data spread: {lat_range},{lon_range}"
+        )
+    else:
+        # Fallback values for Newcastle upon Tyne
+        center_lat = 54.97
+        center_lon = -1.61
+        zoom_level = 11
+
+    # Set appropriate bounds
+    lat_padding = 0.01  # Reduced padding for tighter view
+    lon_padding = 0.01
+
+    if "lat" in df.columns and "lon" in df.columns and len(df) > 0:
+        min_lat = max(min(df["lat"]) - lat_padding, -90)
+        max_lat = min(max(df["lat"]) + lat_padding, 90)
+        min_lon = max(min(df["lon"]) - lon_padding, -180)
+        max_lon = min(max(df["lon"]) + lon_padding, 180)
+    else:
+        # Fallback bounds for Newcastle
+        min_lat = 54.93
+        max_lat = 55.02
+        min_lon = -1.65
+        max_lon = -1.55
+
+    # Get mapping between sensor names and IDs
+    name_id_map = get_sensor_name_id_map()
+
+    # Add completeness data
+    df["sensor_id"] = df["location"].map(name_id_map)
+    df["completeness"] = df["sensor_id"].map(lambda x: completeness_dict.get(x, 0))
+    df["completeness_pct"] = df["completeness"] * 100
+
+    # Debug info
+    print(f"Map center: {center_lat}, {center_lon}")
+    print(f"Map bounds: {min_lat}, {min_lon}, {max_lat}, {max_lon}")
+    print(f"Number of sensors to display: {len(df)}")
+    print(f"Using zoom level: {zoom_level}")
+
+    # Define a custom color scale: red (low) -> yellow (medium) -> green (high)
+    # This creates a more intuitive color scale for completeness
+    custom_colorscale = [
+        [0.0, "rgba(178, 24, 43, 1)"],  # Dark red for very low completeness
+        [0.25, "rgba(239, 138, 98, 1)"],  # Light red/orange for low completeness
+        [0.5, "rgba(253, 219, 121, 1)"],  # Yellow for medium completeness
+        [0.75, "rgba(173, 221, 142, 1)"],  # Light green for good completeness
+        [1.0, "rgba(49, 163, 84, 1)"],  # Dark green for excellent completeness
+    ]
+
+    # Create the map - note the adjusted size_max and explicit zoom level
+    fig = px.scatter_mapbox(
+        df,
+        lat="lat",
+        lon="lon",
+        color="completeness_pct",
+        size="completeness_pct",
+        color_continuous_scale=custom_colorscale,
+        range_color=[0, 100],
+        size_max=30,  # Smaller markers
+        hover_name="location",
+        hover_data={
+            "completeness_pct": ":.1f",
+            "lat": False,
+            "lon": False,
+            "sensor_id": True,
+        },
+        title="Sensor Locations and Data Completeness",
+        labels={"completeness_pct": "Data Completeness (%)"},
+    )
+
+    fig.update_traces(
+        marker=dict(opacity=0.8),
+        selector=dict(mode="markers"),
+    )
+
+    # Update layout with explicit zoom level
+    fig.update_layout(
+        height=700,
+        margin={"r": 0, "t": 30, "l": 0, "b": 0},
+        coloraxis_colorbar=dict(
+            title="Completeness (%)",
+            ticksuffix="%",
+            tickvals=[0, 25, 50, 75, 100],
+            ticktext=["0%", "25%", "50%", "75%", "100%"],
+        ),
+        mapbox=dict(
+            center=dict(lat=center_lat, lon=center_lon),
+            style="carto-positron",
+            zoom=zoom_level,  # Explicitly set zoom level
+            bounds=dict(west=min_lon, east=max_lon, south=min_lat, north=max_lat),
+        ),
+    )
+
+    return fig
+
+
+
+================================================
+File: eda/components/traffic_comparison.py
+================================================
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+
+def create_sensors_comparison(time_series_dict, n_sensors=5, days_back=30):
+    """
+    Create an interactive comparison of top sensors' traffic patterns.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to their time series data
+    n_sensors : int
+        Number of top sensors to compare
+    days_back : int
+        Number of days to look back for the comparison
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Sensors comparison figure
+    """
+    # Find sensors with most data points
+    sensor_data_counts = {
+        sensor_id: len(series) for sensor_id, series in time_series_dict.items()
+    }
+    top_sensors = sorted(sensor_data_counts, key=sensor_data_counts.get, reverse=True)[
+        :n_sensors
+    ]
+
+    # Get the current date (or max date in the data)
+    all_dates = []
+    for series in time_series_dict.values():
+        if len(series) > 0:
+            all_dates.extend(series.index.tolist())
+
+    if not all_dates:
+        return go.Figure().update_layout(title="No data available")
+
+    current_date = max(all_dates).date()
+    start_date = current_date - timedelta(days=days_back)
+
+    # Create figure
+    fig = go.Figure()
+
+    # Add a trace for each sensor
+    for sensor_id in top_sensors:
+        series = time_series_dict[sensor_id]
+
+        # Filter to the selected date range
+        mask = (series.index.date >= start_date) & (series.index.date <= current_date)
+        filtered_series = series[mask]
+
+        # Skip if no data in the range
+        if len(filtered_series) == 0:
+            continue
+
+        # Resample to hourly data for smoother visualization
+        hourly_data = filtered_series.resample("1H").mean()
+
+        # Add trace
+        fig.add_trace(
+            go.Scatter(
+                x=hourly_data.index,
+                y=hourly_data.values,
+                mode="lines",
+                name=f"Sensor {sensor_id}",
+                hovertemplate="%{x}<br>Value: %{y:.1f}<extra>Sensor "
+                + sensor_id
+                + "</extra>",
+            )
+        )
+
+    # Update layout
+    fig.update_layout(
+        title=f"Top {n_sensors} Sensors: Traffic Comparison (Last {days_back} Days)",
+        xaxis_title="Date",
+        yaxis_title="Traffic Count",
+        height=600,
+        hovermode="closest",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+
+    # Add range slider
+    fig.update_xaxes(
+        rangeslider_visible=True,
+        rangeselector=dict(
+            buttons=list(
+                [
+                    dict(count=1, label="1d", step="day", stepmode="backward"),
+                    dict(count=7, label="1w", step="day", stepmode="backward"),
+                    dict(count=1, label="1m", step="month", stepmode="backward"),
+                    dict(step="all"),
+                ]
+            )
+        ),
+    )
+
+    return fig
+
+
+
+================================================
+File: eda/components/traffic_profile.py
+================================================
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
+from plotly.subplots import make_subplots
+
+
+def create_time_of_day_profiles(time_series_dict, top_n=5):
+    """
+    Create profiles of traffic patterns by time of day, comparing weekday vs weekend.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to their time series data
+    top_n : int
+        Number of top sensors to include (with most data points)
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure
+        Time of day profiles figure
+    """
+    # Find sensors with most data points
+    sensor_data_counts = {
+        sensor_id: len(series) for sensor_id, series in time_series_dict.items()
+    }
+    top_sensors = sorted(sensor_data_counts, key=sensor_data_counts.get, reverse=True)[
+        :top_n
+    ]
+
+    # Create figure with subplots - one row per sensor
+    fig = make_subplots(
+        rows=len(top_sensors),
+        cols=1,
+        shared_xaxes=True,
+        subplot_titles=[f"Sensor {sensor_id}" for sensor_id in top_sensors],
+        vertical_spacing=0.05,
+    )
+
+    # Colors for weekday vs weekend
+    colors = {"Weekday": "rgb(31, 119, 180)", "Weekend": "rgb(255, 127, 14)"}
+
+    for i, sensor_id in enumerate(top_sensors):
+        # Get the time series for this sensor
+        series = time_series_dict[sensor_id]
+
+        # Create DataFrame with time components
+        df = pd.DataFrame(
+            {
+                "value": series.values,
+                "hour": series.index.hour,
+                "is_weekend": series.index.dayofweek >= 5,  # 5=Sat, 6=Sun
+            }
+        )
+
+        # Group by hour and weekday/weekend
+        weekday_data = df[~df["is_weekend"]].groupby("hour")["value"].mean()
+        weekend_data = df[df["is_weekend"]].groupby("hour")["value"].mean()
+
+        # Add weekday line
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(24)),
+                y=weekday_data.reindex(range(24)).fillna(0).values,
+                mode="lines+markers",
+                name="Weekday" if i == 0 else None,  # Only show in legend once
+                line=dict(color=colors["Weekday"], width=2),
+                marker=dict(size=6),
+                showlegend=(i == 0),
+                legendgroup="Weekday",
+            ),
+            row=i + 1,
+            col=1,
+        )
+
+        # Add weekend line
+        fig.add_trace(
+            go.Scatter(
+                x=list(range(24)),
+                y=weekend_data.reindex(range(24)).fillna(0).values,
+                mode="lines+markers",
+                name="Weekend" if i == 0 else None,  # Only show in legend once
+                line=dict(color=colors["Weekend"], width=2, dash="dot"),
+                marker=dict(size=6),
+                showlegend=(i == 0),
+                legendgroup="Weekend",
+            ),
+            row=i + 1,
+            col=1,
+        )
+
+    # Update layout
+    fig.update_layout(
+        height=250 * len(top_sensors),
+        title_text="Time of Day Traffic Profiles: Weekday vs Weekend",
+        xaxis_title="Hour of Day",
+        yaxis_title="Average Traffic Count",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+    )
+
+    # Update all x-axes to show hours in 24-hour format
+    for i in range(len(top_sensors)):
+        fig.update_xaxes(
+            tickmode="array",
+            tickvals=list(range(0, 24, 2)),  # Show every 2 hours
+            ticktext=[f"{h:02d}:00" for h in range(0, 24, 2)],
+            row=i + 1,
+            col=1,
+        )
+
+        # Add y-axis title only to the first subplot
+        if i == 0:
+            fig.update_yaxes(title_text="Avg Traffic Count", row=i + 1, col=1)
+
+    return fig
+
+
+
+================================================
+File: eda/components/window_segments.py
+================================================
+import plotly.graph_objects as go
+from dashboards.eda.utils.data_utils import find_continuous_segments
+
+
+# Create interactive window visualization for a given sensor
+def interactive_sensor_windows(time_series_dict, sensor_id, window_size=24, stride=1):
+    """Create an interactive visualization of windows for a specific sensor"""
+    series = time_series_dict.get(sensor_id)
+    if series is None or len(series) == 0:
+        return None
+
+    # Find continuous segments
+    segments = find_continuous_segments(series.index, series.values)
+
+    # Create a figure
+    fig = go.Figure()
+
+    # Add the raw time series
+    fig.add_trace(
+        go.Scatter(
+            x=series.index,
+            y=series.values,
+            mode="lines",
+            name="Raw Data",
+            line=dict(color="darkgray"),
+        )
+    )
+
+    # Add segments and windows
+    for start_seg, end_seg in segments:
+        segment_indices = series.index[start_seg:end_seg]
+
+        # Add segment highlight
+        fig.add_trace(
+            go.Scatter(
+                x=[
+                    segment_indices[0],
+                    segment_indices[0],
+                    segment_indices[-1],
+                    segment_indices[-1],
+                ],
+                y=[
+                    series.values.min(),
+                    series.values.max(),
+                    series.values.max(),
+                    series.values.min(),
+                ],
+                fill="toself",
+                mode="none",
+                name=f"Segment: {segment_indices[0].date()} to {segment_indices[-1].date()}",
+                fillcolor="rgba(144,238,144,0.2)",
+                showlegend=True,
+            )
+        )
+
+        # Add a few example windows
+        n_windows = len(segment_indices) - window_size + 1
+
+        # Only show a few windows to avoid overcrowding
+        window_step = max(1, n_windows // 5)
+
+        for i in range(0, n_windows, window_step):
+            window_start = segment_indices[i]
+            window_end = segment_indices[i + window_size - 1]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[window_start, window_start, window_end, window_end],
+                    y=[
+                        series.values.min(),
+                        series.values.max(),
+                        series.values.max(),
+                        series.values.min(),
+                    ],
+                    fill="toself",
+                    mode="none",
+                    name=f"Window: {window_start}",
+                    fillcolor="rgba(0,0,255,0.1)",
+                    showlegend=False,
+                )
+            )
+
+    # Update layout
+    fig.update_layout(
+        title=f"Time Windows for Sensor {sensor_id}",
+        xaxis_title="Date",
+        yaxis_title="Traffic Count",
+        height=800,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.4, xanchor="right", x=1),
+    )
+
+    return fig
+
+
+
+
+================================================
+File: eda/templates/__init__.py
+================================================
+# Templates package initialization
+# This file is used to mark the directory as a Python package
+
+from pathlib import Path
+
+
+def get_template_path(template_name):
+    """
+    Get the full path to a template file
+
+    Parameters:
+    -----------
+    template_name : str
+        The name of the template file
+
+    Returns:
+    --------
+    Path
+        Full path to the template file
+    """
+    return Path(__file__).parent / template_name
+
+
+
+================================================
+File: eda/templates/dashboard_template.html
+================================================
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Sensor Analysis Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #343a40;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .dashboard-header {
+            background: linear-gradient(135deg, #4c78a8 0%, #345d8a 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .dashboard-section {
+            padding: 25px;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2.2rem;
+            font-weight: 600;
+        }
+
+        h2 {
+            color: #2C3E50;
+            margin-top: 0;
+            font-size: 1.8rem;
+            font-weight: 500;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eaeaea;
+        }
+
+        .dashboard-description {
+            max-width: 800px;
+            margin: 15px auto;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .viz-container {
+            margin-top: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-tabs {
+            display: flex;
+            background-color: #f1f3f5;
+            padding: 0;
+            margin: 0;
+            list-style: none;
+            overflow-x: auto;
+            white-space: nowrap;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .nav-tabs li {
+            margin: 0;
+        }
+
+        .nav-tabs li a {
+            display: inline-block;
+            padding: 12px 20px;
+            text-decoration: none;
+            color: #495057;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .nav-tabs li a:hover {
+            background-color: #e9ecef;
+            border-bottom: 3px solid #4c78a8;
+            color: #4c78a8;
+        }
+
+        .nav-tabs li a.active {
+            background-color: white;
+            border-bottom: 3px solid #4c78a8;
+            color: #4c78a8;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 25px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .dashboard-footer {
+            background-color: #343a40;
+            color: white;
+            text-align: center;
+            padding: 15px;
+            font-size: 0.9rem;
+        }
+
+        .dashboard-footer a {
+            color: #9ec5fe;
+            text-decoration: none;
+        }
+
+        .dashboard-footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-header {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 1.8rem;
+            }
+
+            .dashboard-section {
+                padding: 15px;
+            }
+        }
+    </style>
+
+    <!-- Include any necessary JavaScript for tab switching -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Tab switching functionality
+            const tabLinks = document.querySelectorAll('.nav-tabs a');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabLinks.forEach(link => {
+                link.addEventListener('click', function (e) {
+                    e.preventDefault();
+
+                    // Deactivate all tabs
+                    tabLinks.forEach(l => l.classList.remove('active'));
+                    tabContents.forEach(c => c.classList.remove('active'));
+
+                    // Activate clicked tab
+                    this.classList.add('active');
+                    const targetTab = document.querySelector(this.getAttribute('href'));
+                    if (targetTab) {
+                        targetTab.classList.add('active');
+                    }
+                });
+            });
+
+            // Activate first tab by default
+            if (tabLinks.length > 0) {
+                tabLinks[0].click();
+            }
+        });
+    </script>
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Traffic Sensor Analysis Dashboard</h1>
+            <p class="dashboard-description">
+                Interactive visualization and analysis of traffic sensor data with advanced analytics for pattern
+                recognition and data quality assessment.
+            </p>
+        </div>
+
+        <!-- Tab Navigation -->
+        <ul class="nav-tabs">
+            <li><a href="#overview-tab" class="active">Overview</a></li>
+            <li><a href="#sensor-analysis-tab">Sensor Analysis</a></li>
+            <li><a href="#data-quality-tab">Data Quality</a></li>
+            <li><a href="#patterns-tab">Traffic Patterns</a></li>
+            <li><a href="#advanced-tab">Advanced Analysis</a></li>
+        </ul>
+
+        <!-- Tab Content -->
+        <!-- OVERVIEW TAB -->
+        <div id="overview-tab" class="tab-content active">
+            <div class="dashboard-section">
+                <h2>Sensor Map</h2>
+                <p>Geographic distribution of sensors colored by data completeness percentage.</p>
+                <div class="viz-container">
+                    {{sensor_map_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Data Availability</h2>
+                <p>Heatmap showing when data is available across sensors over time.</p>
+                <div class="viz-container">
+                    {{data_avail_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Sensors Comparison</h2>
+                <p>Interactive comparison of traffic patterns from top sensors.</p>
+                <div class="viz-container">
+                    {{sensors_comparison_fig}}
+                </div>
+            </div>
+        </div>
+
+        <!-- SENSOR ANALYSIS TAB -->
+        <div id="sensor-analysis-tab" class="tab-content">
+            <div class="dashboard-section">
+                <h2>Top Sensor Analysis (ID: {{top_sensor}})</h2>
+                <p>Detailed analysis of data from the sensor with the most readings.</p>
+                <div class="viz-container">
+                    {{top_sensor_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Calendar Heatmap</h2>
+                <p>Traffic patterns by day of week and hour of day for the top sensor.</p>
+                <div class="viz-container">
+                    {{calendar_heatmap_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Window Count Distribution</h2>
+                <p>Number of available time windows (size={{window_size}}) for each sensor.</p>
+                <div class="viz-container">
+                    {{window_counts_fig}}
+                </div>
+            </div>
+        </div>
+
+        <!-- DATA QUALITY TAB -->
+        <div id="data-quality-tab" class="tab-content">
+            <div class="dashboard-section">
+                <h2>Completeness Trend</h2>
+                <p>How data completeness changes over time across all sensors.</p>
+                <div class="viz-container">
+                    {{completeness_trend_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Monthly Coverage Matrix</h2>
+                <p>Monthly data coverage percentage for top sensors.</p>
+                <div class="viz-container">
+                    {{coverage_matrix_fig}}
+                </div>
+            </div>
+        </div>
+
+        <!-- TRAFFIC PATTERNS TAB -->
+        <div id="patterns-tab" class="tab-content">
+            <div class="dashboard-section">
+                <h2>Daily Traffic Patterns</h2>
+                <p>Average traffic patterns by hour of day and day of week for top sensors.</p>
+                <div class="viz-container">
+                    {{daily_patterns_fig}}
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Weekday vs. Weekend Profiles</h2>
+                <p>Comparison of traffic patterns between weekdays and weekends.</p>
+                <div class="viz-container">
+                    {{time_of_day_fig}}
+                </div>
+            </div>
+        </div>
+
+        <!-- ADVANCED ANALYSIS TAB -->
+        <div id="advanced-tab" class="tab-content">
+            <div class="dashboard-section">
+                <h2>Sensor Clustering</h2>
+                <p>Clustering of sensors based on similar traffic patterns.</p>
+                <div class="viz-container">
+                    {{sensor_clustering_fig}}
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-footer">
+            <p>Traffic Sensor Analysis Dashboard | Created with Python and Plotly using data from <a href="https://newcastle.urbanobservatory.ac.uk/">Urban Observatory</a> | <a href="https://carrow.me.uk">Carrow Morris-Wiltshire</a> 2025</p>
+        </div>
+    </div>
+</body>
+
+</html>
+
+
+================================================
+File: eda/utils/__init__.py
+================================================
+from .data_utils import load_data, find_continuous_segments, load_sensor_geojson
+from .template_utils import load_template, render_template, get_template_path
+
+__all__ = [
+    "load_data",
+    "find_continuous_segments",
+    "load_sensor_geojson",
+    "load_template",
+    "render_template",
+    "get_template_path",
+]
+
+
+
+================================================
+File: eda/utils/data_utils.py
+================================================
+import json
+import pickle
+import numpy as np
+import pandas as pd
+
+
+# Helper function to load data from file
+def load_data(file_path="dashboards/data/test_data_1mnth.pkl"):
+    with open(file_path, "rb") as f:
+        return pickle.load(f)
+
+
+# Find continuous segments in time series
+def find_continuous_segments(
+    time_index, values, gap_threshold=pd.Timedelta(minutes=15)
+):
+    segments = []
+    start_idx = 0
+
+    for i in range(1, len(time_index)):
+        time_diff = time_index[i] - time_index[i - 1]
+
+        # Check for gaps in time or values
+        if (time_diff > gap_threshold) or (
+            np.isnan(values[i - 1]) or np.isnan(values[i])
+        ):
+            if i - start_idx >= 24:  # Assuming minimum window size of 24
+                segments.append((start_idx, i))
+            start_idx = i
+
+    # Add the last segment if it's long enough
+    if len(time_index) - start_idx >= 24:
+        segments.append((start_idx, len(time_index)))
+
+    return segments
+
+
+# Load sensor location data from file
+def load_sensor_geojson(file_path="dashboards/data/sensors.geojson"):
+    with open(file_path, "r", encoding="utf8") as f:
+        return json.load(f)
+
+
+
+================================================
+File: eda/utils/template_utils.py
+================================================
+"""
+Template utilities for the dashboard application.
+Provides functions for loading and rendering HTML templates.
+"""
+
+import re
+from pathlib import Path
+
+
+def load_template(template_path):
+    """
+    Load an HTML template from file
+
+    Parameters:
+    -----------
+    template_path : str or Path
+        Path to the template file
+
+    Returns:
+    --------
+    str
+        The template content as a string
+    """
+    with open(template_path, "r", encoding="utf-8") as file:
+        return file.read()
+
+
+def render_template(template, context):
+    """
+    Simple template rendering function that replaces placeholders with values
+
+    Parameters:
+    -----------
+    template : str
+        The template string with placeholders
+    context : dict
+        A dictionary of placeholder names and their values
+
+    Returns:
+    --------
+    str
+        The rendered template
+
+    Notes:
+    ------
+    Supports:
+    - Variable interpolation: {{variable}}
+    - Conditional blocks: {{#variable}}content{{/variable}}
+    - Comments: {{!comment}}
+    """
+    # Remove comments
+    template = re.sub(r"{{!.*?}}", "", template, flags=re.DOTALL)
+
+    # Replace all {{variable}} placeholders with their values
+    for key, value in context.items():
+        placeholder = f"{{{{{key}}}}}"
+        replacement = str(value) if value is not None else ""
+        # Simple string replacement instead of regex to avoid escape sequence issues
+        template = template.replace(placeholder, replacement)
+
+    # Handle conditional blocks {{#variable}} content {{/variable}}
+    for key, value in context.items():
+        start_tag = f"{{{{#{key}}}}}"
+        end_tag = f"{{{{/{key}}}}}"
+
+        # If the value exists and is truthy, remove just the conditional markers
+        if value:
+            # Find all occurrences of this conditional block
+            start_pos = 0
+            while True:
+                start_idx = template.find(start_tag, start_pos)
+                if start_idx == -1:
+                    break
+
+                end_idx = template.find(end_tag, start_idx)
+                if end_idx == -1:
+                    break
+
+                # Extract the content between tags
+                content = template[start_idx + len(start_tag) : end_idx]
+
+                # Replace the entire block with just the content
+                template = (
+                    template[:start_idx] + content + template[end_idx + len(end_tag) :]
+                )
+
+                # Update start position for next iteration
+                start_pos = start_idx + len(content)
+        else:
+            # If the value doesn't exist or is falsy, remove the entire block
+            while True:
+                start_idx = template.find(start_tag)
+                if start_idx == -1:
+                    break
+
+                end_idx = template.find(end_tag)
+                if end_idx == -1:
+                    break
+
+                # Remove the entire block including tags
+                template = template[:start_idx] + template[end_idx + len(end_tag) :]
+
+    # Clean up any remaining template tags (useful for optional content)
+    while True:
+        start_idx = template.find("{{")
+        if start_idx == -1:
+            break
+
+        end_idx = template.find("}}", start_idx)
+        if end_idx == -1:
+            break
+
+        template = template[:start_idx] + template[end_idx + 2 :]
+
+    return template
+
+
+def get_template_path(template_name, template_dir=None):
+    """
+    Get the full path to a template file
+
+    Parameters:
+    -----------
+    template_name : str
+        The name of the template file
+    template_dir : str or Path, optional
+        The directory containing templates. If None, uses the default 'templates' directory
+
+    Returns:
+    --------
+    Path
+        Full path to the template file
+    """
+    if template_dir is None:
+        # Navigate to the templates directory relative to this file
+        # Going up to utils directory, then up to the project root, then to templates
+        template_dir = Path(__file__).parent.parent / "templates"
+    else:
+        template_dir = Path(template_dir)
+
+    return template_dir / template_name
+
+
+
+
+================================================
+File: tensor_flow/__init__.py
+================================================
+
+
+
+================================================
+File: tensor_flow/__main__.py
+================================================
+#!/usr/bin/env python3
+# Run this script to generate the GNN Tensor Flow Dashboard
+
+from pathlib import Path
+import webbrowser
+import importlib.util
+import os
+import pandas as pd
+
+import plotly.io as pio
+import plotly.graph_objects as go
+
+from gnn_package.src.preprocessing import (
+    TimeSeriesPreprocessor,
+    compute_adjacency_matrix,
+)
+from gnn_package.src.models.stgnn import create_stgnn_model
+from gnn_package.src.dataloaders import create_dataloader
+from dashboards.tensor_flow.components import (
+    create_time_series_plot,
+    create_segments_plot,
+    create_windows_plot,
+    create_adjacency_plot,
+    create_batch_plot,
+    create_model_plot,
+)
+from dashboards.eda.utils import (
+    find_continuous_segments,
+)
+from dashboards.tensor_flow.utils import (
+    load_sample_data,
+)
+from dashboards.eda.utils.template_utils import (
+    load_template,
+    render_template,
+    get_template_path,
+)
+
+
+# Set up Plotly theme
+pio.templates.default = "plotly_white"
+
+
+def visualize_tensor_transformations(sample_data, window_size=12, horizon=6):
+    """Create visualizations for each transformation step"""
+
+    # Get input data
+    adj_matrix = sample_data["adj_matrix"]
+    node_ids = sample_data["node_ids"]
+    time_series_dict = sample_data["time_series_dict"]
+
+    visualization_data = {}
+
+    # Step 1: Visualize raw time series data
+    visualization_data["raw_data"] = {
+        "title": "Raw Input Time Series",
+        "data": time_series_dict,
+        "plot": create_time_series_plot(time_series_dict, node_ids),
+    }
+
+    # Step 2: Find continuous segments
+    segments_dict = {}
+    for node_id, series in time_series_dict.items():
+        segments = find_continuous_segments(
+            series.index, series.values, gap_threshold=pd.Timedelta(minutes=15)
+        )
+        segments_dict[node_id] = segments
+
+    visualization_data["segments"] = {
+        "title": "Continuous Segments",
+        "data": segments_dict,
+        "plot": create_segments_plot(time_series_dict, segments_dict),
+    }
+
+    # Step 3: Create windows with TimeSeriesPreprocessor
+    processor = TimeSeriesPreprocessor(
+        window_size=window_size,
+        stride=1,
+        gap_threshold=pd.Timedelta(minutes=15),
+        missing_value=-1.0,
+    )
+
+    X_by_sensor, masks_by_sensor, metadata_by_sensor = processor.create_windows(
+        time_series_dict, standardize=True
+    )
+
+    visualization_data["windows"] = {
+        "title": "Windowed Data",
+        "data": {
+            "X_by_sensor": X_by_sensor,
+            "masks_by_sensor": masks_by_sensor,
+            "metadata": metadata_by_sensor,
+        },
+        "plot": create_windows_plot(X_by_sensor, masks_by_sensor, node_ids),
+    }
+
+    # Step 4: Compute adjacency matrix weights
+    weighted_adj = compute_adjacency_matrix(adj_matrix, sigma_squared=0.1, epsilon=0.5)
+
+    visualization_data["adjacency"] = {
+        "title": "Weighted Adjacency Matrix",
+        "data": {"raw_adj": adj_matrix, "weighted_adj": weighted_adj},
+        "plot": create_adjacency_plot(adj_matrix, weighted_adj, node_ids),
+    }
+
+    # Step 5: Create DataLoader
+    try:
+        dataloader = create_dataloader(
+            X_by_sensor=X_by_sensor,
+            masks_by_sensor=masks_by_sensor,
+            adj_matrix=weighted_adj,
+            node_ids=node_ids,
+            window_size=window_size,
+            horizon=horizon,
+            batch_size=2,
+            shuffle=False,
+        )
+
+        # Get a sample batch
+        sample_batch = next(iter(dataloader))
+
+        visualization_data["batch"] = {
+            "title": "Batched Data",
+            "data": sample_batch,
+            "plot": create_batch_plot(sample_batch),
+        }
+    except Exception as e:
+        print(f"Warning: Could not create dataloader visualizations: {e}")
+        visualization_data["batch"] = {
+            "title": "Batched Data",
+            "data": None,
+            "plot": go.Figure().add_annotation(
+                text=f"Could not create batch visualization: {str(e)}",
+                showarrow=False,
+                font=dict(size=14),
+            ),
+        }
+
+    # Step 6: Model Input/Output
+    try:
+        # Create a small model for visualization
+        model = create_stgnn_model(
+            input_dim=1,
+            hidden_dim=16,
+            output_dim=1,
+            horizon=horizon,
+        )
+
+        # Show model architecture
+        visualization_data["model"] = {
+            "title": "Model Architecture",
+            "data": model,
+            "plot": create_model_plot(model),
+        }
+    except Exception as e:
+        print(f"Warning: Could not create model visualizations: {e}")
+        visualization_data["model"] = {
+            "title": "Model Architecture",
+            "data": None,
+            "plot": go.Figure().add_annotation(
+                text=f"Could not create model visualization: {str(e)}",
+                showarrow=False,
+                font=dict(size=14),
+            ),
+        }
+
+    return visualization_data
+
+
+def create_tensor_flow_dashboard(visualization_data):
+    """Generate HTML dashboard with all visualizations using template_utils"""
+
+    # Convert all plots to HTML
+    html_plots = {}
+    for key, data in visualization_data.items():
+        html_plots[key] = pio.to_html(
+            data["plot"], include_plotlyjs="cdn", full_html=False
+        )
+
+    # Load the template
+    try:
+        # Try to get the template from the dashboards package
+        template_path = get_template_path(
+            "layout.html", template_dir=Path("dashboards/tensor_flow/templates")
+        )
+        template = load_template(template_path)
+    except Exception as e:
+        # Fallback to local template if it exists
+        print(f"Warning: Could not load template from dashboards package: {e}")
+        template_path = Path("templates/layout.html")
+        if not template_path.exists():
+            print(
+                f"Template file not found at {template_path}. Please ensure it exists."
+            )
+            return None
+
+        with open(template_path, "r", encoding="utf-8") as f:
+            template = f.read()
+
+    # Create context with data for template
+    context = {
+        "raw_data_title": visualization_data["raw_data"]["title"],
+        "segments_title": visualization_data["segments"]["title"],
+        "windows_title": visualization_data["windows"]["title"],
+        "adjacency_title": visualization_data["adjacency"]["title"],
+        "batch_title": visualization_data["batch"]["title"],
+        "model_title": visualization_data["model"]["title"],
+        "raw_data_plot": html_plots["raw_data"],
+        "segments_plot": html_plots["segments"],
+        "windows_plot": html_plots["windows"],
+        "adjacency_plot": html_plots["adjacency"],
+        "batch_plot": html_plots["batch"],
+        "model_plot": html_plots["model"],
+    }
+
+    # Try to use render_template from utils
+    try:
+        return render_template(template, context)
+    except Exception as e:
+        print(f"Warning: Could not use render_template: {e}")
+        # Fallback to manual template replacement
+        for key, value in context.items():
+            placeholder = f"{{{{{key}}}}}"
+            template = template.replace(placeholder, str(value))
+        return template
+
+
+def main():
+    """Main function to generate the dashboard"""
+    # Load sample data
+    sample_data = load_sample_data()
+
+    # Create visualizations
+    visualization_data = visualize_tensor_transformations(sample_data)
+
+    # Generate dashboard HTML
+    dashboard_html = create_tensor_flow_dashboard(visualization_data)
+    if dashboard_html is None:
+        print("Failed to generate dashboard HTML")
+        return
+
+    # Ensure output directory exists
+    output_dir = Path("dashboards/tensor_flow")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save to file
+    output_path = output_dir / "index.html"
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(dashboard_html)
+
+    print(f"Dashboard created: {output_path}")
+
+    # Open in browser
+    try:
+        print(f"Opening dashboard in browser")
+        webbrowser.open(f"file://{output_path.absolute()}")
+    except Exception as e:
+        print(f"Could not open dashboard in browser: {e}")
+
+    return dashboard_html
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+================================================
+File: tensor_flow/components/__init__.py
+================================================
+from .adjacency_plot import create_adjacency_plot
+from .batch_plot import create_batch_plot
+from .model_plot import create_model_plot
+from .segments_plot import create_segments_plot
+from .time_series_plot import create_time_series_plot
+from .windows_plot import create_windows_plot
+
+__all__ = [
+    "create_time_series_plot",
+    "create_segments_plot",
+    "create_windows_plot",
+    "create_adjacency_plot",
+    "create_batch_plot",
+    "create_model_plot",
+]
+
+
+
+================================================
+File: tensor_flow/components/adjacency_plot.py
+================================================
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+
+
+def create_adjacency_plot(raw_adj, weighted_adj, node_ids):
+    """Create a more interpretable visualization of the adjacency matrices"""
+    # Ensure we have at least some data to plot
+    if len(node_ids) < 2:
+        # Create a figure with a warning message
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Not enough nodes to visualize adjacency matrix (only found {len(node_ids)} nodes)",
+            showarrow=False,
+            font=dict(size=14, color="red"),
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=0.5,
+        )
+        fig.update_layout(title="Adjacency Matrix - Insufficient Data", height=400)
+        return fig
+
+    # Create a subplot with the raw and weighted adjacency matrices
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=[
+            "Raw Distance Matrix (Distance in meters)",
+            "Weighted Adjacency Matrix (Edge Weights)",
+        ],
+        horizontal_spacing=0.12,
+    )
+
+    # Determine data ranges for better color scaling
+    raw_max = np.max(raw_adj[raw_adj > 0])  # Max non-zero value
+    raw_min = np.min(raw_adj[raw_adj > 0])  # Min non-zero value
+
+    # Enhanced colorscale for distances
+    distance_colorscale = [
+        [0, "rgb(255,255,255)"],  # White for zero/missing
+        [0.1, "rgb(240,240,255)"],  # Very light blue for short distances
+        [0.3, "rgb(180,180,240)"],  # Light blue for medium distances
+        [0.6, "rgb(120,120,220)"],  # Medium blue for longer distances
+        [0.8, "rgb(50,50,200)"],  # Darker blue for longer distances
+        [1, "rgb(0,0,150)"],  # Dark blue for maximum distances
+    ]
+
+    # Plot raw adjacency matrix with improved colorscale
+    fig.add_trace(
+        go.Heatmap(
+            z=raw_adj,
+            x=node_ids,
+            y=node_ids,
+            colorscale=distance_colorscale,
+            colorbar=dict(title="Distance (m)", thickness=15, x=0.46, tickformat=".0f"),
+            hoverongaps=False,
+            name="Raw Distances",
+            hovertemplate="From: %{y}<br>To: %{x}<br>Distance: %{z:.1f} meters<extra></extra>",
+            showscale=True,
+        ),
+        row=1,
+        col=1,
+    )
+
+    # Enhanced colorscale for weights - Green for stronger connections
+    weight_colorscale = [
+        [0, "rgb(255,255,255)"],  # White for zero/missing
+        [0.1, "rgb(240,255,240)"],  # Very light green for weak connections
+        [0.4, "rgb(180,240,180)"],  # Light green
+        [0.7, "rgb(100,200,100)"],  # Medium green
+        [0.9, "rgb(50,150,50)"],  # Darker green
+        [1, "rgb(0,100,0)"],  # Dark green for strongest connections
+    ]
+
+    # Plot weighted adjacency matrix with improved colorscale
+    fig.add_trace(
+        go.Heatmap(
+            z=weighted_adj,
+            x=node_ids,
+            y=node_ids,
+            colorscale=weight_colorscale,
+            colorbar=dict(title="Weight", thickness=15, x=1.0, tickformat=".2f"),
+            hoverongaps=False,
+            name="Connection Weights",
+            hovertemplate="From: %{y}<br>To: %{x}<br>Weight: %{z:.3f}<extra></extra>",
+            showscale=True,
+        ),
+        row=1,
+        col=2,
+    )
+
+    # Add annotations explaining the matrices
+    fig.add_annotation(
+        text="Raw distances between sensor nodes (in meters)",
+        xref="x domain",
+        yref="y domain",
+        x=0.5,
+        y=-0.15,
+        showarrow=False,
+        row=1,
+        col=1,
+    )
+
+    fig.add_annotation(
+        text="Transformed weights using Gaussian kernel<br>Closer nodes have higher weights",
+        xref="x domain",
+        yref="y domain",
+        x=0.5,
+        y=-0.15,
+        showarrow=False,
+        row=1,
+        col=2,
+    )
+
+    # Update layout with more informative title and sizing
+    fig.update_layout(
+        title={
+            "text": f"Adjacency Matrix Transformation ({len(node_ids)} nodes)",
+            "font": {"size": 18},
+        },
+        height=600,
+        margin=dict(t=80, b=100),  # More space for title and annotations
+    )
+
+    # Update axes for better readability
+    for i in range(1, 3):
+        fig.update_xaxes(
+            title_text="To Node", tickangle=45, row=1, col=i, tickfont=dict(size=10)
+        )
+        fig.update_yaxes(
+            title_text="From Node",
+            autorange="reversed",  # This puts (0,0) at the top-left
+            row=1,
+            col=i,
+            tickfont=dict(size=10),
+        )
+
+    # Add a note about the number of nodes displayed
+    fig.add_annotation(
+        text=f"Displaying {len(node_ids)} out of approximately 15-30 total nodes in the dataset",
+        showarrow=False,
+        xref="paper",
+        yref="paper",
+        x=0.5,
+        y=1.05,
+        font=dict(size=12, color="gray"),
+    )
+
+    return fig
+
+
+
+================================================
+File: tensor_flow/components/batch_plot.py
+================================================
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+
+
+def create_batch_plot(batch_data):
+    """Create a more interpretable visualization of the batch data structure"""
+    if batch_data is None:
+        return go.Figure().add_annotation(
+            text="No batch data available", showarrow=False, font=dict(size=14)
+        )
+
+    # Extract batch components safely
+    try:
+        x = batch_data["x"].numpy()
+        x_mask = batch_data["x_mask"].numpy()
+        y = batch_data["y"].numpy()
+        y_mask = batch_data["y_mask"].numpy()
+        node_indices = batch_data["node_indices"].numpy()
+        adj = batch_data["adj"].numpy()
+    except Exception as e:
+        return go.Figure().add_annotation(
+            text=f"Error extracting batch data: {str(e)}",
+            showarrow=False,
+            font=dict(size=14, color="red"),
+        )
+
+    # Create a more informative subplot layout
+    fig = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=[
+            "Input Data (Historical Values)",
+            "Input Mask (Valid Data Points)",
+            "Target Data (Future Values)",
+            "Target Mask (Valid Predictions)",
+        ],
+        vertical_spacing=0.15,
+        horizontal_spacing=0.12,
+    )
+
+    # Define consistent colors for each batch/node combination
+    # This helps the user track the same node across different plots
+    colors = [
+        "rgb(31, 119, 180)",  # Blue
+        "rgb(255, 127, 14)",  # Orange
+        "rgb(44, 160, 44)",  # Green
+        "rgb(214, 39, 40)",  # Red
+        "rgb(148, 103, 189)",  # Purple
+        "rgb(140, 86, 75)",  # Brown
+    ]
+
+    # Plot x - Input data with improved styling
+    batch_size, num_nodes, seq_len, _ = x.shape
+    for b in range(min(batch_size, 2)):  # Show up to 2 batches
+        for n in range(min(num_nodes, 4)):  # Show up to 4 nodes
+            node_id = node_indices[n]
+            color_idx = (b * num_nodes + n) % len(colors)
+
+            # Create a more descriptive name
+            name = f"Batch {b}, Node {node_id}"
+
+            # Use non-broken lines to indicate continuous valid data and add markers
+            mask_values = x_mask[b, n, :, 0]
+            x_values = x[b, n, :, 0]
+
+            # For missing values (mask=0), set y to None to create gaps
+            y_vals = np.where(mask_values > 0, x_values, None)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=list(range(seq_len)),
+                    y=y_vals,
+                    mode="lines+markers",
+                    name=name,
+                    legendgroup=f"batch{b}_node{n}",
+                    marker=dict(size=6),
+                    line=dict(color=colors[color_idx], width=2),
+                    hovertemplate="Step: %{x}<br>Value: %{y:.2f}<br>"
+                    + name
+                    + "<extra></extra>",
+                ),
+                row=1,
+                col=1,
+            )
+
+            # Add markers for missing values
+            missing_indices = np.where(mask_values == 0)[0]
+            if len(missing_indices) > 0:
+                fig.add_trace(
+                    go.Scatter(
+                        x=missing_indices,
+                        y=[None] * len(missing_indices),
+                        mode="markers",
+                        marker=dict(
+                            symbol="x",
+                            size=8,
+                            color=colors[color_idx],
+                            line=dict(width=1, color="black"),
+                        ),
+                        name=f"{name} (Missing)",
+                        legendgroup=f"batch{b}_node{n}",
+                        showlegend=False,
+                        hovertemplate="Step: %{x}<br>Missing Value<extra></extra>",
+                    ),
+                    row=1,
+                    col=1,
+                )
+
+    # Plot x_mask - Input mask with improved styling
+    for b in range(min(batch_size, 2)):
+        for n in range(min(num_nodes, 4)):
+            node_id = node_indices[n]
+            color_idx = (b * num_nodes + n) % len(colors)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=list(range(seq_len)),
+                    y=x_mask[b, n, :, 0],
+                    mode="lines+markers",
+                    marker=dict(size=6),
+                    line=dict(color=colors[color_idx], width=2),
+                    name=f"Batch {b}, Node {node_id}",
+                    legendgroup=f"batch{b}_node{n}",
+                    showlegend=False,
+                    hovertemplate="Step: %{x}<br>Mask: %{y}<br>Node "
+                    + str(node_id)
+                    + "<extra></extra>",
+                ),
+                row=1,
+                col=2,
+            )
+
+            # Add reference line at y=0.5 to help distinguish 0/1 values
+            if b == 0 and n == 0:
+                fig.add_shape(
+                    type="line",
+                    x0=0,
+                    x1=seq_len - 1,
+                    y0=0.5,
+                    y1=0.5,
+                    line=dict(color="gray", width=1, dash="dash"),
+                    row=1,
+                    col=2,
+                )
+                # Add annotations explaining the mask values
+                fig.add_annotation(
+                    text="1 = Valid data",
+                    x=seq_len - 1,
+                    y=0.8,
+                    showarrow=False,
+                    font=dict(size=10),
+                    row=1,
+                    col=2,
+                )
+                fig.add_annotation(
+                    text="0 = Missing data",
+                    x=seq_len - 1,
+                    y=0.2,
+                    showarrow=False,
+                    font=dict(size=10),
+                    row=1,
+                    col=2,
+                )
+
+    # Plot y - Target data with improved styling
+    _, _, horizon, _ = y.shape
+    for b in range(min(batch_size, 2)):
+        for n in range(min(num_nodes, 4)):
+            node_id = node_indices[n]
+            color_idx = (b * num_nodes + n) % len(colors)
+
+            # Use non-broken lines and add markers
+            mask_values = y_mask[b, n, :, 0]
+            y_values = y[b, n, :, 0]
+
+            # For missing values (mask=0), set y to None to create gaps
+            y_vals = np.where(mask_values > 0, y_values, None)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=list(range(horizon)),
+                    y=y_vals,
+                    mode="lines+markers",
+                    marker=dict(size=8),  # Larger markers for future values
+                    line=dict(
+                        color=colors[color_idx], width=2, dash="dash"
+                    ),  # Dashed lines for future
+                    name=f"Batch {b}, Node {node_id}",
+                    legendgroup=f"batch{b}_node{n}",
+                    showlegend=False,
+                    hovertemplate="Future Step: %{x}<br>Value: %{y:.2f}<br>Node "
+                    + str(node_id)
+                    + "<extra></extra>",
+                ),
+                row=2,
+                col=1,
+            )
+
+            # Add markers for missing values
+            missing_indices = np.where(mask_values == 0)[0]
+            if len(missing_indices) > 0:
+                fig.add_trace(
+                    go.Scatter(
+                        x=missing_indices,
+                        y=[None] * len(missing_indices),
+                        mode="markers",
+                        marker=dict(
+                            symbol="x",
+                            size=8,
+                            color=colors[color_idx],
+                            line=dict(width=1, color="black"),
+                        ),
+                        name=f"{name} (Missing)",
+                        legendgroup=f"batch{b}_node{n}",
+                        showlegend=False,
+                        hovertemplate="Future Step: %{x}<br>Missing Value<extra></extra>",
+                    ),
+                    row=2,
+                    col=1,
+                )
+
+    # Plot y_mask - Target mask
+    for b in range(min(batch_size, 2)):
+        for n in range(min(num_nodes, 4)):
+            node_id = node_indices[n]
+            color_idx = (b * num_nodes + n) % len(colors)
+
+            fig.add_trace(
+                go.Scatter(
+                    x=list(range(horizon)),
+                    y=y_mask[b, n, :, 0],
+                    mode="lines+markers",
+                    marker=dict(size=8),
+                    line=dict(color=colors[color_idx], width=2, dash="dash"),
+                    name=f"Batch {b}, Node {node_id}",
+                    legendgroup=f"batch{b}_node{n}",
+                    showlegend=False,
+                    hovertemplate="Future Step: %{x}<br>Mask: %{y}<br>Node "
+                    + str(node_id)
+                    + "<extra></extra>",
+                ),
+                row=2,
+                col=2,
+            )
+
+            # Add reference line at y=0.5
+            if b == 0 and n == 0:
+                fig.add_shape(
+                    type="line",
+                    x0=0,
+                    x1=horizon - 1,
+                    y0=0.5,
+                    y1=0.5,
+                    line=dict(color="gray", width=1, dash="dash"),
+                    row=2,
+                    col=2,
+                )
+
+    # Add tensor shape annotations in a more structured box
+    shapes = [
+        f"<b>Tensor Shapes:</b>",
+        f"x: {x.shape} [batch, nodes, time_steps, features]",
+        f"x_mask: {x_mask.shape} [batch, nodes, time_steps, mask]",
+        f"y: {y.shape} [batch, nodes, horizon, features]",
+        f"y_mask: {y_mask.shape} [batch, nodes, horizon, mask]",
+        f"adjacency: {adj.shape} [nodes, nodes]",
+    ]
+
+    # Add a legend explaining the tensor dimensions
+    fig.add_annotation(
+        text="<br>".join(shapes),
+        x=0.5,
+        y=-0.15,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=12),
+        bordercolor="black",
+        borderwidth=1,
+        borderpad=4,
+        bgcolor="white",
+        align="left",
+    )
+
+    # Add explanatory text about what the visualization is showing
+    fig.add_annotation(
+        text=(
+            f"This visualization shows how data is organized in batches for the STGNN model.<br>"
+            f"• The left column shows actual values, while the right column shows binary masks (1=valid, 0=missing).<br>"
+            f"• The top row contains historical input data, and the bottom row contains future target data.<br>"
+            f"• Each color represents a different node/sensor in the network."
+        ),
+        x=0.5,
+        y=1.08,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=12),
+        bordercolor="black",
+        borderwidth=1,
+        borderpad=4,
+        bgcolor="white",
+        align="left",
+    )
+
+    # Update layout with more informative styling
+    fig.update_layout(
+        title={
+            "text": f"Batch Data Structure ({batch_size} batches, {num_nodes} nodes per batch)",
+            "font": {"size": 18},
+        },
+        height=700,  # Taller figure for better visibility
+        legend=dict(
+            orientation="h",
+            y=-0.25,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+        ),
+        margin=dict(t=120, b=150),  # More space for annotations
+    )
+
+    # Update axes with more informative labels
+    fig.update_xaxes(title_text="Time Step (Historical)", row=1, col=1)
+    fig.update_xaxes(title_text="Time Step (Historical)", row=1, col=2)
+    fig.update_xaxes(title_text="Time Step (Future)", row=2, col=1)
+    fig.update_xaxes(title_text="Time Step (Future)", row=2, col=2)
+
+    fig.update_yaxes(title_text="Standardized Value", row=1, col=1)
+    fig.update_yaxes(title_text="Mask Value (1=Valid, 0=Missing)", row=1, col=2)
+    fig.update_yaxes(title_text="Predicted Value", row=2, col=1)
+    fig.update_yaxes(title_text="Mask Value (1=Valid, 0=Missing)", row=2, col=2)
+
+    return fig
+
+
+
+================================================
+File: tensor_flow/components/model_plot.py
+================================================
+import numpy as np
+import plotly.graph_objects as go
+
+
+def create_model_plot(model):
+    """Create a more robust visualization of the model architecture"""
+    if model is None:
+        return go.Figure().add_annotation(
+            text="No model available", showarrow=False, font=dict(size=14)
+        )
+
+    # More robust parameter extraction with error handling
+    try:
+        # Extract model parameters safely
+        model_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+        # Try multiple approaches to get the input and hidden dimensions
+        try:
+            # First attempt - direct STGNN structure
+            input_dim = model.encoder.gc1.in_features
+            hidden_dim = model.encoder.gc1.out_features
+        except AttributeError:
+            try:
+                # Second attempt - nested encoder structure
+                input_dim = model.encoder.encoder.gc1.in_features
+                hidden_dim = model.encoder.encoder.gc1.out_features
+            except AttributeError:
+                # Fallback - just use some reasonable defaults and warn user
+                input_dim = getattr(model, "input_dim", 1)
+                hidden_dim = getattr(model, "hidden_dim", 64)
+                print(
+                    "Warning: Could not extract exact model dimensions, using defaults"
+                )
+
+        horizon = getattr(model, "horizon", 6)  # Default to 6 if not found
+    except Exception as e:
+        # If extraction fails, use defaults and show a warning
+        print(f"Warning: Error extracting model parameters: {e}")
+        input_dim = 1
+        hidden_dim = 64
+        horizon = 6
+        model_params = 0
+
+    # Create a more informative visualization of the architecture
+    layers = [
+        {
+            "name": "Input",
+            "size": input_dim,
+            "color": "rgba(173, 216, 230, 0.7)",
+            "description": "Raw sensor inputs",
+        },
+        {
+            "name": "GCN-1",
+            "size": hidden_dim,
+            "color": "rgba(144, 238, 144, 0.7)",
+            "description": "Graph convolution",
+        },
+        {
+            "name": "GCN-2",
+            "size": hidden_dim,
+            "color": "rgba(144, 238, 144, 0.7)",
+            "description": "Graph convolution",
+        },
+        {
+            "name": "GRU",
+            "size": hidden_dim,
+            "color": "rgba(255, 255, 153, 0.7)",
+            "description": "Temporal processing",
+        },
+        {
+            "name": "Decoder",
+            "size": hidden_dim,
+            "color": "rgba(255, 182, 193, 0.7)",
+            "description": "Forecast decoder",
+        },
+        {
+            "name": "Output",
+            "size": horizon,
+            "color": "rgba(173, 216, 230, 0.7)",
+            "description": f"{horizon}-step forecast",
+        },
+    ]
+
+    # Create node positions with better spacing
+    y_positions = []
+    x_positions = [1, 2, 3, 4.5, 6, 7]  # Custom x positions to space out layers nicely
+
+    for layer in layers:
+        size = min(
+            max(layer["size"], 4), 12
+        )  # Limit size range for better visualization
+        y_positions.append(np.linspace(-size / 2, size / 2, size))
+
+    fig = go.Figure()
+
+    # Add nodes for each layer with improved styling
+    for i, (layer, x_pos) in enumerate(zip(layers, x_positions)):
+        size = min(max(layer["size"], 4), 12)
+        for j, y in enumerate(y_positions[i]):
+            # Only draw every other node when there are many nodes to avoid overcrowding
+            if size > 8 and j % 2 != 0 and j != 0 and j != size - 1:
+                continue
+
+            show_in_legend = j == 0
+
+            # Add hover information
+            hover_text = f"{layer['name']}: {layer['description']}"
+            if show_in_legend:
+                hover_text += f"<br>Size: {layer['size']}"
+
+            fig.add_trace(
+                go.Scatter(
+                    x=[x_pos],
+                    y=[y],
+                    mode="markers",
+                    marker=dict(
+                        size=20,
+                        color=layer["color"],
+                        line=dict(width=1, color="darkgray"),
+                    ),
+                    name=layer["name"],
+                    legendgroup=layer["name"],
+                    showlegend=show_in_legend,
+                    hoverinfo="text",
+                    hovertext=hover_text,
+                )
+            )
+
+        # Add a text label for each layer
+        fig.add_annotation(
+            x=x_pos,
+            y=max(y_positions[i]) + 0.5,
+            text=layer["name"],
+            showarrow=False,
+            font=dict(size=10),
+        )
+
+    # Add edges between layers with improved styling
+    for i in range(len(layers) - 1):
+        x1, x2 = x_positions[i], x_positions[i + 1]
+        for j, y1 in enumerate(y_positions[i]):
+            # Skip some nodes for larger layers to avoid overcrowding
+            if (
+                len(y_positions[i]) > 8
+                and j % 2 != 0
+                and j != 0
+                and j != len(y_positions[i]) - 1
+            ):
+                continue
+
+            for k, y2 in enumerate(y_positions[i + 1]):
+                # Skip some nodes for larger layers to avoid overcrowding
+                if (
+                    len(y_positions[i + 1]) > 8
+                    and k % 2 != 0
+                    and k != 0
+                    and k != len(y_positions[i + 1]) - 1
+                ):
+                    continue
+
+                # Draw connection with variable opacity based on source/target position
+                # Creates a more visually appealing flow effect
+                opacity = 0.15
+                if (
+                    j == 0
+                    or j == len(y_positions[i]) - 1
+                    or k == 0
+                    or k == len(y_positions[i + 1]) - 1
+                ):
+                    opacity = 0.3  # Stronger lines for outer connections
+
+                fig.add_trace(
+                    go.Scatter(
+                        x=[x1, x2],
+                        y=[y1, y2],
+                        mode="lines",
+                        line=dict(width=0.5, color=f"rgba(100, 100, 100, {opacity})"),
+                        hoverinfo="none",
+                        showlegend=False,
+                    )
+                )
+
+    # Add detailed model summary annotations
+    details = []
+
+    # Add basic model structure information
+    details.append(f"STGNN Model Architecture")
+    details.append(f"Parameters: {model_params:,}")
+    details.append(f"Input: {input_dim}, Hidden: {hidden_dim}, Horizon: {horizon}")
+
+    # Add explanation of the model components
+    details.append("")
+    details.append("Component Functions:")
+    details.append("• GCNs capture spatial relationships between sensors")
+    details.append("• GRU captures temporal patterns in the data")
+    details.append("• Decoder projects to multi-step forecasts")
+
+    # Create text box with model details
+    fig.add_annotation(
+        text="<br>".join(details),
+        x=0.5,
+        y=-0.2,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=12),
+        bordercolor="black",
+        borderwidth=1,
+        borderpad=4,
+        bgcolor="white",
+        align="center",
+    )
+
+    # Add a model flow diagram
+    flow_text = "Input → GCN → GRU → Decoder → Output"
+    fig.add_annotation(
+        text=flow_text,
+        x=0.5,
+        y=1.05,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=14),
+        bordercolor="black",
+        borderwidth=1,
+        borderpad=4,
+        bgcolor="white",
+    )
+
+    # Update layout with improved styling
+    fig.update_layout(
+        title="STGNN Model Architecture",
+        xaxis=dict(
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False,
+            range=[0, 8],  # Explicit range to control the width
+        ),
+        yaxis=dict(
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False,
+            scaleanchor="x",  # Square aspect ratio
+            scaleratio=1,
+        ),
+        legend=dict(
+            orientation="h",
+            y=-0.3,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+        ),
+        height=500,
+        margin=dict(l=20, r=20, t=70, b=120),
+        plot_bgcolor="rgba(240, 240, 240, 0.5)",  # Light gray background
+    )
+
+    return fig
+
+
+
+================================================
+File: tensor_flow/components/segments_plot.py
+================================================
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+
+def create_segments_plot(time_series_dict, segments_dict):
+    """Create a more interpretable plot showing continuous segments"""
+    # Check if we have data to display
+    if not segments_dict or not time_series_dict:
+        return go.Figure().add_annotation(
+            text="No segment data available",
+            showarrow=False,
+            font=dict(size=14, color="red"),
+        )
+
+    # Get nodes that have both time series and segment data
+    available_nodes = [
+        node_id
+        for node_id in segments_dict
+        if node_id in time_series_dict and len(segments_dict[node_id]) > 0
+    ]
+
+    if not available_nodes:
+        return go.Figure().add_annotation(
+            text="No valid segments found in the data",
+            showarrow=False,
+            font=dict(size=14, color="red"),
+        )
+
+    # Limit to a reasonable number of nodes for clarity (maximum 4)
+    display_nodes = available_nodes[: min(4, len(available_nodes))]
+
+    # Create a subplot for each node
+    fig = make_subplots(
+        rows=len(display_nodes),
+        cols=1,
+        subplot_titles=[
+            f"Node {node_id} Continuous Segments" for node_id in display_nodes
+        ],
+        vertical_spacing=0.08,
+    )
+
+    # Define appealing colors for segments
+    segment_colors = [
+        "rgba(65, 105, 225, 0.3)",  # Royal Blue
+        "rgba(46, 139, 87, 0.3)",  # Sea Green
+        "rgba(220, 20, 60, 0.3)",  # Crimson
+        "rgba(255, 140, 0, 0.3)",  # Dark Orange
+        "rgba(148, 0, 211, 0.3)",  # Dark Violet
+        "rgba(0, 128, 128, 0.3)",  # Teal
+    ]
+
+    # Define colors for segment borders (darker versions of fill colors)
+    border_colors = [
+        "rgba(65, 105, 225, 0.8)",  # Royal Blue
+        "rgba(46, 139, 87, 0.8)",  # Sea Green
+        "rgba(220, 20, 60, 0.8)",  # Crimson
+        "rgba(255, 140, 0, 0.8)",  # Dark Orange
+        "rgba(148, 0, 211, 0.8)",  # Dark Violet
+        "rgba(0, 128, 128, 0.8)",  # Teal
+    ]
+
+    # Add an explanation about what segments are
+    fig.add_annotation(
+        text=(
+            "Continuous segments are uninterrupted sequences of data points.<br>"
+            "The algorithm identifies these segments by looking for gaps in the time series.<br>"
+            "Each colored region represents a different segment that will be used to create training windows."
+        ),
+        x=0.5,
+        y=1.05,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=12),
+        bordercolor="black",
+        borderwidth=1,
+        borderpad=4,
+        bgcolor="white",
+        align="left",
+    )
+
+    # For each node, create a more informative visualization
+    for i, node_id in enumerate(display_nodes):
+        if node_id not in time_series_dict:
+            continue
+
+        series = time_series_dict[node_id]
+        segments = segments_dict[node_id]
+
+        # Summary statistics
+        total_points = len(series)
+        points_in_segments = sum(end - start for start, end in segments)
+        coverage_pct = (
+            (points_in_segments / total_points * 100) if total_points > 0 else 0
+        )
+
+        # Add statistics annotation
+        stats_text = (
+            f"Node {node_id}:<br>"
+            f"Total segments: {len(segments)}<br>"
+            f"Points in segments: {points_in_segments} / {total_points} ({coverage_pct:.1f}%)"
+        )
+
+        # Use proper domain references - the first subplot is just "x domain", subsequent ones are "x2 domain", "x3 domain", etc.
+        # Similarly for y axis
+        x_ref = "x domain" if i == 0 else f"x{i+1} domain"
+        y_ref = "y domain" if i == 0 else f"y{i+1} domain"
+
+        fig.add_annotation(
+            text=stats_text,
+            x=0.01,
+            y=0.95,
+            xref=x_ref,
+            yref=y_ref,
+            showarrow=False,
+            font=dict(size=10),
+            bordercolor="black",
+            borderwidth=1,
+            borderpad=4,
+            bgcolor="white",
+            align="left",
+        )
+
+        # Plot the raw time series as a light gray line
+        fig.add_trace(
+            go.Scatter(
+                x=series.index,
+                y=series.values,
+                mode="lines",
+                name="Raw Data",
+                line=dict(color="rgba(100, 100, 100, 0.5)", width=1),
+                showlegend=(i == 0),  # Only show in legend for first node
+                hovertemplate="Time: %{x}<br>Value: %{y:.2f}<extra>Raw Data</extra>",
+            ),
+            row=i + 1,
+            col=1,
+        )
+
+        # Add markers to highlight actual data points
+        fig.add_trace(
+            go.Scatter(
+                x=series.index,
+                y=series.values,
+                mode="markers",
+                marker=dict(
+                    color="rgba(100, 100, 100, 0.5)",
+                    size=3,
+                ),
+                name="Data Points",
+                showlegend=(i == 0),
+                hoverinfo="skip",
+            ),
+            row=i + 1,
+            col=1,
+        )
+
+        # Add segment highlights with improved styling and information
+        for j, (start_idx, end_idx) in enumerate(segments):
+            # Skip if segment indices are invalid
+            if (
+                start_idx >= len(series.index)
+                or end_idx > len(series.index)
+                or start_idx >= end_idx
+            ):
+                continue
+
+            segment_indices = series.index[start_idx:end_idx]
+            if len(segment_indices) == 0:
+                continue
+
+            segment_values = series.values[start_idx:end_idx]
+
+            # Calculate segment statistics
+            segment_length = len(segment_indices)
+            segment_min = (
+                np.nanmin(segment_values) if len(segment_values) > 0 else np.nan
+            )
+            segment_max = (
+                np.nanmax(segment_values) if len(segment_values) > 0 else np.nan
+            )
+
+            # Add a small padding to the y-range for better visibility
+            y_padding = (
+                (segment_max - segment_min) * 0.1
+                if not np.isnan(segment_min) and not np.isnan(segment_max)
+                else 0.1
+            )
+            display_min = (
+                segment_min - y_padding if not np.isnan(segment_min) else series.min()
+            )
+            display_max = (
+                segment_max + y_padding if not np.isnan(segment_max) else series.max()
+            )
+
+            # Use modulo to cycle through colors for segments
+            color_idx = j % len(segment_colors)
+
+            # Format dates for better display
+            start_time = segment_indices[0]
+            end_time = segment_indices[-1]
+            if isinstance(start_time, pd.Timestamp) and isinstance(
+                end_time, pd.Timestamp
+            ):
+                date_format = (
+                    "%Y-%m-%d %H:%M"
+                    if start_time.hour or start_time.minute
+                    else "%Y-%m-%d"
+                )
+                start_str = start_time.strftime(date_format)
+                end_str = end_time.strftime(date_format)
+            else:
+                start_str = str(start_time)
+                end_str = str(end_time)
+
+            # Create a more descriptive name for the segment
+            segment_name = (
+                f"Segment {j+1}: {start_str} to {end_str} ({segment_length} points)"
+            )
+
+            # Add a transparent polygon to highlight segment
+            fig.add_trace(
+                go.Scatter(
+                    x=[
+                        segment_indices[0],
+                        segment_indices[0],
+                        segment_indices[-1],
+                        segment_indices[-1],
+                        segment_indices[0],
+                    ],
+                    y=[display_min, display_max, display_max, display_min, display_min],
+                    fill="toself",
+                    mode="lines",
+                    line=dict(color=border_colors[color_idx], width=1.5),
+                    name=segment_name,
+                    fillcolor=segment_colors[color_idx],
+                    showlegend=(
+                        i == 0 and j < 6
+                    ),  # Only show first 6 segments in legend
+                    legendgroup=f"segment_{j}",
+                    hovertemplate=(
+                        "Segment %{meta}<br>"
+                        "Start: %{customdata[0]}<br>"
+                        "End: %{customdata[1]}<br>"
+                        "Length: %{customdata[2]} points<br>"
+                        "<extra></extra>"
+                    ),
+                    customdata=[[start_str, end_str, segment_length]],
+                    meta=j + 1,
+                ),
+                row=i + 1,
+                col=1,
+            )
+
+            # Optionally add a label in the middle of the segment
+            if segment_length > 30:  # Only label larger segments to avoid clutter
+                middle_idx = start_idx + (end_idx - start_idx) // 2
+                if middle_idx < len(series.index):
+                    middle_time = series.index[middle_idx]
+                    middle_y = (display_min + display_max) / 2
+
+                    fig.add_annotation(
+                        x=middle_time,
+                        y=middle_y,
+                        text=f"Seg {j+1}",
+                        showarrow=False,
+                        font=dict(size=10, color="black"),
+                        bgcolor="rgba(255, 255, 255, 0.7)",
+                        bordercolor="black",
+                        borderwidth=1,
+                        row=i + 1,
+                        col=1,
+                    )
+
+        # Update y-axis title for middle subplot
+        if i == len(display_nodes) // 2:
+            fig.update_yaxes(title_text="Value", row=i + 1, col=1)
+
+        # Update x-axis title for bottom subplot
+        if i == len(display_nodes):
+            fig.update_xaxes(title_text="Timestamp", row=i + 1, col=1)
+
+    # Update overall layout
+    fig.update_layout(
+        title={
+            "text": f"Continuous Segments in Time Series Data",
+            "font": {"size": 18},
+        },
+        height=300 * len(display_nodes) + 100,  # Adaptive height
+        legend=dict(
+            orientation="h",
+            y=-0.1 if len(display_nodes) <= 2 else -0.05,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+        ),
+        margin=dict(t=100, b=80),
+    )
+
+    # Add a note if we're not showing all nodes
+    if len(available_nodes) > len(display_nodes):
+        fig.add_annotation(
+            text=f"Note: Only showing {len(display_nodes)} out of {len(available_nodes)} available nodes for clarity.",
+            x=0.5,
+            y=-0.05 if len(display_nodes) <= 2 else -0.02,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            font=dict(size=10, color="gray"),
+        )
+
+    return fig
+
+
+
+================================================
+File: tensor_flow/components/time_series_plot.py
+================================================
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import pandas as pd
+import numpy as np
+
+
+def create_time_series_plot(time_series_dict, node_ids):
+    """Create a more interpretable plot of the raw time series data"""
+    # Check if we have data to plot
+    available_nodes = [node_id for node_id in node_ids if node_id in time_series_dict]
+
+    if not available_nodes:
+        return go.Figure().add_annotation(
+            text="No time series data available for the provided node IDs",
+            showarrow=False,
+            font=dict(size=14, color="red"),
+        )
+
+    # Limit to a reasonable number of nodes for clarity (maximum 6)
+    display_nodes = available_nodes[: min(6, len(available_nodes))]
+
+    # Create a subplot for each node for better visibility
+    fig = make_subplots(
+        rows=len(display_nodes),
+        cols=1,
+        subplot_titles=[f"Node {node_id} Time Series" for node_id in display_nodes],
+        vertical_spacing=0.05,
+        shared_xaxes=True,
+    )
+
+    # Define a diverse color palette
+    colors = [
+        "#1f77b4",  # Blue
+        "#ff7f0e",  # Orange
+        "#2ca02c",  # Green
+        "#d62728",  # Red
+        "#9467bd",  # Purple
+        "#8c564b",  # Brown
+    ]
+
+    # Add an informative title at the top
+    fig.add_annotation(
+        text="Raw Time Series Data with Missing Values",
+        x=0.5,
+        y=1.08,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=16, color="black"),
+    )
+
+    # Add an explanation of what this visualization shows
+    fig.add_annotation(
+        text=(
+            "This visualization shows the raw sensor data over time.<br>"
+            "Gaps in the lines represent missing data points that will need to be handled during processing.<br>"
+            "Each sensor is shown in a separate subplot for clarity."
+        ),
+        x=0.5,
+        y=1.03,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=12),
+        bordercolor="black",
+        borderwidth=1,
+        borderpad=4,
+        bgcolor="white",
+        align="left",
+    )
+
+    # Plot each node's time series in its own subplot
+    for i, node_id in enumerate(display_nodes):
+        series = time_series_dict[node_id]
+        color = colors[i % len(colors)]
+
+        # Calculate statistics
+        total_points = len(series)
+        valid_points = series.count()  # Count non-NaN values
+        missing_points = total_points - valid_points
+        missing_percentage = (
+            (missing_points / total_points * 100) if total_points > 0 else 0
+        )
+
+        # Plot line for non-NaN values with gaps for missing data
+        fig.add_trace(
+            go.Scatter(
+                x=series.index[:1000],
+                y=series.values[:1000],
+                mode="lines",
+                name=f"Node {node_id}",
+                connectgaps=False,  # Don't connect across NaN values
+                line=dict(color=color, width=1.5),
+                hovertemplate=(
+                    "Time: %{x}<br>"
+                    "Value: %{y:.2f}<br>"
+                    "Node: " + str(node_id) + "<extra></extra>"
+                ),
+            ),
+            row=i + 1,
+            col=1,
+        )
+
+        # Add markers to make the data points more visible
+        fig.add_trace(
+            go.Scatter(
+                x=series.index[:1000],
+                y=series.values[:1000],
+                mode="markers",
+                marker=dict(
+                    color=color,
+                    size=4,
+                    opacity=0.6,
+                ),
+                name=f"Node {node_id} Points",
+                showlegend=False,
+                hoverinfo="skip",
+            ),
+            row=i + 1,
+            col=1,
+        )
+
+        # Add data quality statistics as annotations
+        stats_text = (
+            f"Data quality: {valid_points} valid / {total_points} total points<br>"
+            f"Missing data: {missing_percentage:.1f}% ({missing_points} points)"
+        )
+
+        # Use proper domain references - the first subplot is just "x domain", subsequent ones are "x2 domain", "x3 domain", etc.
+        # Similarly for y axis
+        x_ref = "x domain" if i == 0 else f"x{i+1} domain"
+        y_ref = "y domain" if i == 0 else f"y{i+1} domain"
+
+        fig.add_annotation(
+            text=stats_text,
+            x=0.99,
+            y=0.9,
+            xref=x_ref,
+            yref=y_ref,
+            showarrow=False,
+            font=dict(size=10),
+            align="right",
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="black",
+            borderwidth=1,
+            borderpad=4,
+        )
+
+        # Update y-axis title only for middle subplot to save space
+        if i == len(display_nodes) // 2:
+            fig.update_yaxes(title_text="Value", row=i + 1, col=1)
+
+        # Update x-axis title only for bottom subplot
+        if i == len(display_nodes) - 1:
+            fig.update_xaxes(title_text="Timestamp", row=i + 1, col=1)
+
+        # Highlight periods with missing data using shaded rectangles
+        # Find gaps in the time series
+        if isinstance(series.index, pd.DatetimeIndex) and len(series) > 1:
+            try:
+                # Calculate expected time step from the most common difference
+                time_diffs = series.index.to_series().diff().dropna()
+                if len(time_diffs) > 0:
+                    # Get most common time difference as the expected step
+                    expected_step = time_diffs.mode()[0]
+
+                    # Find gaps larger than the expected step
+                    large_gaps = []
+                    for j in range(1, len(series.index)):
+                        actual_diff = series.index[j] - series.index[j - 1]
+                        if (
+                            actual_diff > expected_step * 2
+                        ):  # Gap is significantly larger than expected
+                            large_gaps.append((series.index[j - 1], series.index[j]))
+
+                    # Highlight the large gaps
+                    for gap_start, gap_end in large_gaps[
+                        :10
+                    ]:  # Limit to 10 gaps to avoid clutter
+                        fig.add_shape(
+                            type="rect",
+                            x0=gap_start,
+                            x1=gap_end,
+                            y0=series.min(),
+                            y1=series.max(),
+                            fillcolor="rgba(200,200,200,0.3)",
+                            line=dict(width=0),
+                            row=i + 1,
+                            col=1,
+                        )
+            except Exception as e:
+                print(f"Warning: Could not highlight gaps for node {node_id}: {e}")
+
+    # Update legend to be horizontal at the bottom
+    fig.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.2 if len(display_nodes) <= 3 else -0.1,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+        ),
+        height=200 * len(display_nodes)
+        + 100,  # Adaptive height based on number of nodes
+        margin=dict(t=120, b=100),
+    )
+
+    # Add a note if not all nodes are shown
+    if len(available_nodes) > len(display_nodes):
+        fig.add_annotation(
+            text=f"Note: Only showing {len(display_nodes)} out of {len(available_nodes)} available nodes for clarity.",
+            x=0.5,
+            y=-0.05 if len(display_nodes) <= 3 else -0.02,
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            font=dict(size=10, color="gray"),
+        )
+
+    return fig
+
+
+
+================================================
+File: tensor_flow/components/windows_plot.py
+================================================
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+
+
+def create_windows_plot(X_by_sensor, masks_by_sensor, node_ids):
+    """Create a more interpretable visualization of windowed data and masks"""
+    # Check if we have enough data to visualize
+    if not X_by_sensor or not any(
+        node_id in X_by_sensor and len(X_by_sensor[node_id]) > 0 for node_id in node_ids
+    ):
+        return go.Figure().add_annotation(
+            text="Not enough data to visualize windows",
+            showarrow=False,
+            font=dict(size=14, color="red"),
+        )
+
+    # Get the actual node IDs that have data
+    available_nodes = [
+        node_id
+        for node_id in node_ids
+        if node_id in X_by_sensor and len(X_by_sensor[node_id]) > 0
+    ]
+
+    if not available_nodes:
+        return go.Figure().add_annotation(
+            text="No windows available for the provided node IDs",
+            showarrow=False,
+            font=dict(size=14, color="red"),
+        )
+
+    # Limit to a reasonable number of nodes for clarity
+    display_nodes = available_nodes[: min(4, len(available_nodes))]
+
+    # Create a grid of subplots - one row per node
+    fig = make_subplots(
+        rows=len(display_nodes),
+        cols=2,
+        subplot_titles=[f"Node {node_id} Window Values" for node_id in display_nodes]
+        + [f"Node {node_id} Mask Values" for node_id in display_nodes],
+        column_widths=[0.7, 0.3],
+        vertical_spacing=0.1,
+        horizontal_spacing=0.1,
+    )
+
+    # Define a color palette for the windows
+    colors = [
+        "#1f77b4",  # Blue
+        "#ff7f0e",  # Orange
+        "#2ca02c",  # Green
+        "#d62728",  # Red
+        "#9467bd",  # Purple
+    ]
+
+    # Add a legend to explain what windows are
+    legend_text = (
+        "Windows are fixed-length sequences of data points extracted from continuous segments.<br>"
+        "Each window becomes a training example for the model.<br>"
+        "Windows with missing values use masks to indicate which values are valid."
+    )
+
+    fig.add_annotation(
+        text=legend_text,
+        x=0.5,
+        y=1.08,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=12),
+        bordercolor="black",
+        borderwidth=1,
+        borderpad=4,
+        bgcolor="white",
+        align="left",
+    )
+
+    for i, node_id in enumerate(display_nodes):
+        # Get window data and masks
+        windows = X_by_sensor[node_id]
+        masks = masks_by_sensor[node_id]
+
+        # Sample up to 5 windows for visualization
+        num_windows = min(5, len(windows))
+
+        # Add a small offset to each window for better visibility when stacked
+        y_offset = 0.2
+
+        # Add node statistics
+        total_windows = len(windows)
+        window_length = windows.shape[1] if windows.shape[0] > 0 else 0
+
+        # Use proper domain references for Plotly
+        left_x_ref = "x domain" if i == 0 else f"x{i*2+1} domain"
+        left_y_ref = "y domain" if i == 0 else f"y{i*2+1} domain"
+
+        right_x_ref = "x2 domain" if i == 0 else f"x{i*2+2} domain"
+        right_y_ref = "y2 domain" if i == 0 else f"y{i*2+2} domain"
+
+        # Add a textbox with node stats
+        stats_text = (
+            f"Node {node_id}:<br>"
+            f"Total windows: {total_windows}<br>"
+            f"Window length: {window_length}"
+        )
+
+        fig.add_annotation(
+            text=stats_text,
+            x=0.01,
+            y=0.95,
+            xref=left_x_ref,
+            yref=left_y_ref,
+            showarrow=False,
+            font=dict(size=10),
+            bordercolor="black",
+            borderwidth=1,
+            borderpad=4,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            align="left",
+        )
+
+        # For each window, create a more informative visualization
+        for j in range(num_windows):
+            window = windows[j]
+            mask = masks[j]
+
+            # Calculate y-position for this window (stacked from bottom to top)
+            y_position = j * y_offset
+
+            # Create filled area representing the window values
+            fig.add_trace(
+                go.Scatter(
+                    x=list(range(len(window))),
+                    y=window + y_position,  # Add offset for stacking
+                    mode="lines+markers",
+                    line=dict(color=colors[j % len(colors)], width=2),
+                    marker=dict(
+                        size=8,
+                        color=colors[j % len(colors)],
+                        line=dict(width=1, color="white"),
+                    ),
+                    name=f"Window {j+1}",
+                    legendgroup=f"window_{j}",
+                    showlegend=(i == 0),  # Only show in legend for first node
+                    hovertemplate=(
+                        "Step: %{x}<br>"
+                        "Value: %{customdata[0]:.2f}<br>"
+                        "Valid: %{customdata[1]}<br>"
+                        "Window: " + str(j + 1) + "<extra></extra>"
+                    ),
+                    customdata=np.column_stack((window, mask)),
+                ),
+                row=i + 1,
+                col=1,
+            )
+
+            # Add markers for missing values
+            missing_indices = np.where(mask == 0)[0]
+            if len(missing_indices) > 0:
+                fig.add_trace(
+                    go.Scatter(
+                        x=missing_indices,
+                        y=window[missing_indices] + y_position,  # Add offset
+                        mode="markers",
+                        marker=dict(
+                            symbol="x",
+                            size=12,
+                            color=colors[j % len(colors)],
+                            line=dict(width=2, color="black"),
+                        ),
+                        name=f"Window {j+1} Missing",
+                        legendgroup=f"window_{j}",
+                        showlegend=False,
+                        hovertemplate=(
+                            "Step: %{x}<br>"
+                            "Value: %{y:.2f}<br>"
+                            "Missing Data Point<br>"
+                            "Window: " + str(j + 1) + "<extra></extra>"
+                        ),
+                    ),
+                    row=i + 1,
+                    col=1,
+                )
+
+            # Create a heatmap-like visualization for masks using scatter points
+            marker_colors = ["red" if m == 0 else "green" for m in mask]
+            marker_symbols = ["x" if m == 0 else "circle" for m in mask]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=list(range(len(mask))),
+                    y=[j] * len(mask),  # One row per window
+                    mode="markers",
+                    marker=dict(
+                        size=10,
+                        color=marker_colors,
+                        symbol=marker_symbols,
+                        line=dict(width=1, color="black"),
+                    ),
+                    name=f"Window {j+1} Mask",
+                    legendgroup=f"window_{j}",
+                    showlegend=False,
+                    hovertemplate=(
+                        "Step: %{x}<br>"
+                        "Valid: %{text}<br>"
+                        "Window: " + str(j + 1) + "<extra></extra>"
+                    ),
+                    text=["Yes" if m == 1 else "No" for m in mask],
+                ),
+                row=i + 1,
+                col=2,
+            )
+
+        # Add a legend for the mask values in the first instance
+        if i == 0:
+            fig.add_annotation(
+                text="Masks:<br>● = Valid<br>✕ = Missing",
+                x=0.9,
+                y=0.5,
+                xref=right_x_ref,
+                yref=right_y_ref,
+                showarrow=False,
+                font=dict(size=10),
+                align="center",
+                bgcolor="rgba(255, 255, 255, 0.8)",
+                bordercolor="black",
+                borderwidth=1,
+            )
+
+        # Update y-axis for windows column
+        fig.update_yaxes(
+            title_text=f"Standardized Value (stacked)",
+            row=i + 1,
+            col=1,
+        )
+
+        # Update y-axis for masks column
+        fig.update_yaxes(
+            title_text="Window #",
+            tickvals=list(range(num_windows)),
+            ticktext=[f"Window {j+1}" for j in range(num_windows)],
+            range=[-0.5, num_windows - 0.5],
+            row=i + 1,
+            col=2,
+        )
+
+        # Add x-axis label to bottom subplot only
+        if i == len(display_nodes) - 1:
+            fig.update_xaxes(title_text="Time Step", row=i + 1, col=1)
+            fig.update_xaxes(title_text="Time Step", row=i + 1, col=2)
+
+    # Add overall count of windows to the title
+    total_windows_count = sum(len(X_by_sensor.get(node_id, [])) for node_id in node_ids)
+
+    # Update layout with more informative title and styling
+    fig.update_layout(
+        title={
+            "text": f"Windowed Data Representation ({total_windows_count} total windows across {len(available_nodes)} nodes)",
+            "font": {"size": 18},
+        },
+        height=max(
+            150 * len(display_nodes) + 200, 400
+        ),  # Adaptive height based on number of nodes
+        legend=dict(
+            orientation="h",
+            y=-0.1 if len(display_nodes) <= 2 else -0.05,
+            xanchor="center",
+            x=0.5,
+            bgcolor="rgba(255, 255, 255, 0.8)",
+        ),
+        margin=dict(t=120, b=80, l=60, r=60),
+    )
+
+    # Add a note about what a window is and how it's used
+    note_text = (
+        "Note: Only showing first 5 windows per node for clarity. "
+        f"In total, there are {total_windows_count} windows available for training."
+    )
+
+    fig.add_annotation(
+        text=note_text,
+        x=0.5,
+        y=-0.05 if len(display_nodes) <= 2 else -0.02,
+        xref="paper",
+        yref="paper",
+        showarrow=False,
+        font=dict(size=10, color="gray"),
+    )
+
+    return fig
+
+
+
+
+================================================
+File: tensor_flow/templates/layout.html
+================================================
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>GNN Tensor Flow Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .dashboard-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .dashboard-header {
+            background-color: #4C78A8;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .dashboard-section {
+            padding: 20px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        h1 {
+            margin: 0;
+        }
+
+        h2 {
+            color: #2C3E50;
+            margin-top: 0;
+        }
+
+        .viz-container {
+            margin-top: 20px;
+        }
+
+        .tensor-transformation {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+
+        .arrow {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+
+        .tensor-info {
+            font-family: monospace;
+            background-color: #f0f0f0;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+
+        .tensor-info pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>GNN Tensor Flow Dashboard</h1>
+            <p>Visualizing Data Transformations Through the Pipeline</p>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>Pipeline Overview</h2>
+            <p>This dashboard visualizes how data transforms as it flows through the GNN pipeline:</p>
+            <div class="tensor-transformation">
+                <div class="tensor-info">
+                    <pre>Raw Time Series Data → Find Continuous Segments → Create Windows → Compute Adjacency Weights → Batch Data → Model Forward Pass</pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{raw_data_title}}</h2>
+            <p>Starting point: time series data with missing values (shown as gaps).</p>
+            <div class="viz-container">
+                {{raw_data_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{segments_title}}</h2>
+            <p>Identifying continuous segments in the time series data without significant gaps.</p>
+            <div class="viz-container">
+                {{segments_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{windows_title}}</h2>
+            <p>Creating fixed-size windows from continuous segments, standardizing values, and tracking missing data
+                with masks.</p>
+            <div class="viz-container">
+                {{windows_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{adjacency_title}}</h2>
+            <p>Converting distance matrix to weighted adjacency matrix using Gaussian kernel.</p>
+            <div class="viz-container">
+                {{adjacency_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{batch_title}}</h2>
+            <p>Organizing data into batches for model training with shape transformations.</p>
+            <div class="viz-container">
+                {{batch_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>{{model_title}}</h2>
+            <p>Visualizing the STGNN model architecture that processes the tensor data.</p>
+            <div class="viz-container">
+                {{model_plot}}
+            </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>Tensor Shape Transformations</h2>
+            <p>Summary of how tensor shapes change through the pipeline:</p>
+
+            <div class="tensor-transformation">
+                <div class="tensor-info">
+                    <pre>Raw Time Series: Series[time] → shape: (n_timestamps,)</pre>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="tensor-info">
+                    <pre>Windowed Data: X_by_sensor[node_id] → shape: (n_windows, window_size)</pre>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="tensor-info">
+                    <pre>Batched Data: x → shape: (batch_size, num_nodes, seq_len, features)</pre>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="tensor-info">
+                    <pre>Model Output: predictions → shape: (batch_size, num_nodes, horizon, features)</pre>
+                </div>
+            </div>
+
+            <div class="tensor-transformation">
+                <div class="tensor-info">
+                    <pre>Raw Adjacency Matrix → shape: (num_nodes, num_nodes)</pre>
+                </div>
+                <div class="arrow">↓</div>
+                <div class="tensor-info">
+                    <pre>Weighted Adjacency Matrix → shape: (num_nodes, num_nodes)</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
+
+
+================================================
+File: tensor_flow/utils/__init__.py
+================================================
+from .data_utils import load_sample_data
+
+__all__ = [
+    "load_sample_data",
+]
+
+
+
+================================================
+File: tensor_flow/utils/data_utils.py
+================================================
+"""
+Utility functions for the tensor flow dashboard with improved data loading.
+Includes data loading, preprocessing helpers, and more.
+"""
+
+import os
+import pickle
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from datetime import datetime, timedelta
+from gnn_package import preprocessing
+
+
+def load_sample_data(graph_prefix="25022025_test", sample_size=8, use_real_data=True):
+    """
+    Load data for the tensor flow dashboard.
+    Attempts to load real data first, falls back to synthetic if needed.
+
+    Now loads more nodes (8 by default) for better visualizations.
+
+    Parameters:
+    -----------
+    graph_prefix : str
+        Prefix for the graph data files
+    sample_size : int
+        Number of sensor nodes to include in visualization (increased from 5 to 8)
+    use_real_data : bool
+        Whether to try loading real data first (True) or go straight to synthetic (False)
+
+    Returns:
+    --------
+    dict
+        Dictionary containing adjacency matrix, node IDs, and time series data
+    """
+    if use_real_data:
+        data = load_real_data(graph_prefix, sample_size)
+        if data is not None:
+            return data
+
+    # Fall back to synthetic data if real data loading failed or was skipped
+    return load_synthetic_data(sample_size=sample_size)
+
+
+def load_real_data(
+    graph_prefix="25022025_test", sample_size=8, data_file="test_data_1mnth.pkl"
+):
+    """
+    Load real data from the dashboards/data folder with improved node selection
+
+    Parameters:
+    -----------
+    graph_prefix : str
+        Prefix for the graph data files
+    sample_size : int
+        Number of sensor nodes to include in visualization
+    data_file : str
+        Name of the time series data file
+
+    Returns:
+    --------
+    dict
+        Dictionary containing adjacency matrix, node IDs, and time series data
+    """
+    print(f"Loading graph data with prefix '{graph_prefix}'...")
+    try:
+        # Load adjacency matrix and node IDs
+        adj_matrix, node_ids, metadata = preprocessing.load_graph_data(
+            prefix=graph_prefix, return_df=False
+        )
+
+        print(
+            f"Loaded adjacency matrix with shape {adj_matrix.shape} containing {len(node_ids)} nodes"
+        )
+
+        # Find potential data files
+        potential_paths = [
+            Path("dashboards/data") / data_file,
+            Path("data") / data_file,
+            Path("../data") / data_file,
+            Path("dashboards/data/test_data_1mnth.pkl"),
+            Path("dashboards/data/test_data.pkl"),
+            Path(data_file) if data_file.startswith("/") else None,
+        ]
+
+        data_path = None
+        for path in potential_paths:
+            if path and path.exists():
+                data_path = path
+                print(f"Found data at {data_path}")
+                break
+
+        if not data_path:
+            print(f"Warning: Could not find data file at any of these locations:")
+            for path in potential_paths:
+                if path:
+                    print(f"  - {path}")
+            return None
+
+        # Load the pickle file
+        print(f"Loading time series data from {data_path}")
+        with open(data_path, "rb") as f:
+            time_series_dict = pickle.load(f)
+
+        print(f"Loaded time series data with {len(time_series_dict)} sensors")
+
+        # First determine which nodes have data
+        nodes_with_data = [
+            node_id
+            for node_id in node_ids
+            if node_id in time_series_dict and time_series_dict[node_id] is not None
+        ]
+
+        print(f"Found {len(nodes_with_data)} nodes with valid time series data")
+
+        if len(nodes_with_data) < 2:
+            print(f"Warning: Not enough nodes with data (found {len(nodes_with_data)})")
+            return None
+
+        # For better visualizations, select nodes with the best data quality
+        if len(nodes_with_data) > sample_size:
+            # Calculate data quality for each node
+            data_quality = {}
+            for node_id in nodes_with_data:
+                series = time_series_dict[node_id]
+                if series is not None:
+                    # Calculate percentage of non-NaN values and total data points
+                    total_points = len(series)
+                    valid_points = series.count()  # Count non-NaN values
+                    quality_score = (
+                        (valid_points / total_points) * np.log10(total_points)
+                        if total_points > 0
+                        else 0
+                    )
+                    data_quality[node_id] = quality_score
+
+            # Select top nodes by data quality
+            selected_nodes = sorted(
+                data_quality.items(), key=lambda x: x[1], reverse=True
+            )[:sample_size]
+            selected_node_ids = [node_id for node_id, _ in selected_nodes]
+
+            print(
+                f"Selected {len(selected_node_ids)} nodes with best data quality from {len(nodes_with_data)} available nodes"
+            )
+        else:
+            selected_node_ids = nodes_with_data
+            print(f"Using all {len(selected_node_ids)} available nodes with data")
+
+        # Create filtered adjacency matrix for selected nodes
+        valid_indices = [
+            node_ids.index(node_id)
+            for node_id in selected_node_ids
+            if node_id in node_ids
+        ]
+        valid_adj_matrix = adj_matrix[valid_indices][:, valid_indices]
+
+        # Create filtered time series dictionary
+        valid_time_series = {
+            node_id: time_series_dict[node_id] for node_id in selected_node_ids
+        }
+
+        print(f"Successfully prepared data for {len(selected_node_ids)} nodes")
+        print(f"Adjacency matrix shape: {valid_adj_matrix.shape}")
+
+        return {
+            "adj_matrix": valid_adj_matrix,
+            "node_ids": selected_node_ids,
+            "time_series_dict": valid_time_series,
+        }
+
+    except Exception as e:
+        print(f"Error loading real data: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return None
+
+
+def load_synthetic_data(adj_matrix=None, node_ids=None, sample_size=8):
+    """
+    Generate synthetic data as a fallback, now with more nodes
+
+    Parameters:
+    -----------
+    adj_matrix : np.ndarray, optional
+        Pre-existing adjacency matrix
+    node_ids : list, optional
+        Pre-existing node IDs
+    sample_size : int
+        Number of sensor nodes to include if creating new synthetic data
+
+    Returns:
+    --------
+    dict
+        Dictionary containing adjacency matrix, node IDs, and synthetic time series data
+    """
+    print(f"Generating synthetic time series data with {sample_size} nodes...")
+
+    # Create synthetic adjacency matrix and node IDs if not provided
+    if adj_matrix is None or node_ids is None:
+        # Create random node IDs
+        node_ids = [f"1{str(i).zfill(4)}" for i in range(sample_size)]
+
+        # Create random adjacency matrix
+        adj_matrix = (
+            np.random.rand(sample_size, sample_size) * 1000
+        )  # Distances in meters
+        adj_matrix = (adj_matrix + adj_matrix.T) / 2  # Make symmetric
+        np.fill_diagonal(adj_matrix, 0)  # Zero diagonal
+
+    # Create synthetic time series data
+    time_series_dict = {}
+    now = datetime.now()
+    date_range = pd.date_range(start=now - timedelta(days=7), end=now, freq="15min")
+
+    for node_id in node_ids:
+        # Create a synthetic time series with some missing values and patterns
+        base_pattern = np.sin(np.linspace(0, 14 * np.pi, len(date_range))) * 50 + 50
+
+        # Add some random noise
+        noise = np.random.normal(0, 5, len(date_range))
+
+        # Add daily pattern
+        hour_effect = np.array(
+            [
+                max(
+                    0, 20 * np.sin((hour - 6) * np.pi / 12)
+                )  # Peak at noon, low at midnight
+                for hour in [d.hour for d in date_range]
+            ]
+        )
+
+        values = base_pattern + noise + hour_effect
+
+        # Introduce some NaN values to simulate missing data
+        # Create patterns of missing data rather than random missing values
+        mask = np.ones(len(date_range), dtype=bool)
+
+        # Scenario 1: Missing data at night (midnight to 5am)
+        night_hours = np.array([d.hour >= 0 and d.hour < 5 for d in date_range])
+        night_missing = (
+            np.random.random(len(date_range)) < 0.7
+        )  # 70% chance of missing at night
+        mask = mask & ~(night_hours & night_missing)
+
+        # Scenario 2: Random data outages (blocks of consecutive missing values)
+        num_outages = np.random.randint(3, 7)  # 3-6 outages
+        for _ in range(num_outages):
+            outage_start = np.random.randint(
+                0, len(date_range) - 48
+            )  # Ensure room for outage
+            outage_length = np.random.randint(
+                12, 48
+            )  # 3-12 hour outage (at 15-min intervals)
+            mask[outage_start : outage_start + outage_length] = False
+
+        # Apply mask
+        values[~mask] = np.nan
+
+        time_series_dict[node_id] = pd.Series(values, index=date_range)
+
+    print(
+        f"Generated synthetic data for {len(node_ids)} nodes over {len(date_range)} time points"
+    )
+    return {
+        "adj_matrix": adj_matrix,
+        "node_ids": node_ids,
+        "time_series_dict": time_series_dict,
+    }
+
+
+def get_most_complete_nodes(time_series_dict, num_nodes=8):
+    """
+    Find the nodes with the most complete data
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping node IDs to time series
+    num_nodes : int
+        Number of nodes to return
+
+    Returns:
+    --------
+    list
+        List of node IDs with the most complete data
+    """
+    # Calculate completeness for each node
+    completeness = {}
+    for node_id, series in time_series_dict.items():
+        if series is not None:
+            # Calculate percentage of non-NaN values
+            completeness[node_id] = (~pd.isna(series)).mean()
+
+    # Sort by completeness and return top N
+    sorted_nodes = sorted(completeness.items(), key=lambda x: x[1], reverse=True)
+    return [node_id for node_id, _ in sorted_nodes[:num_nodes]]
+
+
+

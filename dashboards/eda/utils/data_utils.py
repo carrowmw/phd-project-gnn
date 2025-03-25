@@ -5,7 +5,7 @@ import pandas as pd
 
 
 # Helper function to load data from file
-def load_data(file_path="dashboards/data/test_data_1mnth.pkl"):
+def load_data(file_path):
     with open(file_path, "rb") as f:
         return pickle.load(f)
 

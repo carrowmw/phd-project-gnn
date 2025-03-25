@@ -12,7 +12,9 @@ from datetime import datetime, timedelta
 from gnn_package import preprocessing
 
 
-def load_sample_data(graph_prefix="25022025_test", sample_size=8, use_real_data=True):
+def load_sample_data(
+    graph_prefix="25022025_test", sample_size=8, use_real_data=True, data_file=None
+):
     """
     Load data for the tensor flow dashboard.
     Attempts to load real data first, falls back to synthetic if needed.
@@ -34,7 +36,7 @@ def load_sample_data(graph_prefix="25022025_test", sample_size=8, use_real_data=
         Dictionary containing adjacency matrix, node IDs, and time series data
     """
     if use_real_data:
-        data = load_real_data(graph_prefix, sample_size)
+        data = load_real_data(graph_prefix, sample_size, data_file)
         if data is not None:
             return data
 

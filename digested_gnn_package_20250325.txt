@@ -1,0 +1,3546 @@
+Directory structure:
+└── gnn_package/
+    ├── __init__.py
+    ├── digester.sh
+    ├── config/
+    │   ├── __init__.py
+    │   ├── config.py
+    │   ├── paths.py
+    │   └── __pycache__/
+    ├── data/
+    │   ├── preprocessed/
+    │   │   ├── graphs/
+    │   │   └── timeseries/
+    │   ├── raw/
+    │   │   └── timeseries/
+    │   └── sensors/
+    └── src/
+        ├── dataloaders/
+        │   ├── __init__.py
+        │   ├── dataloaders.py
+        │   └── __pycache__/
+        ├── models/
+        │   ├── __init__.py
+        │   ├── stgnn.py
+        │   └── __pycache__/
+        ├── preprocessing/
+        │   ├── __init__.py
+        │   ├── fetch_sensor_data.py
+        │   ├── graph_analysis.py
+        │   ├── graph_computation.py
+        │   ├── graph_manipulation.py
+        │   ├── graph_utils.py
+        │   ├── graph_visualization.py
+        │   ├── timeseries_preprocessor.py
+        │   └── __pycache__/
+        ├── training/
+        │   ├── __init__.py
+        │   ├── stgnn_prediction.py
+        │   ├── stgnn_training.py
+        │   └── __pycache__/
+        ├── tuning/
+        └── utils/
+            ├── __init__.py
+            ├── data_utils.py
+            ├── sensor_utils.py
+            └── __pycache__/
+
+================================================
+File: __init__.py
+================================================
+from .config import paths
+from .src.utils import data_utils, sensor_utils
+
+from .config.paths import *
+from .src import preprocessing
+from .src import dataloaders
+from .src import models
+from .src import training
+
+__all__ = ["paths", "data_utils", "preprocessing", "dataloaders", "models", "training"]
+
+
+
+================================================
+File: digester.sh
+================================================
+#!/bin/bash
+
+# digester.sh - Script to ingest codebase while excluding large files and data files
+# Dependencies: gitingest, nbstripout
+
+set -e  # Exit on error
+
+# Configuration
+MAX_FILE_SIZE_KB=500  # Set maximum file size to 500 KB
+MAX_FILE_SIZE_BYTES=$((MAX_FILE_SIZE_KB * 1024))
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+OUTPUT_FILE="$PROJECT_ROOT/digested_gnn_package_$(date +%Y%m%d).txt"
+
+# Check if gitingest is installed
+if ! command -v gitingest &> /dev/null; then
+    echo "Error: gitingest is not installed. Please install it first."
+    echo "Install with: pip install gitingest"
+    exit 1
+fi
+
+# Check if nbstripout is installed
+if ! command -v nbstripout &> /dev/null; then
+    echo "Warning: nbstripout is not installed. Notebooks will not be processed."
+    echo "Consider installing with: pip install nbstripout"
+    PROCESS_NOTEBOOKS=false
+else
+    PROCESS_NOTEBOOKS=true
+fi
+
+# Process notebooks if nbstripout is available
+if [ "$PROCESS_NOTEBOOKS" = true ]; then
+    echo "Processing notebooks with nbstripout..."
+    find "$SCRIPT_DIR" -name "*.ipynb" -exec nbstripout {} \;
+fi
+
+echo "Starting codebase ingestion from gnn_package directory..."
+echo "- Max file size: ${MAX_FILE_SIZE_KB}KB"
+echo "- Output will be saved to: ${OUTPUT_FILE}"
+
+# Run gitingest on the gnn_package directory
+gitingest "$SCRIPT_DIR" \
+    -s "${MAX_FILE_SIZE_BYTES}" \
+    --exclude-pattern="*.pkl" \
+    --exclude-pattern="*.npy" \
+    --exclude-pattern="*.csv" \
+    --exclude-pattern="*.parquet" \
+    --exclude-pattern="*.json" \
+    --exclude-pattern="*.gz" \
+    --exclude-pattern="*.zip" \
+    --exclude-pattern="*.tar" \
+    --exclude-pattern="*.h5" \
+    --exclude-pattern="*.hdf5" \
+    --exclude-pattern="*.pyc" \
+    --exclude-pattern="__pycache__/" \
+    --exclude-pattern=".ipynb_checkpoints/" \
+    --exclude-pattern="cache/" \
+    --exclude-pattern="*/cache/*" \
+    --exclude-pattern="*.so" \
+    --exclude-pattern="*.o" \
+    --exclude-pattern="*.a" \
+    --exclude-pattern="*.dll" \
+    --exclude-pattern="*.geojson" \
+    --exclude-pattern="*.shp" \
+    --exclude-pattern="*.shx" \
+    --exclude-pattern="*.dbf" \
+    --exclude-pattern="*.prj" \
+    --exclude-pattern="*.cpg" \
+    --exclude-pattern="*.pth" \
+    --exclude-pattern="*.pt" \
+    --exclude-pattern="*.ckpt" \
+    --exclude-pattern="*.bin" \
+    --exclude-pattern="*.png" \
+    --exclude-pattern="*.jpg" \
+    --exclude-pattern="*.jpeg" \
+    --exclude-pattern="*.gif" \
+    --exclude-pattern="*.svg" \
+    --exclude-pattern="*.ico" \
+    --exclude-pattern="*.pdf" \
+    --output="$OUTPUT_FILE"
+
+echo "Nom nom, digestion complete! Output saved to $OUTPUT_FILE"
+
+
+================================================
+File: config/__init__.py
+================================================
+from .config import (
+    DataConfig,
+    ExperimentConfig,
+    ModelConfig,
+    PathsConfig,
+    TrainingConfig,
+    VisualizationConfig,
+)
+
+__all__ = [
+    "DataConfig",
+    "ExperimentConfig",
+    "ModelConfig",
+    "PathsConfig",
+    "TrainingConfig",
+    "VisualizationConfig",
+]
+
+
+
+================================================
+File: config/config.py
+================================================
+# gnn_package/src/utils/config.py
+
+import os
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Dict, List, Any, Optional
+import yaml
+from datetime import timedelta
+import pandas as pd
+
+
+@dataclass
+class ExperimentMetadata:
+    """Metadata for the experiment."""
+
+    name: str
+    description: str
+    version: str
+    tags: List[str] = field(default_factory=list)
+
+
+@dataclass
+class DataConfig:
+    """Configuration for data processing."""
+
+    start_date: str
+    end_date: str
+    graph_prefix: str
+    window_size: int
+    horizon: int
+    batch_size: int
+    days_back: int = 14
+    stride: int = 1
+    gap_threshold_minutes: int = 15
+
+    @property
+    def gap_threshold(self) -> pd.Timedelta:
+        """Get the gap threshold as a pandas Timedelta."""
+        return pd.Timedelta(minutes=self.gap_threshold_minutes)
+
+
+@dataclass
+class ModelConfig:
+    """Configuration for the model architecture."""
+
+    input_dim: int
+    hidden_dim: int
+    output_dim: int
+    num_layers: int = 2
+    dropout: float = 0.2
+
+
+@dataclass
+class TrainingConfig:
+    """Configuration for model training."""
+
+    learning_rate: float
+    weight_decay: float
+    num_epochs: int
+    patience: int
+    train_val_split: float = 0.8
+
+
+@dataclass
+class PathsConfig:
+    """Configuration for file paths."""
+
+    model_save_path: str
+    data_cache: str
+    results_dir: str
+
+    def __post_init__(self):
+        """Convert string paths to Path objects."""
+        self.model_save_path = Path(self.model_save_path)
+        self.data_cache = Path(self.data_cache)
+        self.results_dir = Path(self.results_dir)
+
+
+@dataclass
+class VisualizationConfig:
+    """Configuration for visualization components."""
+
+    dashboard_template: str
+    default_sensors_to_plot: int
+    max_sensors_in_heatmap: int
+
+
+class ExperimentConfig:
+    """Main configuration class for experiments."""
+
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialize configuration from a YAML file.
+
+        Parameters:
+        -----------
+        config_path : str, optional
+            Path to the YAML configuration file. If not provided,
+            looks for 'config.yml' in the current directory.
+        """
+        if config_path is None:
+            config_path = os.path.join(os.getcwd(), "config.yml")
+
+        self.config_path = Path(config_path)
+        self._load_config()
+
+    def _load_config(self):
+        """Load configuration from YAML file."""
+        if not self.config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {self.config_path}")
+
+        with open(self.config_path, "r") as f:
+            config_dict = yaml.safe_load(f)
+
+        # Initialize sub-configs
+        self.experiment = ExperimentMetadata(**config_dict.get("experiment", {}))
+        self.data = DataConfig(**config_dict.get("data", {}))
+        self.model = ModelConfig(**config_dict.get("model", {}))
+        self.training = TrainingConfig(**config_dict.get("training", {}))
+        self.paths = PathsConfig(**config_dict.get("paths", {}))
+        self.visualization = VisualizationConfig(**config_dict.get("visualization", {}))
+
+        # Store the raw dict for any additional access
+        self._config_dict = config_dict
+
+    def save(self, path: Optional[str] = None):
+        """
+        Save the current configuration to a YAML file.
+
+        Parameters:
+        -----------
+        path : str, optional
+            Path to save the configuration. If not provided, uses the path
+            from which the configuration was loaded.
+        """
+        save_path = Path(path) if path else self.config_path
+
+        # Create nested dictionary from dataclasses
+        config_dict = {
+            "experiment": self._dataclass_to_dict(self.experiment),
+            "data": self._dataclass_to_dict(self.data),
+            "model": self._dataclass_to_dict(self.model),
+            "training": self._dataclass_to_dict(self.training),
+            "paths": self._dataclass_to_dict(self.paths),
+            "visualization": self._dataclass_to_dict(self.visualization),
+        }
+
+        # Ensure the directory exists
+        os.makedirs(save_path.parent, exist_ok=True)
+
+        with open(save_path, "w") as f:
+            yaml.dump(config_dict, f, default_flow_style=False)
+
+    @staticmethod
+    def _dataclass_to_dict(obj):
+        """Convert a dataclass instance to a dictionary."""
+        result = {}
+        for field_name in obj.__dataclass_fields__:
+            value = getattr(obj, field_name)
+            # Handle Path objects
+            if isinstance(value, Path):
+                value = str(value)
+            result[field_name] = value
+        return result
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """
+        Get a configuration value by its key path.
+
+        Parameters:
+        -----------
+        key : str
+            Dot-separated path to the configuration value (e.g., 'model.hidden_dim')
+        default : Any
+            Default value to return if the key is not found
+
+        Returns:
+        --------
+        Any
+            The configuration value or the default
+        """
+        keys = key.split(".")
+        value = self._config_dict
+
+        for k in keys:
+            if isinstance(value, dict) and k in value:
+                value = value[k]
+            else:
+                return default
+
+        return value
+
+    def __str__(self):
+        """String representation of the configuration."""
+        return (
+            f"ExperimentConfig(\n"
+            f"  experiment: {self.experiment.name} (v{self.experiment.version})\n"
+            f"  data: window_size={self.data.window_size}, horizon={self.data.horizon}\n"
+            f"  model: hidden_dim={self.model.hidden_dim}, layers={self.model.num_layers}\n"
+            f"  training: epochs={self.training.num_epochs}, lr={self.training.learning_rate}\n"
+            f")"
+        )
+
+
+
+================================================
+File: config/paths.py
+================================================
+# Defines all of the paths used in the project
+
+from pathlib import Path
+from typing import Dict
+import os
+
+# Root directory of the project
+ROOT_DIR = Path(__file__).parent.parent.parent.resolve()
+assert ROOT_DIR.exists(), f"Invalid ROOT_DIR: {ROOT_DIR}"
+assert (
+    ROOT_DIR.name == "phd-project-gnn"
+), f"Invalid ROOT_DIR - Check Parents: {ROOT_DIR}"
+
+# Package directory
+
+PACKAGE_DIR = ROOT_DIR / "gnn_package"
+
+# Source directory
+SRC_DIR = PACKAGE_DIR / "src"
+
+# Data directory
+DATA_DIR = PACKAGE_DIR / "data"
+
+# Sensor locations data directory
+SENSORS_DATA_DIR = DATA_DIR / "sensors"
+
+# Raw data directory
+RAW_DATA_DIR = DATA_DIR / "raw"
+RAW_TIMESERIES_DIR = RAW_DATA_DIR / "timeseries"
+
+# Preprocessed data directories
+PREPROCESSED_DATA_DIR = DATA_DIR / "preprocessed"
+PREPROCESSED_GRAPH_DIR = PREPROCESSED_DATA_DIR / "graphs"
+PREPROCESSED_TIMESERIES_DIR = PREPROCESSED_DATA_DIR / "timeseries"
+
+# Model directories
+
+
+# Config directories
+
+
+# Create directories if they don't exist
+DIRS: Dict[str, Path] = {
+    "data": DATA_DIR,
+    "sensors": SENSORS_DATA_DIR,
+    "preprocessed": PREPROCESSED_DATA_DIR,
+    # "interim_data": INTERIM_DATA_DIR,
+    # "models": MODELS_DIR,
+    # "checkpoints": CHECKPOINTS_DIR,
+    # "artifacts": ARTIFACTS_DIR,
+    # "config": CONFIG_DIR,
+    # "model_config": MODEL_CONFIG_DIR,
+    # "data_config": DATA_CONFIG_DIR,
+    # "results": RESULTS_DIR,
+    # "figures": FIGURES_DIR,
+    # "logs": LOGS_DIR
+}
+
+for dir_path in DIRS.values():
+    dir_path.mkdir(parents=True, exist_ok=True)
+
+
+def get_path(name: str) -> Path:
+    """Get path by name from DIRS dictionary."""
+    if name not in DIRS:
+        raise KeyError(f"Path '{name}' not found in DIRS dictionary.")
+    return DIRS[name]
+
+
+def add_path(name: str, path: Path) -> None:
+    """Add new path to DIRS dictionary."""
+    DIRS[name] = path
+    path.mkdir(parents=True, exist_ok=True)
+
+
+
+
+
+
+
+
+================================================
+File: src/dataloaders/__init__.py
+================================================
+from .dataloaders import create_dataloader, SpatioTemporalDataset, collate_fn
+
+__all__ = [
+    "create_dataloader",
+    "SpatioTemporalDataset",
+    "collate_fn",
+]
+
+
+
+================================================
+File: src/dataloaders/dataloaders.py
+================================================
+# gnn_package/src/preprocessing/dataloaders.py
+
+import numpy as np
+import torch
+from torch.utils.data import Dataset, DataLoader
+
+
+class SpatioTemporalDataset(Dataset):
+    def __init__(
+        self,
+        X_by_sensor,
+        masks_by_sensor,
+        adj_matrix,
+        node_ids,
+        window_size,
+        horizon,
+    ):
+        """
+        Parameters:
+        ----------
+        X_by_sensor : Dict[str, np.ndarray]
+            Dictionary containing the input data for each sensor.
+        masks_by_sensor : Dict[str, np.ndarray]
+            Dictionary containing the masks for each sensor.
+        adj_matrix : np.ndarray
+            Adjacency matrix of the graph.
+        node_ids : List[str]
+            List of node IDs.
+        window_size : int
+            Size of the input window.
+        horizon : int
+            Number of time steps to predict ahead.
+        """
+        self.X_by_sensor = X_by_sensor
+        self.masks_by_sensor = masks_by_sensor
+        self.adj_matrix = torch.FloatTensor(adj_matrix)
+        self.node_ids = node_ids
+        self.window_size = window_size
+        self.horizon = horizon
+
+        # Create flattened index mapping (node_id, window_idx)
+        self.sample_indices = []
+        for node_id in self.node_ids:
+            if node_id in X_by_sensor:
+                windows = X_by_sensor[node_id]
+                for window_idx in range(len(windows)):
+                    self.sample_indices.append((node_id, window_idx))
+
+        print(
+            f"Created dataset with {len(self.sample_indices)} total samples across {len(node_ids)} nodes"
+        )
+
+    def __len__(self):
+        return len(self.sample_indices)
+
+    def __getitem__(self, idx):
+        # Get the node_id and window_idx for this sample
+        node_id, window_idx = self.sample_indices[idx]
+
+        # Get node index in adjacency matrix
+        node_idx = self.node_ids.index(node_id)
+
+        # Get input window (history) and target window (future)
+        x_window = self.X_by_sensor[node_id][
+            window_idx, : self.window_size - self.horizon
+        ]
+        x_mask = self.masks_by_sensor[node_id][
+            window_idx, : self.window_size - self.horizon
+        ]
+
+        y_window = self.X_by_sensor[node_id][window_idx, -self.horizon :]
+        y_mask = self.masks_by_sensor[node_id][window_idx, -self.horizon :]
+
+        return {
+            "x": torch.FloatTensor(x_window),
+            "x_mask": torch.FloatTensor(x_mask),
+            "y": torch.FloatTensor(y_window),
+            "y_mask": torch.FloatTensor(y_mask),
+            "node_idx": node_idx,
+            "adj": self.adj_matrix,
+        }
+
+
+def collate_fn(batch):
+    """
+    Custom collate function that creates batches of multiple time windows,
+    each containing data for all nodes present in the batch.
+
+    Parameters:
+    ----------
+    batch : List[Dict]
+        List of samples from the dataset.
+
+    Returns:
+    -------
+    Dict
+        x : Tensor [batch_size, num_nodes, seq_len, 1]
+        x_mask : Tensor [batch_size, num_nodes, seq_len, 1]
+        y : Tensor [batch_size, num_nodes, horizon, 1]
+        y_mask : Tensor [batch_size, num_nodes, horizon, 1]
+        node_indices : Tensor [num_nodes]
+        adj : Tensor [num_nodes, num_nodes]
+    """
+    # Get all unique node indices in this batch
+    all_node_indices = sorted(list(set(item["node_idx"] for item in batch)))
+    node_idx_map = {idx: i for i, idx in enumerate(all_node_indices)}
+
+    # Get window dimensions
+    seq_len = len(batch[0]["x"])
+    horizon = len(batch[0]["y"])
+
+    # Group samples by window_idx
+    # We'll use the relative position in the batch to create window groups
+    # This way, we'll create multiple windows in a batch
+    max_windows_per_batch = 32  # Maximum windows in a batch
+    window_groups = {}
+
+    for i, item in enumerate(batch):
+        # Assign a window group based on position in batch
+        window_group = i % max_windows_per_batch
+        if window_group not in window_groups:
+            window_groups[window_group] = []
+        window_groups[window_group].append(item)
+
+    # Calculate batch dimensions
+    batch_size = len(window_groups)
+    num_nodes = len(all_node_indices)
+
+    # print(f"DEBUG: Creating batch with dimensions: {batch_size} windows, {num_nodes} nodes")
+
+    # Initialize tensors with proper dimensions
+    x = torch.full((batch_size, num_nodes, seq_len, 1), -1.0)
+    x_mask = torch.zeros((batch_size, num_nodes, seq_len, 1))
+    y = torch.full((batch_size, num_nodes, horizon, 1), -1.0)
+    y_mask = torch.zeros((batch_size, num_nodes, horizon, 1))
+
+    # Fill tensors
+    for batch_idx, items in enumerate(window_groups.values()):
+        for item in items:
+            node_pos = node_idx_map[item["node_idx"]]
+
+            # Add data and masks (add feature dimension)
+            x[batch_idx, node_pos, :, 0] = item["x"]
+            x_mask[batch_idx, node_pos, :, 0] = item["x_mask"]
+            y[batch_idx, node_pos, :, 0] = item["y"]
+            y_mask[batch_idx, node_pos, :, 0] = item["y_mask"]
+
+    # Extract adjacency for these specific nodes
+    adj = batch[0]["adj"]
+    batch_adj = adj[all_node_indices][:, all_node_indices]
+
+    return {
+        "x": x,
+        "x_mask": x_mask,
+        "y": y,
+        "y_mask": y_mask,
+        "node_indices": torch.tensor(all_node_indices),
+        "adj": batch_adj,
+    }
+
+
+def create_dataloader(
+    X_by_sensor,
+    masks_by_sensor,
+    adj_matrix,
+    node_ids,
+    window_size,
+    horizon,
+    batch_size,
+    shuffle,
+):
+    """
+    Create a DataLoader that can handle varying numbers of windows per sensor.
+    """
+    dataset = SpatioTemporalDataset(
+        X_by_sensor, masks_by_sensor, adj_matrix, node_ids, window_size, horizon
+    )
+
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=collate_fn,
+    )
+
+    return dataloader
+
+
+
+
+================================================
+File: src/models/__init__.py
+================================================
+from .stgnn import STGNN, STGNNTrainer, create_stgnn_model
+
+__all__ = ["STGNN", "STGNNTrainer", "create_stgnn_model"]
+
+
+
+================================================
+File: src/models/stgnn.py
+================================================
+# gnn_package/src/models/stgnn.py
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class GraphConvolution(nn.Module):
+    def __init__(self, in_features, out_features, bias=True):
+        """
+        Initialize the GraphConvolution layer.
+
+        Parameters:
+        -----------
+        in_features : int
+            Number of input features per node
+        out_features : int
+            Number of output features per node
+        bias : bool, optional
+            Whether to include bias term
+        """
+        super(GraphConvolution, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+
+        # Define learnable parameters
+        self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
+        if bias:
+            self.bias = nn.Parameter(torch.FloatTensor(out_features))
+        else:
+            self.register_parameter("bias", None)
+
+        # Initialize parameters
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        """Initialize weights using Glorot initialization"""
+        nn.init.xavier_uniform_(self.weight)
+        if self.bias is not None:
+            nn.init.zeros_(self.bias)
+
+    def forward(self, x, adj, mask=None):
+        """
+        x: Node features [batch_size, num_nodes, in_features] or [batch_size, in_features]
+        adj: Adjacency matrix [num_nodes, num_nodes]
+        mask: Mask for valid values [batch_size, num_nodes, 1] or [batch_size, 1]
+        """
+        # First, we need to handle missing values (marked as -1)
+        # Create a binary mask where 1 = valid data, 0 = missing data (-1)
+        missing_mask = (x != -1.0).float()
+
+        # Apply the mask and replace missing values with zeros for computation
+        # (zeros won't contribute to the convolution)
+        x_masked = x * missing_mask
+
+        # If a separate mask is provided, combine it with the missing mask
+        if mask is not None:
+            combined_mask = missing_mask * mask
+        else:
+            combined_mask = missing_mask
+
+        # Transform node features
+        support = torch.matmul(x_masked, self.weight)
+
+        # Propagate using normalized adjacency matrix
+        # Add identity to allow self-loops
+        adj_with_self = adj + torch.eye(adj.size(0), device=adj.device)
+
+        # Normalize adjacency matrix
+        rowsum = adj_with_self.sum(dim=1)
+        d_inv_sqrt = torch.pow(rowsum, -0.5)
+        d_inv_sqrt[torch.isinf(d_inv_sqrt)] = 0.0
+        d_mat_inv_sqrt = torch.diag(d_inv_sqrt)
+        normalized_adj = torch.matmul(
+            torch.matmul(d_mat_inv_sqrt, adj_with_self), d_mat_inv_sqrt
+        )
+
+        # Propagate node features using normalized adjacency
+        output = torch.matmul(normalized_adj, support)
+
+        # Re-apply mask to ensure missing values stay missing
+        output = output * combined_mask
+
+        # Add bias if needed
+        if self.bias is not None:
+            return output + self.bias
+        else:
+            return output
+
+
+class AttentionLayer(nn.Module):
+    """
+    Attention layer to focus on most relevant nodes and timestamps.
+    """
+
+    def __init__(self, input_dim):
+        super(AttentionLayer, self).__init__()
+        self.attention = nn.Linear(input_dim, 1)
+
+    def forward(self, x, mask=None):
+        """
+        x: Input tensor [batch_size, seq_len/num_nodes, features]
+        mask: Binary mask [batch_size, seq_len/num_nodes, 1]
+        """
+        # Calculate attention scores
+        attention_scores = self.attention(x)  # [batch_size, seq_len/num_nodes, 1]
+
+        # Apply mask if provided (set scores to a large negative value)
+        if mask is not None:
+            # Convert -1 values to mask
+            if len(mask.shape) == len(x.shape):
+                mask = (mask != -1).float() * (x != -1).float()
+            else:
+                mask = (x != -1).float()
+
+            # Set masked positions to large negative value
+            attention_scores = attention_scores.masked_fill(mask == 0, -1e9)
+
+        # Apply softmax to get attention weights
+        attention_weights = F.softmax(attention_scores, dim=1)
+
+        # Apply attention to input
+        context = torch.sum(x * attention_weights, dim=1)
+
+        return context, attention_weights
+
+
+class TemporalGCN(nn.Module):
+    """
+    Temporal Graph Convolutional Network with attention for missing data.
+    """
+
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=1, dropout=0.2):
+        super(TemporalGCN, self).__init__()
+
+        # Graph Convolutional layers
+        self.gc1 = GraphConvolution(input_dim, hidden_dim)
+        self.gc2 = GraphConvolution(hidden_dim, hidden_dim)
+
+        # Attention layers
+        self.node_attention = AttentionLayer(hidden_dim)
+        self.temporal_attention = AttentionLayer(hidden_dim)
+
+        # Recurrent layer for temporal patterns
+        self.gru = nn.GRU(
+            input_size=hidden_dim,
+            hidden_size=hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0,
+        )
+
+        # Output layer
+        self.fc_out = nn.Linear(hidden_dim, output_dim)
+
+        # Dropout for regularization
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, adj, mask=None):
+        """
+        x: Node features [batch_size, num_nodes, seq_len, input_dim]
+        adj: Adjacency matrix [num_nodes, num_nodes]
+        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim]
+        """
+        batch_size, num_nodes, seq_len, features = x.size()
+
+        # Process each time step through the GCN layers
+        outputs = []
+
+        for t in range(seq_len):
+            # Get features at this time step
+            x_t = x[:, :, t, :]  # [batch_size, num_nodes, features]
+
+            # Create mask for this timestep
+            if mask is not None:
+                mask_t = mask[:, :, t, :]  # [batch_size, num_nodes, features]
+            else:
+                mask_t = None
+
+            # Apply GC layers with explicit handling of missing values
+            h = self.gc1(x_t, adj, mask_t)  # First GC layer
+            h = F.relu(h)  # Activation
+            h = self.dropout(h)  # Apply dropout
+            h = self.gc2(h, adj, mask_t)  # Second GC layer
+
+            # Store the processed features for this timestep
+            outputs.append(h)  # [batch_size, num_nodes, hidden_dim]
+
+        # Stack outputs along time dimension
+        # This gives us [batch_size, num_nodes, seq_len, hidden_dim]
+        temporal_features = torch.stack(outputs, dim=2)
+
+        # Process each node's temporal sequence with GRU
+        node_outputs = []
+
+        for n in range(num_nodes):
+            # Get temporal data for this node across all batches
+            # Shape: [batch_size, seq_len, hidden_dim]
+            node_temporal_data = temporal_features[:, n, :, :]
+
+            # Pass through GRU
+            # Output shape: [batch_size, seq_len, hidden_dim]
+            node_gru_out, _ = self.gru(node_temporal_data)
+
+            # Add to collected outputs
+            node_outputs.append(node_gru_out)
+
+        # Stack back to full tensor
+        # Shape: [batch_size, num_nodes, seq_len, hidden_dim]
+        gru_output = torch.stack(node_outputs, dim=1)
+
+        # Apply final FC layer for output
+        # Shape: [batch_size, num_nodes, seq_len, output_dim]
+        out = self.fc_out(gru_output)
+
+        # Apply mask if provided to ensure missing values stay missing
+        if mask is not None:
+            # Ensure mask has right shape
+            if mask.shape[-1] == 1 and out.shape[-1] > 1:
+                # Expand last dimension if needed
+                mask = mask.expand(-1, -1, -1, out.shape[-1])
+
+            # Apply mask
+            out = out * mask
+
+        return out
+
+
+class STGNN(nn.Module):
+    """
+    Spatio-Temporal Graph Neural Network with attention for traffic prediction
+    """
+
+    def __init__(
+        self, input_dim, hidden_dim, output_dim, horizon, num_layers=1, dropout=0.2
+    ):
+        super(STGNN, self).__init__()
+
+        self.horizon = horizon
+
+        # Encoder: process historical data
+        self.encoder = TemporalGCN(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            output_dim=hidden_dim,
+            num_layers=num_layers,
+            dropout=dropout,
+        )
+
+        # Decoder: predict future values
+        self.decoder = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, output_dim * horizon),
+        )
+
+    def forward(self, x, adj, x_mask=None):
+        """
+        x: Input features [batch_size, num_nodes, seq_len, input_dim]
+        adj: Adjacency matrix [num_nodes, num_nodes]
+        x_mask: Mask for input [batch_size, num_nodes, seq_len, input_dim]
+
+        Returns:
+        Predictions [batch_size, num_nodes, horizon, output_dim]
+        """
+        # Check for proper shape
+        assert len(x.shape) == 4, f"Expected 4D input but got shape {x.shape}"
+
+        batch_size, num_nodes, seq_len, _ = x.size()
+
+        # Encode the input sequence
+        # Output shape: [batch_size, num_nodes, seq_len, hidden_dim]
+        encoded = self.encoder(x, adj, x_mask)
+
+        # Use the last time step for each node to predict future
+        # Shape: [batch_size, num_nodes, hidden_dim]
+        last_hidden = encoded[:, :, -1, :]
+
+        # Predict future values
+        # Shape: [batch_size, num_nodes, output_dim * horizon]
+        future_flat = self.decoder(last_hidden)
+
+        # Reshape to separate time steps
+        # Shape: [batch_size, num_nodes, horizon, output_dim]
+        predictions = future_flat.reshape(batch_size, num_nodes, self.horizon, -1)
+
+        return predictions
+
+
+class STGNNTrainer:
+    def __init__(self, model, optimizer, criterion, device):
+        self.model = model.to(device)
+        self.optimizer = optimizer
+        self.criterion = criterion
+        self.device = device
+
+    def train_epoch(self, dataloader):
+        """Train for one epoch"""
+        self.model.train()
+        total_loss = 0
+        num_batches = 0
+
+        for batch in dataloader:
+            # Move data to device
+            x = batch["x"].to(self.device)
+            x_mask = batch["x_mask"].to(self.device)
+            y = batch["y"].to(self.device)
+            y_mask = batch["y_mask"].to(self.device)
+            adj = batch["adj"].to(self.device)
+
+            # # Print shapes for debugging
+            # print(f"DEBUG: Batch shapes: x={x.shape}, y={y.shape}")
+            # print(
+            #     f"DEBUG: Mask non-zero values: {x_mask.sum().item()} out of {x_mask.numel()}"
+            # )
+
+            # Forward pass
+            self.optimizer.zero_grad()
+            y_pred = self.model(x, adj, x_mask)
+
+            # Compute loss on valid points only
+            loss = self.criterion(y_pred, y)
+            if y_mask is not None:
+                # Count non-zero elements in mask
+                mask_sum = y_mask.sum()
+                if mask_sum > 0:
+                    loss = (loss * y_mask).sum() / mask_sum
+                else:
+                    loss = torch.tensor(0.0, device=self.device)
+
+            # Backward pass
+            loss.backward()
+            self.optimizer.step()
+
+            total_loss += loss.item()
+            num_batches += 1
+
+        return total_loss / max(1, num_batches)
+
+    def evaluate(self, dataloader):
+        """Evaluate the model on a validation or test set"""
+        self.model.eval()
+        total_loss = 0
+        num_batches = 0
+
+        with torch.no_grad():
+            for batch in dataloader:
+                # Move data to device
+                x = batch["x"].to(self.device)
+                x_mask = batch["x_mask"].to(self.device)
+                y = batch["y"].to(self.device)
+                y_mask = batch["y_mask"].to(self.device)
+                adj = batch["adj"].to(self.device)
+
+                # Forward pass
+                y_pred = self.model(x, adj, x_mask)
+
+                # Compute loss on valid points only
+                loss = self.criterion(y_pred, y)
+                if y_mask is not None:
+                    # Count non-zero elements in mask
+                    mask_sum = y_mask.sum()
+                    if mask_sum > 0:
+                        loss = (loss * y_mask).sum() / mask_sum
+                    else:
+                        loss = torch.tensor(0.0, device=self.device)
+
+                total_loss += loss.item()
+                num_batches += 1
+
+        return total_loss / max(1, num_batches)
+
+
+# Example usage
+def create_stgnn_model(
+    input_dim=1, hidden_dim=64, output_dim=1, horizon=6, num_layers=2
+):
+    """Create a Spatio-Temporal GNN model with specified parameters"""
+    model = STGNN(
+        input_dim=input_dim,
+        hidden_dim=hidden_dim,
+        output_dim=output_dim,
+        horizon=horizon,
+        num_layers=num_layers,
+    )
+    return model
+
+
+
+
+================================================
+File: src/preprocessing/__init__.py
+================================================
+# gnn_package/src/preprocessing/__init__.py
+
+from .fetch_sensor_data import (
+    fetch_and_save_sensor_data,
+    load_sensor_data,
+)
+
+from .graph_utils import (
+    get_street_network_gdfs,
+    load_graph_data,
+)
+from .graph_manipulation import (
+    snap_points_to_network,
+    connect_components,
+    create_adjacency_matrix,
+)
+from .graph_computation import (
+    compute_adjacency_matrix,
+)
+
+from .timeseries_preprocessor import (
+    TimeSeriesPreprocessor,
+    resample_sensor_data,
+)
+
+
+__all__ = [
+    "get_street_network_gdfs",
+    "load_graph_data",
+    "snap_points_to_network",
+    "connect_components",
+    "create_adjacency_matrix",
+    "compute_adjacency_matrix",
+    "TimeSeriesPreprocessor",
+    "resample_sensor_data",
+    "fetch_and_save_sensor_data",
+    "load_sensor_data",
+]
+
+
+
+================================================
+File: src/preprocessing/fetch_sensor_data.py
+================================================
+# gnn_package/src/preprocessing/fetch_sensor_data.py
+
+import pickle
+from datetime import datetime, timedelta
+import pandas as pd
+import os
+from private_uoapi import (
+    LSConfig,
+    LSAuth,
+    LightsailWrapper,
+    DateRangeParams,
+    convert_to_dataframe,
+)
+from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
+
+
+def load_sensor_data(data_file):
+    """
+    Load sensor data from a pickle file.
+
+    Parameters:
+    -----------
+    data_file : str
+        Path to the pickle file
+
+    Returns:
+    --------
+    dict
+        Dictionary mapping sensor IDs to time series data
+
+    Raises:
+    -------
+    FileNotFoundError
+        If the data file doesn't exist
+    """
+    if os.path.exists(data_file):
+        print(f"Loading sensor data from {data_file}")
+        with open(data_file, "rb") as f:
+            return pickle.load(f)
+    else:
+        raise FileNotFoundError(
+            f"Sensor data file {data_file} not found. "
+            f"Run fetch_sensor_data.py to create it."
+        )
+
+
+async def fetch_and_save_sensor_data(
+    data_file, days_back=7, start_date=None, end_date=None
+):
+    print(f"Fetching sensor data from API")
+
+    # Initialize API client
+    config = LSConfig()
+    auth = LSAuth(config)
+    client = LightsailWrapper(config, auth)
+
+    print(f"Using base URL: {config.base_url}")
+    print(f"Using username: {config.username}")
+    print(f"Using secret key: {'*' * len(config.secret_key)}")
+
+    # Get sensor locations
+    sensor_locations = client.get_traffic_sensors()
+    sensor_locations = pd.DataFrame(sensor_locations)
+
+    # Determine date range
+    if start_date is None or end_date is None:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days_back)
+
+    # Create date range parameters
+    date_range_params = DateRangeParams(
+        start_date=start_date,
+        end_date=end_date,
+        max_date_range=timedelta(days=400),
+    )
+
+    # Get sensor name to ID mapping
+    name_id_map = get_sensor_name_id_map()
+
+    # Fetch data
+    count_data = await client.get_traffic_data(date_range_params)
+    counts_df = convert_to_dataframe(count_data)
+
+    # Create time series dictionary
+    counts_dict = {}
+    for location in sensor_locations["location"]:
+        df = counts_df[counts_df["location"] == location]
+        series = pd.Series(df["value"].values, index=df["dt"])
+        location_id = name_id_map[location]
+        counts_dict[location_id] = series if not df.empty else None
+
+    # Filter out None values and remove duplicates
+    results_containing_data = {}
+    for node_id, data in counts_dict.items():
+        if data is not None:
+            data = data[~data.index.duplicated(keep="first")]
+            results_containing_data[node_id] = data
+
+    # Save to file
+    with open(data_file, "wb") as f:
+        pickle.dump(results_containing_data, f)
+
+    print(f"Saved sensor data to {data_file}")
+    return results_containing_data
+
+
+
+================================================
+File: src/preprocessing/graph_analysis.py
+================================================
+# gnn_package/src/preprocessing/graph_analysis.py
+import networkx as nx
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point, box
+import numpy as np
+
+
+def analyze_network_graph(G):
+    """
+    Analyze the network properties.
+
+    Parameters:
+    G (networkx.MultiDiGraph): Network graph to analyze
+    """
+    print("\nAnalyzing network properties...")
+
+    # Get the graph's CRS
+    graph_crs = G.graph.get("crs", "Unknown")
+    print(f"Network CRS: {graph_crs}")
+
+    # Basic network statistics
+    stats = {
+        "Nodes": len(G.nodes()),
+        "Edges": len(G.edges()),
+        "Average node degree": np.mean([d for n, d in G.degree()]),
+        "Network type": "Directed" if G.is_directed() else "Undirected",
+    }
+
+    # Print statistics
+    print("\nNetwork Statistics:")
+    for key, value in stats.items():
+        print(f"{key}: {value}")
+
+    # Calculate network area
+    try:
+        # Get network bounds
+        nodes = pd.DataFrame(
+            {
+                "x": [G.nodes[node]["x"] for node in G.nodes()],
+                "y": [G.nodes[node]["y"] for node in G.nodes()],
+            }
+        )
+
+        # Create a polygon from the bounds
+        bbox = box(
+            nodes["x"].min(), nodes["y"].min(), nodes["x"].max(), nodes["y"].max()
+        )
+
+        # Since we're already in EPSG:27700 (British National Grid),
+        # we can calculate the area directly
+        area = bbox.area
+
+        # Convert to km²
+        area_km2 = area / 1_000_000  # Convert square meters to square kilometers
+
+        print(f"\nNetwork area: {area_km2:.2f} km²")
+
+        # Calculate network density
+        network_length = sum(d.get("length", 0) for u, v, d in G.edges(data=True))
+
+        density = network_length / area if area > 0 else 0
+        print(f"Network density: {density:.2f} meters per square meter")
+
+        # Add to stats
+        stats.update(
+            {
+                "Area (km²)": area_km2,
+                "Total network length (km)": network_length / 1000,
+                "Network density (km/km²)": density,
+            }
+        )
+
+    except Exception as e:
+        print(f"\nWarning: Could not calculate network area: {str(e)}")
+
+    # Additional network metrics
+    try:
+        # Average street length
+        avg_street_length = np.mean(
+            [d.get("length", 0) for u, v, d in G.edges(data=True)]
+        )
+        print(f"Average street segment length: {avg_street_length:.2f} meters")
+
+        # Number of connected components
+        if G.is_directed():
+            n_components = nx.number_weakly_connected_components(G)
+            print(f"Number of weakly connected components: {n_components}")
+        else:
+            n_components = nx.number_connected_components(G)
+            print(f"Number of connected components: {n_components}")
+
+        stats["Average segment length (m)"] = avg_street_length
+        stats["Number of components"] = n_components
+
+    except Exception as e:
+        print(f"\nWarning: Could not calculate some network metrics: {str(e)}")
+
+    return stats
+
+
+def analyze_graph_components(G, snapped_points_gdf, tolerance=1e-6):
+    """
+    Analyze which components the snapped points belong to and verify network connectivity.
+
+    Args:
+        G: NetworkX graph (directed or undirected)
+        snapped_points_gdf: GeoDataFrame of snapped points
+        tolerance: Distance tolerance for considering a point connected to the network
+
+    Returns:
+        GeoDataFrame with component information and connectivity status
+    """
+    print("\nAnalyzing network connectivity...")
+    print(f"\nDetected a {'directed' if G.is_directed() else 'undirected'} graph.")
+
+    # First verify if the graph is directed
+    if G.is_directed():
+        components = list(nx.weakly_connected_components(G))
+    else:
+        components = list(nx.connected_components(G))
+
+    # Get all network nodes as Points using x and y coordinates from node attributes
+    network_nodes = {}
+    for node in G.nodes():
+        # Get coordinates from node attributes
+        node_data = G.nodes[node]
+        if "x" in node_data and "y" in node_data:
+            coords = (node_data["x"], node_data["y"])
+            network_nodes[node] = Point(coords)
+        else:
+            # If node is already a coordinate tuple
+            try:
+                if isinstance(node, (tuple, list)) and len(node) >= 2:
+                    network_nodes[node] = Point(node)
+            except Exception:
+                print(f"Warning: Could not get coordinates for node {node}")
+                continue
+
+    # Create a mapping of nodes to their component index
+    node_to_component = {}
+    for i, component in enumerate(components):
+        for node in component:
+            node_to_component[node] = i
+
+    # Check each snapped point
+    point_components = []
+    unconnected_points = []
+
+    for idx, point in snapped_points_gdf.iterrows():
+        coords = tuple(round(x, 6) for x in (point.geometry.x, point.geometry.y))
+
+        # Find the closest network node and its component
+        min_dist = float("inf")
+        closest_node = None
+        component_idx = None
+
+        for node, node_point in network_nodes.items():
+            dist = point.geometry.distance(node_point)
+            if dist < min_dist:
+                min_dist = dist
+                closest_node = node
+                component_idx = node_to_component.get(node, -1)
+
+        # Check if the point is connected (within tolerance)
+        if min_dist <= tolerance:
+            if min_dist > 0:  # Only print warning if not exact match
+                print(
+                    f"Warning: Point {point.original_id} was not exactly on network node but within {min_dist:.6f} units of node {closest_node}."
+                )
+        else:
+            component_idx = -1
+            unconnected_points.append(
+                {
+                    "original_id": point.original_id,
+                    "coords": coords,
+                    "min_distance": min_dist,
+                }
+            )
+
+        point_components.append(
+            {
+                "original_id": point.original_id,
+                "component": component_idx,
+                "geometry": point.geometry,
+                "connected": component_idx != -1,
+                "distance_to_network": min_dist,
+            }
+        )
+
+    # Create new GeoDataFrame with component information
+    result_gdf = gpd.GeoDataFrame(point_components, crs=snapped_points_gdf.crs)
+
+    # Print summary statistics
+    print("\nNetwork Connectivity Analysis:")
+    print(f"Total points: {len(result_gdf)}")
+    print(f"Connected points: {sum(result_gdf['connected'])}")
+    print(f"Unconnected points: {sum(~result_gdf['connected'])}")
+
+    if unconnected_points:
+        print("\nWARNING: The following points are not connected to the network:")
+        for p in unconnected_points:
+            print(
+                f"Point ID: {p['original_id']}: distance to nearest node = {p['min_distance']:.6f}"
+            )
+
+    print("\nPoints per component:")
+    component_counts = result_gdf[result_gdf["connected"]]["component"].value_counts()
+    print(component_counts)
+
+    # Calculate average distance to network
+    avg_distance = np.mean(result_gdf["distance_to_network"])
+    max_distance = np.max(result_gdf["distance_to_network"])
+    print(f"\nAverage distance to network: {avg_distance:.6f}")
+    print(f"Maximum distance to network: {max_distance:.6f}")
+
+    return result_gdf
+
+
+def validate_snapped_points(snapped_points_gdf, network_gdf, tolerance=6):
+    """
+    Validate that all snapped points exist in the network.
+
+    Parameters:
+    snapped_points_gdf (GeoDataFrame): GeoDataFrame of snapped points
+    network_gdf (GeoDataFrame): Network edges GeoDataFrame
+    tolerance (int): Number of decimal places for coordinate rounding
+
+    Returns:
+    GeoDataFrame: Only the valid points that exist in network
+    """
+    # Get all network nodes from the edges
+    network_nodes = set()
+    for idx, row in network_gdf.iterrows():
+        coords = list(row.geometry.coords)
+        for coord in coords:
+            network_nodes.add(tuple(round(x, tolerance) for x in coord))
+
+    # Validate points
+    valid_points = []
+    invalid_points = []
+
+    for idx, point in snapped_points_gdf.iterrows():
+        coords = tuple(
+            round(x, tolerance) for x in (point.geometry.x, point.geometry.y)
+        )
+        if coords in network_nodes:
+            valid_points.append(point)
+        else:
+            invalid_points.append(point.original_id)
+            print(f"Warning: Point {point.original_id} not found in network")
+
+    # Print summary
+    print("\nValidation Summary:")
+    print(f"Total points checked: {len(snapped_points_gdf)}")
+    print(f"Valid points: {len(valid_points)}")
+    print(f"Invalid points: {len(invalid_points)}")
+
+    if invalid_points:
+        print("\nInvalid point IDs:", invalid_points)
+
+    return gpd.GeoDataFrame(valid_points, crs=snapped_points_gdf.crs)
+
+
+
+================================================
+File: src/preprocessing/graph_computation.py
+================================================
+# gnn_package/src/preprocessing/graph_computation.py
+
+import numpy as np
+import networkx as nx
+import geopandas as gpd
+from shapely.geometry import Point, LineString
+from itertools import combinations
+
+
+def compute_shortest_paths(network_gdf, snapped_points_gdf, tolerance=6):
+    """
+    Compute shortest paths between all pairs of snapped points.
+    Assumes points have been validated using validate_snapped_points().
+
+    Parameters:
+    network_gdf (GeoDataFrame): Network edges
+    snapped_points_gdf (GeoDataFrame): Validated snapped sensor points
+    tolerance (int): Number of decimal places for coordinate rounding
+
+    Returns:
+    GeoDataFrame: Shortest paths between points
+    """
+    # Create NetworkX graph from network GeoDataFrame
+    G = nx.Graph()
+    for idx, row in network_gdf.iterrows():
+        coords = list(row.geometry.coords)
+        for i in range(len(coords) - 1):
+            start = tuple(round(x, tolerance) for x in coords[i])
+            end = tuple(round(x, tolerance) for x in coords[i + 1])
+            weight = Point(coords[i]).distance(Point(coords[i + 1]))
+            G.add_edge(start, end, weight=weight)
+
+    # Get point pairs with rounded coordinates
+    point_coords = {
+        row.original_id: tuple(
+            round(x, tolerance) for x in (row.geometry.x, row.geometry.y)
+        )
+        for idx, row in snapped_points_gdf.iterrows()
+    }
+
+    point_pairs = list(combinations(point_coords.items(), 2))
+    print(f"Attempting to find paths between {len(point_pairs)} pairs of points")
+
+    # Compute paths
+    paths = []
+    total_pairs = len(point_pairs)
+    failed_pairs = 0
+
+    for i, ((id1, start_point), (id2, end_point)) in enumerate(point_pairs):
+        if start_point == end_point:
+            continue
+
+        try:
+            path_length = nx.shortest_path_length(
+                G, start_point, end_point, weight="weight"
+            )
+            path = nx.shortest_path(G, start_point, end_point, weight="weight")
+            path_line = LineString([Point(p) for p in path])
+
+            paths.append(
+                {
+                    "start_id": id1,
+                    "end_id": id2,
+                    "geometry": path_line,
+                    "path_length": path_length,
+                    "n_points": len(path),
+                }
+            )
+
+        except nx.NetworkXNoPath:
+            failed_pairs += 1
+            print(f"No path found between points {id1} and {id2}")
+            continue
+
+        if (i + 1) % 100 == 0:
+            print(f"Processed {i + 1}/{total_pairs} pairs...")
+
+    if paths:
+        paths_gdf = gpd.GeoDataFrame(paths, crs=snapped_points_gdf.crs)
+        paths_gdf = paths_gdf.sort_values("path_length")
+
+        print("\nPath finding summary:")
+        print(f"Total pairs attempted: {total_pairs}")
+        print(f"Failed pairs: {failed_pairs}")
+        print(f"Successful paths: {len(paths)}")
+
+        return paths_gdf
+    else:
+        print("No valid paths found!")
+        return None
+
+
+def create_weighted_graph_from_paths(paths_gdf):
+    """
+    Create a NetworkX graph from shortest paths data where:
+    - Nodes are sensor locations
+    - Edges connect sensors with weights as path lengths
+
+    Parameters:
+    -----------
+    paths_gdf : GeoDataFrame
+        Contains shortest paths data with start_id, end_id, and path_length
+
+    Returns:
+    --------
+    G : NetworkX Graph
+        Undirected weighted graph of sensor connections
+    """
+    # Create new undirected graph
+    G = nx.Graph()
+
+    # Add edges with weights
+    for idx, row in paths_gdf.iterrows():
+        G.add_edge(
+            row["start_id"],
+            row["end_id"],
+            weight=row["path_length"],
+            n_points=row["n_points"],
+        )
+
+    # Print some basic statistics
+    print(f"Graph Statistics:")
+    print(f"Number of nodes: {G.number_of_nodes()}")
+    print(f"Number of edges: {G.number_of_edges()}")
+    print(
+        f"Average path length: {np.mean([d['weight'] for (u, v, d) in G.edges(data=True)]):.2f} meters"
+    )
+    print(
+        f"Min path length: {min([d['weight'] for (u, v, d) in G.edges(data=True)]):.2f} meters"
+    )
+    print(
+        f"Max path length: {max([d['weight'] for (u, v, d) in G.edges(data=True)]):.2f} meters"
+    )
+
+    # Check if graph is connected
+    is_connected = nx.is_connected(G)
+    print(f"Graph is {'connected' if is_connected else 'not connected'}")
+
+    if not is_connected:
+        components = list(nx.connected_components(G))
+        print(f"Number of connected components: {len(components)}")
+        print(f"Sizes of components: {[len(c) for c in components]}")
+
+    return G
+
+
+def compute_adjacency_matrix(
+    adj_matrix: np.ndarray, sigma_squared=0.1, epsilon=0.5
+) -> np.ndarray:
+    """
+    Computes a weighted adjacency matrix from a distance matrix using a Gaussian kernel function.
+    The function first normalizes distances, then applies a Gaussian decay and thresholds weak connections.
+
+    Parameters:
+    -----------
+    adj_matrix : np.ndarray
+        Input matrix of distances between nodes
+    sigma_squared : float, default=0.1
+        Variance parameter that controls the rate of weight decay with distance.
+        Smaller values cause weights to decay more quickly, while larger values
+        preserve stronger long-range connections.
+    epsilon : float, default=0.95
+        Threshold for keeping connections. Any connection with weight below epsilon
+        is removed (set to 0). For small geographical areas, a lower value like 0.5
+        may be more appropriate to ensure connectivity.
+
+    Returns:
+    --------
+    np.ndarray
+        Weighted adjacency matrix where weights are computed using a Gaussian kernel
+        function (e^(-d²/σ²)) and thresholded by epsilon. Self-connections (diagonal
+        elements) are set to 0.
+
+    Notes:
+    ------
+    - Distances are normalized by dividing by 10000 before computation
+    - The Gaussian kernel means weights decay exponentially with squared distance
+    - Higher epsilon values lead to sparser graphs as more weak connections are removed
+    """
+    # sigma_squared is the variance of the Gaussian kernel which controls how quickly the connection strength decays with distance
+    # smaller sigma squared means weights decay more quickly with distance
+    # epsilon is the threshold for the weights
+    # a high value e.g. 0.95 means that only very strong connections are kept
+    # for small areas epsilon=0.5 will likely be fully connected
+    a = adj_matrix / 10000  # Normalize distances
+    a_squared = a * a  # Square distances
+    n = a.shape[0]
+    w_mask = np.ones([n, n]) - np.identity(n)  # Mask of ones except for the diagonal
+    w = (
+        np.exp(-a_squared / sigma_squared)
+        * (np.exp(-a_squared / sigma_squared) >= epsilon)
+        * w_mask
+    )  # Test whether the weights are greater than epsilon, apply the mask, and multiply again to return real values of weights
+    return w
+
+
+
+================================================
+File: src/preprocessing/graph_manipulation.py
+================================================
+# gnn_package/src/preprocessing/graph_manipulation.py
+
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+import networkx as nx
+from shapely.ops import nearest_points
+from shapely.geometry import Point, LineString, MultiLineString
+from itertools import combinations
+
+
+def snap_points_to_network(points_gdf, network_gdf, tolerance_decimal_places=6):
+    """
+    Snap points to their nearest location on the network.
+
+    Parameters:
+    points_gdf (GeoDataFrame): GeoDataFrame containing points to snap
+    network_gdf (GeoDataFrame): Network edges as GeoDataFrame
+    tolerance (float): Rounding tolerance for coordinate comparison
+
+    Returns:
+    GeoDataFrame: Points snapped to nearest network vertices
+    """
+    # Create unified network geometry
+    print("Creating unified network geometry...")
+    network_unary = network_gdf.geometry.union_all()
+
+    # Get all network vertices
+    print("Extracting network vertices...")
+    network_vertices = set()
+    for geom in network_gdf.geometry:
+        if isinstance(geom, LineString):
+            network_vertices.update(
+                [
+                    tuple(round(x, tolerance_decimal_places) for x in coord)
+                    for coord in geom.coords
+                ]
+            )
+
+    print(f"Number of network vertices: {len(network_vertices)}")
+
+    # Snap points to network
+    snapped_points = []
+    unsnapped_points = []
+
+    for idx, point in points_gdf.iterrows():
+        try:
+            # Get the nearest point on the network
+            nearest_geom = nearest_points(point.geometry, network_unary)[1]
+            point_coord = (
+                round(nearest_geom.x, tolerance_decimal_places),
+                round(nearest_geom.y, tolerance_decimal_places),
+            )
+
+            # Find the closest network vertex
+            min_dist = float("inf")
+            closest_vertex = None
+
+            for vertex in network_vertices:
+                dist = Point(vertex).distance(Point(point_coord))
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_vertex = vertex
+
+            if closest_vertex is None:
+                print(
+                    f"Warning: Could not find closest vertex for point {point.get('id', idx)}"
+                )
+                unsnapped_points.append(point.get("id", idx))
+                continue
+
+            # Create point record
+            point_record = {
+                "original_id": point.get("id", idx),
+                "geometry": Point(closest_vertex),
+                "snap_distance": min_dist,
+            }
+
+            # Add any additional attributes from the original points
+            for col in points_gdf.columns:
+                if col not in ["geometry", "id"]:
+                    point_record[col] = point[col]
+
+            snapped_points.append(point_record)
+
+        except Exception as e:
+            print(f"Error processing point {point.get('id', idx)}: {str(e)}")
+            unsnapped_points.append(point.get("id", idx))
+
+    # Create result GeoDataFrame
+    result_gdf = gpd.GeoDataFrame(snapped_points, crs=points_gdf.crs)
+
+    # Print summary
+    print("\nSnapping Summary:")
+    print(f"Total points processed: {len(points_gdf)}")
+    print(f"Successfully snapped points: {len(snapped_points)}")
+    print(f"Failed to snap points: {len(unsnapped_points)}")
+
+    if unsnapped_points:
+        print("\nPoints that failed to snap:", unsnapped_points)
+
+    return result_gdf
+
+
+def connect_components(edges_gdf, max_distance=100):
+    """
+    Connect nearby components in the network using NetworkX for speed.
+
+    Parameters:
+    edges_gdf (GeoDataFrame): Network edges
+    max_distance (float): Maximum distance to connect components
+
+    Returns:
+    GeoDataFrame: Updated network edges with new connections
+    """
+    # First convert to NetworkX graph for faster component analysis
+    G = nx.Graph()
+
+    # Add edges from the GeoDataFrame
+    for idx, row in edges_gdf.iterrows():
+        coords = list(row.geometry.coords)
+        for i in range(len(coords) - 1):
+            start = coords[i]
+            end = coords[i + 1]
+            G.add_edge(start, end, geometry=row.geometry)
+
+    # Get initial components
+    components = list(nx.connected_components(G))
+    print(f"Initial number of components: {len(components)}")
+
+    # Track new connections
+    new_connections = []
+    connections_made = 0
+
+    # Connect components using NetworkX for speed
+    for i, comp1 in enumerate(components):
+        comp1_list = list(comp1)
+
+        for j, comp2 in enumerate(components[i + 1 :], i + 1):
+            comp2_list = list(comp2)
+
+            # Find closest pair of nodes between components
+            min_dist = float("inf")
+            closest_pair = None
+
+            # Use numpy for vectorized distance calculation
+            coords1 = np.array(comp1_list)
+            coords2 = np.array(comp2_list)
+
+            # Calculate pairwise distances using broadcasting
+            distances = np.sqrt(
+                np.sum(
+                    (coords1[:, np.newaxis, :] - coords2[np.newaxis, :, :]) ** 2, axis=2
+                )
+            )
+            min_idx = np.argmin(distances)
+            min_dist = distances.flat[min_idx]
+
+            if min_dist < max_distance:
+                idx1, idx2 = np.unravel_index(min_idx, distances.shape)
+                closest_pair = (tuple(coords1[idx1]), tuple(coords2[idx2]))
+
+                # Add edge to graph and track new connection
+                G.add_edge(*closest_pair)
+                new_connections.append(
+                    {
+                        "geometry": LineString([closest_pair[0], closest_pair[1]]),
+                        "length": min_dist,
+                        "type": "connection",
+                    }
+                )
+                connections_made += 1
+
+                if connections_made % 10 == 0:
+                    print(f"Made {connections_made} connections...")
+
+    # Convert new connections to GeoDataFrame
+    if new_connections:
+        connections_gdf = gpd.GeoDataFrame(new_connections, crs=edges_gdf.crs)
+        edges_connected = pd.concat([edges_gdf, connections_gdf])
+        print(f"Added {len(new_connections)} new connections")
+    else:
+        edges_connected = edges_gdf.copy()
+
+    # Verify final connectivity
+    final_components = nx.number_connected_components(G)
+    print(f"Final number of components: {final_components}")
+
+    return edges_connected
+
+
+def create_adjacency_matrix(snapped_points_gdf, network_gdf):
+    """
+    Create adjacency matrix from snapped points and network.
+
+    Parameters:
+    snapped_points_gdf (GeoDataFrame): Snapped sensor points
+    network_gdf (GeoDataFrame): Network edges
+
+    Returns:
+    tuple: (adjacency matrix, node IDs)
+    """
+    # Calculate shortest paths between all pairs of points
+    paths = []
+    point_pairs = list(combinations(snapped_points_gdf.iterrows(), 2))
+
+    print(f"Calculating paths between {len(point_pairs)} point pairs...")
+
+    # Create a NetworkX graph for shortest path calculation
+    G = nx.Graph()
+
+    # Add edges from network
+    for _, row in network_gdf.iterrows():
+        line = row.geometry
+        coords = list(line.coords)
+        for i in range(len(coords) - 1):
+            G.add_edge(
+                coords[i],
+                coords[i + 1],
+                weight=Point(coords[i]).distance(Point(coords[i + 1])),
+            )
+
+    # Calculate paths between all pairs
+    for (_, point1), (_, point2) in point_pairs:
+        try:
+            path_length = nx.shortest_path_length(
+                G,
+                source=tuple(point1.geometry.coords)[0],
+                target=tuple(point2.geometry.coords)[0],
+                weight="weight",
+            )
+
+            paths.append(
+                {
+                    "start_id": point1.original_id,
+                    "end_id": point2.original_id,
+                    "distance": path_length,
+                }
+            )
+
+        except nx.NetworkXNoPath:
+            print(
+                f"No path between points {point1.original_id} and {point2.original_id}"
+            )
+
+    # Create the adjacency matrix
+    if paths:
+        # Create DataFrame from paths
+        paths_df = pd.DataFrame(paths)
+
+        # Get unique node IDs
+        node_ids = sorted(snapped_points_gdf.original_id.unique())
+
+        # Create empty matrix
+        n = len(node_ids)
+        adj_matrix = np.zeros((n, n))
+
+        # Fill matrix with distances
+        id_to_idx = {id_: i for i, id_ in enumerate(node_ids)}
+        for _, row in paths_df.iterrows():
+            i = id_to_idx[row.start_id]
+            j = id_to_idx[row.end_id]
+            adj_matrix[i, j] = row.distance
+            adj_matrix[j, i] = row.distance  # Symmetric matrix
+
+        return adj_matrix, node_ids
+    else:
+        print("No valid paths found!")
+        return None, None
+
+
+def explode_multilinestrings(gdf):
+    # Create list to store new rows
+    rows = []
+
+    # Iterate through each row in the GDF
+    for idx, row in gdf.iterrows():
+        if isinstance(row.geometry, MultiLineString):
+            # If geometry is MultiLineString, create new row for each LineString
+            for line in row.geometry.geoms:
+                new_row = row.copy()
+                new_row.geometry = line
+                rows.append(new_row)
+        else:
+            # If geometry is already LineString, keep as is
+            rows.append(row)
+
+    # Create new GeoDataFrame from expanded rows
+    new_gdf = gpd.GeoDataFrame(rows, crs=gdf.crs)
+    return new_gdf
+
+
+
+================================================
+File: src/preprocessing/graph_utils.py
+================================================
+# gnn_package/src/preprocessing/graph_utils.py
+
+import os
+import json
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import osmnx as ox
+import networkx as nx
+import geopandas as gpd
+import private_uoapi
+from shapely.geometry import Polygon
+from gnn_package.config.paths import (
+    PREPROCESSED_GRAPH_DIR,
+    SENSORS_DATA_DIR,
+)
+from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
+
+
+def read_or_create_sensor_nodes():
+    FILE_PATH = SENSORS_DATA_DIR / "sensors.shp"
+    if os.path.exists(FILE_PATH):
+        print("Reading private sensors from file")
+        sensors_gdf = gpd.read_file(FILE_PATH)
+        return sensors_gdf
+    else:
+        config = private_uoapi.LSConfig()
+        auth = private_uoapi.LSAuth(config)
+        client = private_uoapi.LightsailWrapper(config, auth)
+        locations = client.get_traffic_sensors()
+        locations = pd.DataFrame(locations)
+        sensors_gdf = gpd.GeoDataFrame(
+            locations["location"],
+            geometry=gpd.points_from_xy(locations["lon"], locations["lat"]),
+            crs="EPSG:4326",
+        )
+        sensors_gdf = sensors_gdf.to_crs("EPSG:27700")
+        # Add sensor IDs to the GeoDataFrame
+        sensor_name_id_map = get_sensor_name_id_map()
+        sensors_gdf["id"] = sensors_gdf["location"].apply(
+            lambda x: sensor_name_id_map[x]
+        )
+        print(f"DEBUG: Column names: {sensors_gdf.columns}")
+        sensors_gdf.to_file(FILE_PATH)
+        return sensors_gdf
+
+
+def get_bbox_transformed():
+    polygon_bbox = Polygon(
+        [
+            [-1.65327, 54.93188],
+            [-1.54993, 54.93188],
+            [-1.54993, 55.02084],
+            [-1.65327, 55.02084],
+        ]
+    )
+    #     polygon_bbox = Polygon(
+    #     [
+    #         [-1.61327, 54.96188],
+    #         [-1.59993, 54.96188],
+    #         [-1.59993, 54.98084],
+    #         [-1.61327, 54.98084],
+    #     ]
+    #   )
+
+    # Create a GeoDataFrame from the bounding box polygon
+    bbox_gdf = gpd.GeoDataFrame(geometry=[polygon_bbox], crs="EPSG:4326")
+
+    # Assuming your road data is in British National Grid (EPSG:27700)
+    # Transform the bbox to match the road data's CRS
+    bbox_transformed = bbox_gdf.to_crs("EPSG:27700")
+    return bbox_transformed
+
+
+def get_street_network_gdfs(place_name, to_crs="EPSG:27700"):
+    """
+    Extract the walkable network for a specified area as GeoDataFrames.
+
+    Parameters:
+    place_name (str): Name of the place (e.g., 'Newcastle upon Tyne, UK')
+    to_crs (str): Target coordinate reference system (default: 'EPSG:27700' for British National Grid)
+
+    Returns:
+    GeoDataFrame: Network edges as linestrings
+    """
+    # Configure OSMnx settings
+    ox.settings.use_cache = True
+    ox.settings.log_console = True
+
+    # Custom filter for pedestrian-specific infrastructure
+    custom_filter = (
+        '["highway"~"footway|path|pedestrian|steps|corridor|'
+        'track|service|living_street|residential|unclassified"]'
+        '["area"!~"yes"]["access"!~"private"]'
+    )
+
+    try:
+        print(f"\nDownloading network for: {place_name}")
+        # Download and project the network
+        G = ox.graph_from_place(
+            place_name, network_type="walk", custom_filter=custom_filter, simplify=True
+        )
+        G = ox.project_graph(G, to_crs=to_crs)
+
+        # Convert to GeoDataFrames and return only edges
+        _, edges_gdf = ox.graph_to_gdfs(G)
+        print(f"Network downloaded and projected to: {to_crs}")
+        print(f"Number of edges: {len(edges_gdf)}")
+
+        return edges_gdf
+
+    except Exception as e:
+        print(f"Error downloading network: {str(e)}")
+        raise
+
+
+def save_graph_data(adj_matrix, node_ids, prefix="graph"):
+    """
+    Save adjacency matrix and node IDs with proper metadata.
+
+    Parameters:
+    -----------
+    adj_matrix : np.ndarray
+        The adjacency matrix
+    node_ids : list or np.ndarray
+        List of node IDs corresponding to matrix rows/columns
+    output_dir : str or Path
+        Directory to save the files
+    prefix : str
+        Prefix for the saved files
+    """
+    output_dir = Path(PREPROCESSED_GRAPH_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save the adjacency matrix
+    np.save(output_dir / f"{prefix}_adj_matrix.npy", adj_matrix)
+
+    # Save node IDs with metadata
+    node_metadata = {
+        "node_ids": list(
+            map(str, node_ids)
+        ),  # Convert to strings for JSON compatibility
+        "matrix_shape": adj_matrix.shape,
+        "creation_metadata": {
+            "num_nodes": len(node_ids),
+            "matrix_is_symmetric": np.allclose(adj_matrix, adj_matrix.T),
+        },
+    }
+
+    with open(output_dir / f"{prefix}_metadata.json", "w", encoding="utf-8") as f:
+        json.dump(node_metadata, f, indent=2)
+
+
+def load_graph_data(prefix="graph", return_df=False):
+    """
+    Load adjacency matrix with associated node IDs.
+
+    Parameters:
+    -----------
+    input_dir : str or Path
+        Directory containing the saved files
+    prefix : str
+        Prefix of the saved files
+    return_df : bool
+        If True, returns a pandas DataFrame instead of numpy array
+
+    Returns:
+    --------
+    tuple : (adj_matrix, node_ids, metadata)
+        - adj_matrix: numpy array or DataFrame of the adjacency matrix
+        - node_ids: list of node IDs
+        - metadata: dict containing additional graph information
+    """
+    input_dir = Path(PREPROCESSED_GRAPH_DIR)
+
+    # Load the adjacency matrix
+    adj_matrix = np.load(input_dir / f"{prefix}_adj_matrix.npy")
+
+    # Load metadata
+    with open(input_dir / f"{prefix}_metadata.json", "r", encoding="utf-8") as f:
+        metadata = json.load(f)
+
+    node_ids = metadata["node_ids"]
+
+    # Verify matrix shape matches metadata
+    assert adj_matrix.shape == tuple(metadata["matrix_shape"]), "Matrix shape mismatch!"
+
+    # Optionally convert to DataFrame
+    if return_df:
+        adj_matrix = pd.DataFrame(adj_matrix, index=node_ids, columns=node_ids)
+
+    return adj_matrix, node_ids, metadata
+
+
+def graph_to_adjacency_matrix_and_nodes(G) -> tuple:
+    """
+    Convert a NetworkX graph to an adjacency matrix.
+
+    Parameters
+    ----------
+    G : nx.Graph
+        The input graph.
+
+    Returns
+    -------
+    np.ndarray
+        The adjacency matrix as a dense numpy array.
+    list
+        The list of node IDs in the same order as the rows/columns of the matrix.
+    """
+    # Get a sorted list of node IDs to ensure consistent ordering
+    node_ids = sorted(list(G.nodes()))
+
+    # Create the adjacency matrix using NetworkX's built-in function
+    adj_matrix = nx.adjacency_matrix(G, nodelist=node_ids, weight="weight")
+
+    # Convert to dense numpy array for easier viewing
+    adj_matrix_dense = adj_matrix.todense()
+
+    return adj_matrix_dense, node_ids
+
+
+def create_networkx_graph_from_adj_matrix(adj_matrix, node_ids, names_dict=None):
+    """
+    Create a NetworkX graph from adjacency matrix and node IDs.
+
+    Parameters:
+    -----------
+    adj_matrix : np.ndarray
+        The adjacency matrix
+    node_ids : list
+        List of node IDs
+    names_dict : dict, optional
+        Dictionary mapping node IDs to names
+
+    Returns:
+    --------
+    networkx.Graph
+        The reconstructed graph with all metadata
+    """
+    G = nx.Graph()
+
+    # Add nodes with names if provided
+    for i, node_id in enumerate(node_ids):
+        node_attrs = {"id": node_id}
+        if names_dict and str(node_id) in names_dict:
+            node_attrs["name"] = names_dict[str(node_id)]
+        G.add_node(node_id, **node_attrs)
+
+    # Add edges with weights
+    for i in range(len(node_ids)):
+        for j in range(i + 1, len(node_ids)):
+            weight = adj_matrix[i, j]
+            if weight > 0:
+                G.add_edge(node_ids[i], node_ids[j], weight=weight)
+
+    return G
+
+
+
+================================================
+File: src/preprocessing/graph_visualization.py
+================================================
+#  gnn_package/src/preprocessing/graph_visualisation.py
+
+import networkx as nx
+import matplotlib.pyplot as plt
+import numpy as np
+from shapely.geometry import LineString, MultiLineString
+
+
+def visualize_network_components(road_network_gdf):
+    """
+    Visualize all components of the road network in different colors.
+
+    Parameters:
+    road_network_gdf (GeoDataFrame): Network edges as GeoDataFrame
+
+    Returns:
+    tuple: (figure, axis, GeoDataFrame with component information)
+    """
+    # Find connected components using spatial operations
+    components_gdf = road_network_gdf.copy()
+    components_gdf["component"] = -1
+
+    merged_lines = components_gdf.geometry.unary_union
+
+    # If it's a single geometry, convert to list
+    if isinstance(merged_lines, LineString):
+        merged_lines = [merged_lines]
+    elif isinstance(merged_lines, MultiLineString):
+        merged_lines = list(merged_lines.geoms)
+
+    # Assign component IDs
+    for i, merged_line in enumerate(merged_lines):
+        # Find all linestrings that intersect with this component
+        mask = components_gdf.geometry.intersects(merged_line)
+        components_gdf.loc[mask, "component"] = i
+
+    # Count segments in each component
+    component_sizes = components_gdf.component.value_counts()
+    n_components = len(component_sizes)
+
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(15, 15))
+
+    # Create color map
+    colors = plt.cm.rainbow(np.linspace(0, 1, n_components))
+
+    # Plot each component
+    for i, color in enumerate(colors):
+        mask = components_gdf["component"] == i
+        subset = components_gdf[mask]
+        size = len(subset)
+
+        # Only label larger components
+        if (
+            size > len(road_network_gdf) * 0.05
+        ):  # Label components with >5% of total segments
+            label = f"Component {i} ({size} segments)"
+        else:
+            label = None
+
+        subset.plot(ax=ax, color=color, linewidth=1, alpha=0.7, label=label)
+
+    # Add legend and title
+    if ax.get_legend():  # Only add legend if there are labels
+        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+
+    plt.title(f"Road Network Components (Total: {n_components} components)")
+    plt.tight_layout()
+
+    # Print summary
+    print("\nComponent Summary:")
+    print(f"Total components: {n_components}")
+    print("\nLargest components:")
+    print(component_sizes.head())
+
+    return fig, ax, components_gdf
+
+
+def visualize_sensor_graph(G, points_gdf):
+    """
+    Visualize the sensor graph with edge weights.
+    """
+    fig, ax = plt.subplots(figsize=(10, 10))
+
+    # Create position dictionary from points GeoDataFrame
+    pos = {
+        row.original_id: (row.geometry.x, row.geometry.y)
+        for idx, row in points_gdf.iterrows()
+    }
+
+    # Draw edges with width proportional to weight
+    weights = [G[u][v]["weight"] for u, v in G.edges()]
+    max_weight = max(weights)
+    normalized_weights = [w / max_weight for w in weights]
+
+    # Draw the graph
+    nx.draw_networkx_edges(G, pos, width=normalized_weights, alpha=0.5)
+    nx.draw_networkx_nodes(G, pos, node_size=50, node_color="red")
+
+    plt.title("Fully Connected Sensor Network Graph")
+    plt.axis("on")
+    ax.set_aspect("equal")
+
+    return fig, ax
+
+
+
+================================================
+File: src/preprocessing/timeseries_preprocessor.py
+================================================
+from typing import Dict, List, Tuple
+from dataclasses import dataclass
+import numpy as np
+import pandas as pd
+
+
+@dataclass
+class TimeWindow:
+    start_idx: int
+    end_idx: int
+    node_id: str
+    mask: np.ndarray  # 1 for valid data, 0 for missing
+
+
+class TimeSeriesPreprocessor:
+    def __init__(
+        self,
+        window_size: int,
+        stride: int,
+        gap_threshold: pd.Timedelta,
+        missing_value: float = -1.0,
+    ):
+        """
+        Initialize the preprocessor for handling time series with gaps.
+
+        Parameters:
+        -----------
+        window_size : int
+            Size of the sliding window
+        stride : int
+            Number of steps to move the window
+        gap_threshold : pd.Timedelta
+            Maximum allowed time difference between consecutive points
+            e.g., pd.Timedelta(hours=1) for hourly data
+        missing_value : float
+            Value to use for marking missing data
+        """
+        self.window_size = window_size
+        self.stride = stride
+        self.gap_threshold = gap_threshold
+        self.missing_value = missing_value
+
+    def find_continuous_segments(
+        self, time_index: pd.DatetimeIndex, values: np.ndarray
+    ) -> List[Tuple[int, int]]:
+        """
+        Find continuous segments of data without gaps.
+
+        Returns list of (start_idx, end_idx) tuples.
+        """
+        segments = []
+        start_idx = 0
+
+        for i in range(1, len(time_index)):
+            time_diff = time_index[i] - time_index[i - 1]
+
+            # Check for gaps in time or values
+            if (time_diff > self.gap_threshold) or (
+                np.isnan(values[i - 1]) or np.isnan(values[i])
+            ):
+                if i - start_idx >= self.window_size:
+                    segments.append((start_idx, i))
+                start_idx = i
+
+        # Add the last segment if it's long enough
+        if len(time_index) - start_idx >= self.window_size:
+            segments.append((start_idx, len(time_index)))
+
+        return segments
+
+    def create_windows(
+        self, time_series_dict: Dict[str, pd.Series], standardize: bool = True
+    ) -> Tuple[
+        Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, List[TimeWindow]]
+    ]:
+        """
+        Create windowed data with masks for missing values.
+
+        Parameters:
+        -----------
+        time_series_dict : Dict[str, pd.Series]
+            Dictionary mapping node IDs to their time series
+        standardize : bool
+            Whether to standardize the data
+
+        Returns:
+        --------
+        X_by_sensor : Dict[str, np.ndarray]
+            Dictionary mapping node IDs to their windowed arrays
+                Array of shape (n_windows, n_nodes, window_size)
+        masks_by_sensor : Dict[str, np.ndarray]
+            Dictionary mapping node IDs to their binary masks
+        metadata : Dict[str,List[TimeWindow]
+            Metadata for each window
+        """
+        X_by_sensor = {}
+        masks_by_sensor = {}
+        metadata_by_sensor = {}
+
+        # Process each node's time series
+        for node_id, series in time_series_dict.items():
+            # Initialize lists for this node
+            sensor_windows = []
+            sensor_masks = []
+            sensor_metadata = []
+
+            # Find continuous segments
+            segments = self.find_continuous_segments(series.index, series.values)
+
+            # Process each segment
+            for start_seg, end_seg in segments:
+                segment_values = series.values[start_seg:end_seg]
+
+                if standardize:
+                    # Standardize non-missing values
+                    valid_mask = ~np.isnan(segment_values)
+                    valid_values = segment_values[valid_mask]
+                    if len(valid_values) > 0:
+                        mean = np.mean(valid_values)
+                        std = np.std(valid_values)
+                        segment_values = (segment_values - mean) / (std + 1e-8)
+
+                # Create windows for this segment
+                for i in range(
+                    0, len(segment_values) - self.window_size + 1, self.stride
+                ):
+                    window = segment_values[i : i + self.window_size]
+                    mask = ~np.isnan(window)
+
+                    # Replace NaN with missing_value
+                    window = np.where(mask, window, self.missing_value)
+
+                    sensor_windows.append(window)
+                    sensor_masks.append(mask)
+
+                    sensor_metadata.append(
+                        TimeWindow(
+                            start_idx=start_seg + i,
+                            end_idx=start_seg + i + self.window_size,
+                            node_id=node_id,
+                            mask=mask,
+                        )
+                    )
+
+                # Only add if we found windows for this sensor
+                if sensor_windows:
+                    X_by_sensor[node_id] = np.array(sensor_windows)
+                    masks_by_sensor[node_id] = np.array(sensor_masks)
+                    metadata_by_sensor[node_id] = sensor_metadata
+
+        return X_by_sensor, masks_by_sensor, metadata_by_sensor
+
+    def prepare_batch_data(
+        self,
+        X_by_sensor: Dict[str, np.ndarray],
+        masks_by_sensor: Dict[str, np.ndarray],
+        adj_matrix: np.ndarray,
+        node_ids: List[str],
+    ) -> Dict[str, np.ndarray]:
+        """
+        Prepare data for GNN training.
+
+        Parameters:
+        -----------
+        X_by_sensor : Dict[str, np.ndarray]
+            Dictionary mapping sensor IDs to their window arrays
+        masks_by_sensor : Dict[str, np.ndarray]
+            Dictionary mapping sensor IDs to their mask arrays
+        adj_matrix : np.ndarray
+            Adjacency matrix
+        node_ids : List[str]
+            List of node IDs in the same order as in the adjacency matrix
+
+        Returns:
+        --------
+        dict containing:
+            - node_features: Organized time series windows
+            - adjacency: Adjacency matrix
+            - mask: Binary mask for missing values
+        """
+        # Organize features in the same order as the adjacency matrix
+        features = []
+        masks = []
+
+        for node_id in node_ids:
+            if node_id in X_by_sensor:
+                features.append(X_by_sensor[node_id])
+                masks.append(masks_by_sensor[node_id])
+            else:
+                # Handle missing sensors
+                # You might want to create a dummy placeholder or skip
+                pass
+
+        return {
+            "node_features": features,  # Now a list of arrays organized by sensor
+            "adjacency": adj_matrix,
+            "mask": masks,  # Also organized by sensor
+        }
+
+
+def resample_sensor_data(time_series_dict, freq="15min", fill_value=-1.0):
+    """
+    Resample all sensor time series to a consistent frequency and fill gaps.
+
+    Parameters:
+    -----------
+    time_series_dict : dict
+        Dictionary mapping sensor IDs to their time series data
+    freq : str
+        Pandas frequency string (e.g., '15min', '1H')
+    fill_value : float
+        Value to use for filling gaps
+
+    Returns:
+    --------
+    dict
+        Dictionary with resampled time series
+    """
+    # Find global min and max dates
+    all_dates = []
+    for series in time_series_dict.values():
+        if len(series) > 0:
+            all_dates.extend(series.index)
+
+    global_min = min(all_dates)
+    global_max = max(all_dates)
+
+    # Create common date range
+    date_range = pd.date_range(start=global_min, end=global_max, freq=freq)
+
+    # Resample each sensor's data
+    resampled_dict = {}
+
+    for sensor_id, series in time_series_dict.items():
+        # Skip empty series
+        if series is None or len(series) == 0:
+            continue
+
+        # Create a Series with the full date range
+        resampled = pd.Series(index=date_range, dtype=float)
+
+        # Use original values where available (handle duplicates by taking the mean)
+        grouper = series.groupby(series.index)
+        non_duplicate_series = grouper.mean()
+
+        # Align with the resampled index
+        resampled[non_duplicate_series.index] = non_duplicate_series
+
+        # Fill gaps with fill_value
+        resampled = resampled.fillna(fill_value)
+
+        resampled_dict[sensor_id] = resampled
+
+    print(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
+    print(f"Each sensor now has {len(date_range)} data points")
+
+    return resampled_dict
+
+
+
+
+================================================
+File: src/training/__init__.py
+================================================
+from .stgnn_training import preprocess_data, train_model
+
+__all__ = ["preprocess_data", "train_model"]
+
+
+
+================================================
+File: src/training/stgnn_prediction.py
+================================================
+# gnn_package/src/models/predict.py
+
+import torch
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
+
+from gnn_package.src.preprocessing import (
+    load_graph_data,
+    compute_adjacency_matrix,
+    SensorDataFetcher,
+    TimeSeriesPreprocessor,
+    get_sensor_name_id_map,
+)
+from gnn_package.src.models.stgnn import create_stgnn_model
+
+
+def load_model(
+    model_path, input_dim=1, hidden_dim=64, output_dim=1, horizon=6, num_layers=2
+):
+    """
+    Load a trained STGNN model
+
+    Parameters:
+    -----------
+    model_path : str
+        Path to the saved model
+    input_dim, hidden_dim, output_dim, horizon, num_layers : model parameters
+
+    Returns:
+    --------
+    Loaded model
+    """
+    model = create_stgnn_model(
+        input_dim=input_dim,
+        hidden_dim=hidden_dim,
+        output_dim=output_dim,
+        horizon=horizon,
+        num_layers=num_layers,
+    )
+
+    model.load_state_dict(torch.load(model_path))
+    model.eval()
+
+    return model
+
+
+def fetch_recent_data(node_ids, days_back=1, window_size=24):
+    """
+    Fetch recent data for prediction
+
+    Parameters:
+    -----------
+    node_ids : list
+        List of node IDs to fetch data for
+    days_back : int
+        Number of days of historical data to fetch
+    window_size : int
+        Size of the input window for the model
+
+    Returns:
+    --------
+    Dict containing preprocessed data for prediction
+    """
+    # Fetch sensor data
+    fetcher = SensorDataFetcher()
+    response = fetcher.get_sensor_data_batch(node_ids, days_back=days_back)
+
+    print(f"Fetched data for {len(response.data)} nodes")
+    print(
+        f"API Stats: {response.stats.successful_calls} successful, {response.stats.failed_calls} failed"
+    )
+
+    # Filter out empty results
+    time_series_dict = {
+        node_id: data for node_id, data in response.data.items() if data is not None
+    }
+    print(f"Nodes with valid data: {len(time_series_dict)}/{len(node_ids)}")
+
+    # Create windows for time series
+    processor = TimeSeriesPreprocessor(
+        window_size=window_size,
+        stride=1,
+        gap_threshold=pd.Timedelta(minutes=15),
+        missing_value=-1.0,
+    )
+
+    X_by_sensor, masks_by_sensor, metadata_by_sensor = processor.create_windows(
+        time_series_dict
+    )
+
+    # Get the most recent window for each sensor
+    latest_windows = {}
+    latest_masks = {}
+    time_indices = {}
+
+    for node_id in X_by_sensor:
+        if len(X_by_sensor[node_id]) > 0:
+            # Get the last window
+            latest_windows[node_id] = X_by_sensor[node_id][-1:]
+            latest_masks[node_id] = masks_by_sensor[node_id][-1:]
+
+            # Get time index information for this window
+            metadata = metadata_by_sensor[node_id][-1]
+            time_indices[node_id] = metadata
+
+    return {
+        "windows": latest_windows,
+        "masks": latest_masks,
+        "metadata": time_indices,
+        "time_series": time_series_dict,
+    }
+
+
+def make_prediction(model, data, adj_matrix, node_ids, device=None):
+    """
+    Make predictions with the trained model
+
+    Parameters:
+    -----------
+    model : STGNN
+        Trained model
+    data : dict
+        Dict containing preprocessed data as returned by fetch_recent_data
+    adj_matrix : numpy.ndarray
+        Adjacency matrix for the graph
+    node_ids : list
+        List of node IDs
+    device : torch.device
+        Device to use for inference
+
+    Returns:
+    --------
+    Dict containing predictions and related information
+    """
+    if device is None:
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+    model.to(device)
+    model.eval()
+
+    # Prepare input data
+    all_inputs = []
+    all_masks = []
+    valid_nodes = []
+
+    for i, node_id in enumerate(node_ids):
+        if node_id in data["windows"]:
+            x = torch.FloatTensor(data["windows"][node_id])
+            mask = torch.FloatTensor(data["masks"][node_id])
+
+            all_inputs.append(x)
+            all_masks.append(mask)
+            valid_nodes.append(node_id)
+
+    if not all_inputs:
+        raise ValueError("No valid input data for prediction")
+
+    # Concatenate all inputs
+    x = torch.cat(all_inputs, dim=0)
+    mask = torch.cat(all_masks, dim=0)
+
+    # Convert to tensors and move to device
+    x = x.to(device)
+    mask = mask.to(device)
+    adj = torch.FloatTensor(adj_matrix).to(device)
+
+    # Add batch dimension if needed
+    if len(x.shape) == 2:
+        x = x.unsqueeze(0)
+        mask = mask.unsqueeze(0)
+
+    # For STGNN model, reshape input to [batch, nodes, time, features]
+    if len(x.shape) == 3:
+        x = x.unsqueeze(-1)  # Add feature dimension
+
+    # Make prediction
+    with torch.no_grad():
+        predictions = model(x, adj, mask)
+
+    # Move predictions to CPU
+    predictions = predictions.cpu().numpy()
+
+    return {"predictions": predictions, "valid_nodes": valid_nodes}
+
+
+def plot_predictions(predictions, data, node_ids, name_id_map=None):
+    """
+    Plot predictions alongside historical data
+
+    Parameters:
+    -----------
+    predictions : dict
+        Dict containing predictions from make_prediction
+    data : dict
+        Dict containing time series data from fetch_recent_data
+    node_ids : list
+        List of node IDs
+    name_id_map : dict, optional
+        Mapping from node IDs to sensor names
+
+    Returns:
+    --------
+    matplotlib figure
+    """
+    if name_id_map is None:
+        name_id_map = get_sensor_name_id_map()
+        # Reverse the mapping to go from id to name
+        name_id_map = {v: k for k, v in name_id_map.items()}
+
+    pred_array = predictions["predictions"]
+    valid_nodes = predictions["valid_nodes"]
+
+    # Create a figure
+    n_nodes = min(len(valid_nodes), 6)  # Limit to 6 nodes
+    fig, axes = plt.subplots(n_nodes, 1, figsize=(12, 3 * n_nodes))
+    if n_nodes == 1:
+        axes = [axes]
+
+    for i, node_id in enumerate(valid_nodes[:n_nodes]):
+        ax = axes[i]
+
+        # Get historical data
+        historical = data["time_series"][node_id]
+
+        # Get prediction for this node
+        node_idx = valid_nodes.index(node_id)
+        pred = pred_array[node_idx, 0, :, 0]  # [batch=0, node_idx, time, feature=0]
+
+        # Get the last timestamp from historical data
+        last_time = historical.index[-1]
+
+        # Create time indices for prediction
+        pred_times = [
+            last_time + timedelta(minutes=15 * (i + 1)) for i in range(len(pred))
+        ]
+
+        # Plot
+        ax.plot(historical.index, historical.values, label="Historical", color="blue")
+        ax.plot(pred_times, pred, "r--", label="Prediction", linewidth=2)
+
+        # Add sensor name to title if available
+        sensor_name = name_id_map.get(node_id, node_id)
+        ax.set_title(f"Sensor: {sensor_name} (ID: {node_id})")
+        ax.set_ylabel("Traffic Count")
+        ax.legend()
+
+        # Format x-axis as time
+        ax.tick_params(axis="x", rotation=45)
+
+    plt.tight_layout()
+    return fig
+
+
+def predict_all_sensors(model_path, graph_prefix, output_file=None, plot=True):
+    """
+    Make predictions for all available sensors
+
+    Parameters:
+    -----------
+    model_path : str
+        Path to the saved model
+    graph_prefix : str
+        Prefix for the graph data files
+    output_file : str, optional
+        Path to save predictions
+    plot : bool
+        Whether to generate and display plots
+
+    Returns:
+    --------
+    Dict containing predictions and related information
+    """
+    # Load graph data
+    adj_matrix, node_ids, metadata = load_graph_data(
+        prefix=graph_prefix, return_df=False
+    )
+
+    # Compute graph weights
+    weighted_adj = compute_adjacency_matrix(adj_matrix, sigma_squared=0.1, epsilon=0.5)
+
+    # Load model
+    model = load_model(model_path)
+
+    # Fetch recent data
+    data = fetch_recent_data(node_ids, days_back=1, window_size=model.horizon)
+
+    # Get valid nodes for prediction
+    valid_nodes = list(data["windows"].keys())
+
+    if not valid_nodes:
+        print("No valid data for prediction")
+        return None
+
+    # Create filtered adjacency matrix
+    valid_indices = [node_ids.index(nid) for nid in valid_nodes if nid in node_ids]
+    filtered_adj = weighted_adj[valid_indices, :][:, valid_indices]
+    filtered_nodes = [node_ids[idx] for idx in valid_indices]
+
+    # Make predictions
+    results = make_prediction(model, data, filtered_adj, filtered_nodes)
+
+    # Get mapping from ID to name
+    id_to_name = get_sensor_name_id_map()
+    id_to_name = {v: k for k, v in id_to_name.items()}
+
+    # Format predictions
+    preds = results["predictions"]
+    pred_nodes = results["valid_nodes"]
+
+    # Create results dataframe
+    last_times = {
+        node_id: data["time_series"][node_id].index[-1] for node_id in pred_nodes
+    }
+
+    # Convert predictions to dataframe
+    all_rows = []
+
+    for i, node_id in enumerate(pred_nodes):
+        node_preds = preds[i, 0, :, 0]  # [node_idx, batch=0, time, feature=0]
+        last_time = last_times[node_id]
+
+        for t, value in enumerate(node_preds):
+            future_time = last_time + timedelta(minutes=15 * (t + 1))
+
+            row = {
+                "node_id": node_id,
+                "sensor_name": id_to_name.get(node_id, ""),
+                "timestamp": future_time,
+                "prediction": value,
+                "horizon": t + 1,
+            }
+            all_rows.append(row)
+
+    results_df = pd.DataFrame(all_rows)
+
+    # Save to file if requested
+    if output_file:
+        results_df.to_csv(output_file, index=False)
+        print(f"Predictions saved to {output_file}")
+
+    # Plot if requested
+    if plot:
+        fig = plot_predictions(results, data, filtered_nodes, id_to_name)
+        plt.show()
+
+    return {"predictions": results, "dataframe": results_df, "data": data}
+
+
+if __name__ == "__main__":
+    # Example usage
+    predictions = predict_all_sensors(
+        model_path="stgnn_model.pth",
+        graph_prefix="traffic_graph",
+        output_file="predictions.csv",
+        plot=True,
+    )
+
+    # Print summary
+    if predictions:
+        df = predictions["dataframe"]
+        print(f"Generated {len(df)} predictions for {df['node_id'].nunique()} sensors")
+
+        # Show prediction ranges
+        print("\nPrediction summary stats:")
+        print(df.groupby("horizon")["prediction"].describe())
+
+
+
+================================================
+File: src/training/stgnn_training.py
+================================================
+# gnn_package/src/models/train_stgnn.py
+
+import sys
+import torch
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from torch.utils.data import random_split
+from tqdm import tqdm, trange
+
+from gnn_package.src import preprocessing
+from gnn_package.src.dataloaders import create_dataloader
+from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
+
+
+def preprocess_data(
+    data=None,
+    data_file=None,
+    graph_prefix="graph",
+    window_size=24,
+    horizon=6,
+    stride=1,
+    batch_size=32,
+    sigma_squared=0.1,
+    epsilon=0.5,
+):
+    """
+    Load and preprocess graph and sensor data for training
+    with support for varying window counts per sensor
+    """
+    print("Loading graph data...")
+
+    adj_matrix, node_ids, metadata = preprocessing.load_graph_data(
+        prefix=graph_prefix, return_df=False
+    )
+
+    # Compute graph weights using Gaussian kernel
+    weighted_adj = preprocessing.compute_adjacency_matrix(
+        adj_matrix, sigma_squared=sigma_squared, epsilon=epsilon
+    )
+
+    print(
+        f"Loaded adjacency matrix of shape {adj_matrix.shape} with {len(node_ids)} nodes"
+    )
+
+    # Load sensor data if not provided
+    if data is None:
+        if data_file is None:
+            raise ValueError(
+                "Either data or data_file must be provided to load sensor data."
+            )
+
+        try:
+            data = preprocessing.load_sensor_data(data_file)
+        except FileNotFoundError as e:
+            print(e)
+            print("Please run 'python fetch_sensor_data.py' first to fetch the data.")
+            sys.exit(1)
+
+    resampled_data = preprocessing.resample_sensor_data(
+        data, freq="15min", fill_value=-1.0
+    )
+
+    # Create windows for time series
+    print(f"Creating windows with size={window_size}, horizon={horizon}...")
+    processor = preprocessing.TimeSeriesPreprocessor(
+        window_size=window_size,
+        stride=stride,
+        gap_threshold=pd.Timedelta(minutes=15),
+        missing_value=-1.0,
+    )
+
+    X_by_sensor, masks_by_sensor, metadata_by_sensor = processor.create_windows(
+        resampled_data
+    )
+
+    # Get list of sensors with valid windows
+    valid_sensors = list(X_by_sensor.keys())
+    print(f"Found {len(valid_sensors)} sensors with valid windows")
+
+    if len(valid_sensors) == 0:
+        raise ValueError(
+            "No valid windows found! Try increasing days_back or decreasing window_size."
+        )
+
+    # Create a smaller adjacency matrix for only the valid sensors
+    valid_indices = [node_ids.index(sid) for sid in valid_sensors if sid in node_ids]
+    valid_adj = weighted_adj[valid_indices, :][:, valid_indices]
+    valid_node_ids = [node_ids[idx] for idx in valid_indices]
+
+    # For each sensor, split its data into train and validation
+    X_train_by_sensor = {}
+    X_val_by_sensor = {}
+    masks_train_by_sensor = {}
+    masks_val_by_sensor = {}
+
+    # Add progress bar for splitting data
+    for node_id in tqdm(
+        valid_sensors, desc="Splitting data into train/validation sets"
+    ):
+        n_windows = len(X_by_sensor[node_id])
+        train_size = int(n_windows * 0.8)
+
+        X_train_by_sensor[node_id] = X_by_sensor[node_id][:train_size]
+        X_val_by_sensor[node_id] = X_by_sensor[node_id][train_size:]
+
+        masks_train_by_sensor[node_id] = masks_by_sensor[node_id][:train_size]
+        masks_val_by_sensor[node_id] = masks_by_sensor[node_id][train_size:]
+
+    # Calculate total windows
+    total_train = sum(len(windows) for windows in X_train_by_sensor.values())
+    total_val = sum(len(windows) for windows in X_val_by_sensor.values())
+    print(f"Total training windows: {total_train}")
+    print(f"Total validation windows: {total_val}")
+
+    print("Creating dataloaders...")
+    # Create dataloaders with the updated implementation
+    train_loader = create_dataloader(
+        X_train_by_sensor,
+        masks_train_by_sensor,
+        valid_adj,
+        valid_node_ids,
+        window_size,
+        horizon,
+        batch_size,
+        shuffle=True,
+    )
+
+    val_loader = create_dataloader(
+        X_val_by_sensor,
+        masks_val_by_sensor,
+        valid_adj,
+        valid_node_ids,
+        window_size,
+        horizon,
+        batch_size,
+        shuffle=False,
+    )
+
+    return {
+        "train_loader": train_loader,
+        "val_loader": val_loader,
+        "adj_matrix": valid_adj,
+        "node_ids": valid_node_ids,
+    }
+
+
+class TqdmSTGNNTrainer(STGNNTrainer):
+    """
+    Extension of STGNNTrainer that adds progress bars using tqdm
+    """
+
+    def train_epoch(self, dataloader):
+        """Train for one epoch with progress bar"""
+        self.model.train()
+        total_loss = 0
+        num_batches = 0
+
+        # Create progress bar for batches
+        pbar = tqdm(dataloader, desc="Training batches", leave=False)
+
+        for batch in pbar:
+            # Move data to device
+            x = batch["x"].to(self.device)
+            x_mask = batch["x_mask"].to(self.device)
+            y = batch["y"].to(self.device)
+            y_mask = batch["y_mask"].to(self.device)
+            adj = batch["adj"].to(self.device)
+
+            # Forward pass
+            self.optimizer.zero_grad()
+            y_pred = self.model(x, adj, x_mask)
+
+            # Compute loss on valid points only
+            loss = self.criterion(y_pred, y)
+            if y_mask is not None:
+                # Count non-zero elements in mask
+                mask_sum = y_mask.sum()
+                if mask_sum > 0:
+                    loss = (loss * y_mask).sum() / mask_sum
+                else:
+                    loss = torch.tensor(0.0, device=self.device)
+
+            # Backward pass
+            loss.backward()
+            self.optimizer.step()
+
+            batch_loss = loss.item()
+            total_loss += batch_loss
+            num_batches += 1
+
+            # Update progress bar with current batch loss
+            pbar.set_postfix({"batch_loss": f"{batch_loss:.6f}"})
+
+        return total_loss / max(1, num_batches)
+
+    def evaluate(self, dataloader):
+        """Evaluate the model on a validation or test set with progress bar"""
+        self.model.eval()
+        total_loss = 0
+        num_batches = 0
+
+        with torch.no_grad():
+            # Create progress bar for validation batches
+            pbar = tqdm(dataloader, desc="Validation batches", leave=False)
+
+            for batch in pbar:
+                # Move data to device
+                x = batch["x"].to(self.device)
+                x_mask = batch["x_mask"].to(self.device)
+                y = batch["y"].to(self.device)
+                y_mask = batch["y_mask"].to(self.device)
+                adj = batch["adj"].to(self.device)
+
+                # Forward pass
+                y_pred = self.model(x, adj, x_mask)
+
+                # Compute loss on valid points only
+                loss = self.criterion(y_pred, y)
+                if y_mask is not None:
+                    # Count non-zero elements in mask
+                    mask_sum = y_mask.sum()
+                    if mask_sum > 0:
+                        loss = (loss * y_mask).sum() / mask_sum
+                    else:
+                        loss = torch.tensor(0.0, device=self.device)
+
+                batch_loss = loss.item()
+                total_loss += batch_loss
+                num_batches += 1
+
+                # Update progress bar with current batch loss
+                pbar.set_postfix({"batch_loss": f"{batch_loss:.6f}"})
+
+        return total_loss / max(1, num_batches)
+
+
+def train_model(
+    data_loaders,
+    input_dim=1,
+    hidden_dim=64,
+    output_dim=1,
+    horizon=6,
+    learning_rate=0.001,
+    weight_decay=1e-5,
+    num_epochs=50,
+    patience=10,
+):
+    """
+    Train the STGNN model with progress bars
+
+    Parameters:
+    -----------
+    data_loaders : dict
+        Dict containing train_loader and val_loader
+    input_dim : int
+        Input dimension (number of features per node)
+    hidden_dim : int
+        Hidden dimension for model
+    output_dim : int
+        Output dimension (number of features to predict)
+    horizon : int
+        Number of future time steps to predict
+    learning_rate : float
+        Learning rate for optimizer
+    weight_decay : float
+        Weight decay for regularization
+    num_epochs : int
+        Maximum number of epochs to train
+    patience : int
+        Number of epochs to wait for improvement before early stopping
+
+    Returns:
+    --------
+    Trained model and training metrics
+    """
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    # Create model
+    model = create_stgnn_model(
+        input_dim=input_dim,
+        hidden_dim=hidden_dim,
+        output_dim=output_dim,
+        horizon=horizon,
+    )
+
+    # Define optimizer and loss function
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+    )
+
+    # Mean Squared Error loss
+    criterion = torch.nn.MSELoss(reduction="none")
+
+    # Create trainer with tqdm support
+    trainer = TqdmSTGNNTrainer(model, optimizer, criterion, device)
+
+    # Training loop with early stopping and overall progress bar
+    train_losses = []
+    val_losses = []
+    best_val_loss = float("inf")
+    best_model = None
+    no_improve_count = 0
+
+    # Use trange for overall epoch progress
+    epochs_pbar = trange(num_epochs, desc="Training progress")
+
+    for epoch in epochs_pbar:
+        # Train
+        train_loss = trainer.train_epoch(data_loaders["train_loader"])
+        train_losses.append(train_loss)
+
+        # Validate
+        val_loss = trainer.evaluate(data_loaders["val_loader"])
+        val_losses.append(val_loss)
+
+        # Update progress bar with current metrics
+        epochs_pbar.set_postfix(
+            {
+                "train_loss": f"{train_loss:.6f}",
+                "val_loss": f"{val_loss:.6f}",
+                "no_improve": no_improve_count,
+            }
+        )
+
+        # Check for improvement
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_model = model.state_dict().copy()
+            no_improve_count = 0
+        else:
+            no_improve_count += 1
+
+        # Early stopping
+        if no_improve_count >= patience:
+            print(f"Early stopping after {epoch+1} epochs")
+            break
+
+    # Load best model
+    if best_model is not None:
+        model.load_state_dict(best_model)
+
+    # Plot training curve
+    plt.figure(figsize=(10, 5))
+    plt.plot(train_losses, label="Training Loss")
+    plt.plot(val_losses, label="Validation Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.title("Training and Validation Loss")
+    plt.tight_layout()
+
+    return {
+        "model": model,
+        "train_losses": train_losses,
+        "val_losses": val_losses,
+        "best_val_loss": best_val_loss,
+    }
+
+
+def predict_and_evaluate(model, dataloader, device=None):
+    """
+    Make predictions with the trained model and evaluate performance
+
+    Parameters:
+    -----------
+    model : STGNN
+        Trained model
+    dataloader : DataLoader
+        Dataloader containing test data
+    device : torch.device
+        Device to use for inference
+
+    Returns:
+    --------
+    Dict containing predictions and evaluation metrics
+    """
+    if device is None:
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+    model.to(device)
+    model.eval()
+
+    all_preds = []
+    all_targets = []
+    all_masks = []
+
+    with torch.no_grad():
+        # Add progress bar for evaluation
+        for batch in tqdm(dataloader, desc="Evaluating model"):
+            # Move data to device
+            x = batch["x"].to(device)
+            x_mask = batch["x_mask"].to(device)
+            y = batch["y"].to(device)
+            y_mask = batch["y_mask"].to(device)
+            adj = batch["adj"].to(device)
+
+            # Forward pass
+            y_pred = model(x, adj, x_mask)
+
+            # Move predictions and targets to CPU
+            all_preds.append(y_pred.cpu().numpy())
+            all_targets.append(y.cpu().numpy())
+            all_masks.append(y_mask.cpu().numpy())
+
+    # Concatenate batches
+    predictions = np.concatenate(all_preds, axis=0)
+    targets = np.concatenate(all_targets, axis=0)
+    masks = np.concatenate(all_masks, axis=0)
+
+    # Compute metrics on valid points only
+    mse = np.mean(((predictions - targets) ** 2) * masks) / np.mean(masks)
+    mae = np.mean(np.abs(predictions - targets) * masks) / np.mean(masks)
+
+    print(f"Test MSE: {mse:.6f}")
+    print(f"Test MAE: {mae:.6f}")
+
+    return {
+        "predictions": predictions,
+        "targets": targets,
+        "masks": masks,
+        "mse": mse,
+        "mae": mae,
+    }
+
+
+def save_model(model, file_path):
+    """Save the trained model"""
+    torch.save(model.state_dict(), file_path)
+    print(f"Model saved to {file_path}")
+
+
+
+
+
+================================================
+File: src/utils/__init__.py
+================================================
+
+
+
+
+================================================
+File: src/utils/data_utils.py
+================================================
+# gnn_package/src/utils/data_utils.py
+
+import pandas as pd
+
+
+def read_pickled_gdf(dir_path, file_name):
+    """
+    Read a pickled GeoDataFrame from a specified directory.
+    Parameters:
+    ----------
+    dir_path : str
+        Directory path where the GeoDataFrame is stored
+    file_name : str
+        Name of the pickled GeoDataFrame file
+    Returns:
+    -------
+    GeoDataFrame
+        The loaded GeoDataFrame
+    Raises:
+    -------
+    FileNotFoundError
+        If the file doesn't exist
+    """
+    cropped_gdf = pd.read_pickle(dir_path + file_name)
+    return cropped_gdf
+
+
+
+================================================
+File: src/utils/sensor_utils.py
+================================================
+# gnn_package/src/utils/sensor_utils.py
+import os
+import json
+from pathlib import Path
+from gnn_package.config.paths import SENSORS_DATA_DIR  # Import from paths module
+
+from private_uoapi import LSConfig, LSAuth, LightsailWrapper
+
+
+def get_sensor_name_id_map():
+    """
+    Create unique IDs for each sensor from the private UOAPI.
+
+    location: id
+
+    For the private API, where no IDs are provided, we generate
+    unique IDs of the form '1XXXX' where XXXX is a zero-padded
+    index (e.g. i=1 > 10001 and i=100 > 10100).
+
+    Returns:
+    dict: Mapping between sensor names (keys) and IDs (values)
+    """
+    # Move the implementation here from graph_utils.py
+    if not os.path.exists(SENSORS_DATA_DIR / "sensor_name_id_map.json"):
+
+        config = LSConfig()
+        auth = LSAuth(config)
+        client = LightsailWrapper(config, auth)
+        sensors = client.get_traffic_sensors()
+        import pandas as pd
+
+        sensors = pd.DataFrame(sensors)
+        mapping = {
+            location: f"1{str(i).zfill(4)}"
+            for i, location in enumerate(sensors["location"])
+        }
+
+        with open(
+            SENSORS_DATA_DIR / "sensor_name_id_map.json",
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(mapping, f, indent=4)
+    else:
+        with open(
+            SENSORS_DATA_DIR / "sensor_name_id_map.json",
+            "r",
+            encoding="utf-8",
+        ) as f:
+            mapping = json.load(f)
+
+    return mapping
+
+
+

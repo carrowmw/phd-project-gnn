@@ -24,6 +24,8 @@ fastapi = "^0.115.8"
 tqdm = "^4.67.1"
 seaborn = "^0.13.2"
 private-uoapi = {path = "/Users/administrator/Code/python/private-uo-api", develop = true}
+dash = "^3.0.0"
+dash-bootstrap-components = "^2.0.0"
 
 
 [tool.poetry.group.dev.dependencies]

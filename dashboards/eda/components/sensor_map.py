@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from private_uoapi import LightsailWrapper, LSAuth, LSConfig
 import geopandas as gpd
-from gnn_package.src.preprocessing import get_sensor_name_id_map
+from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 
 
 def create_sensors_map(completeness_dict):

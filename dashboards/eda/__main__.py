@@ -1,4 +1,5 @@
 # Create a multi-page dashboard using HTML and Plotly
+import os
 from pathlib import Path
 from datetime import datetime
 from plotly.io import to_html
@@ -21,6 +22,7 @@ from .components import (
 from .utils import load_data, load_template, render_template, get_template_path
 
 from gnn_package.config import ExperimentConfig
+from gnn_package import paths
 
 
 def compute_completeness(time_series_dict):
@@ -70,7 +72,7 @@ def compute_completeness(time_series_dict):
 
 
 # Create a comprehensive dashboard combining multiple visualizations
-def create_sensor_window_dashboard(data_file="test_data_1mnth.pkl", window_size=24):
+def create_sensor_window_dashboard(data_file, window_size=24):
     """Create a comprehensive dashboard for analyzing sensor time windows"""
     # Load the data
     time_series_dict = load_data(data_file)
@@ -206,9 +208,8 @@ def create_sensor_window_dashboard(data_file="test_data_1mnth.pkl", window_size=
 
 if __name__ == "__main__":
     # Create the dashboard
-    dashboard_html = create_sensor_window_dashboard(
-        data_file="dashboards/data/test_data_1mnth.pkl", window_size=24
-    )
+    data_file = os.path.join(paths.RAW_TIMESERIES_DIR, "test_data_1mnth.pkl")
+    dashboard_html = create_sensor_window_dashboard(data_file, window_size=24)
 
     # Save to a file
     output_path = Path(__file__).parent / "index.html"

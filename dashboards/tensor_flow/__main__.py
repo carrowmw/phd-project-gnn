@@ -36,6 +36,8 @@ from dashboards.eda.utils.template_utils import (
     get_template_path,
 )
 
+from gnn_package import paths
+
 
 # Set up Plotly theme
 pio.templates.default = "plotly_white"
@@ -228,7 +230,8 @@ def create_tensor_flow_dashboard(visualization_data):
 def main():
     """Main function to generate the dashboard"""
     # Load sample data
-    sample_data = load_sample_data()
+    file_path = os.path.join(paths.PREPROCESSED_TIMESERIES_DIR, "")
+    sample_data = load_sample_data("test_data_1mnth.pkl")
 
     # Create visualizations
     visualization_data = visualize_tensor_transformations(sample_data)
