@@ -51,111 +51,115 @@ class SpatioTemporalDataset(Dataset):
         )
 
     def __len__(self):
-        return len(self.sample_indices)
+        """Return the number of windows (time steps)."""
+        # Find the sensor with the minimum number of windows
+        min_windows = min(len(windows) for windows in self.X_by_sensor.values())
+        return min_windows
+
+    # Works with the original TimeSeriesPreprocessor segmented windows
+    # def __getitem__(self, idx):
+    #     # Get the node_id and window_idx for this sample
+    #     node_id, window_idx = self.sample_indices[idx]
+
+    #     # Get node index in adjacency matrix
+    #     node_idx = self.node_ids.index(node_id)
+
+    #     # Get input window (history) and target window (future)
+    #     x_window = self.X_by_sensor[node_id][
+    #         window_idx, : self.window_size - self.horizon
+    #     ]
+    #     x_mask = self.masks_by_sensor[node_id][
+    #         window_idx, : self.window_size - self.horizon
+    #     ]
+
+    #     y_window = self.X_by_sensor[node_id][window_idx, -self.horizon :]
+    #     y_mask = self.masks_by_sensor[node_id][window_idx, -self.horizon :]
+
+    #     return {
+    #         "x": torch.FloatTensor(x_window),
+    #         "x_mask": torch.FloatTensor(x_mask),
+    #         "y": torch.FloatTensor(y_window),
+    #         "y_mask": torch.FloatTensor(y_mask),
+    #         "node_idx": node_idx,
+    #         "adj": self.adj_matrix,
+    #     }
 
     def __getitem__(self, idx):
-        # Get the node_id and window_idx for this sample
-        node_id, window_idx = self.sample_indices[idx]
+        """
+        Get data for window index idx across all sensors.
 
-        # Get node index in adjacency matrix
-        node_idx = self.node_ids.index(node_id)
+        Returns all sensors' data for this window to represent a system snapshot.
+        """
+        # idx now represents a window index, not a (node_id, window_idx) pair
+        window_idx = idx
 
-        # Get input window (history) and target window (future)
-        x_window = self.X_by_sensor[node_id][
-            window_idx, : self.window_size - self.horizon
-        ]
-        x_mask = self.masks_by_sensor[node_id][
-            window_idx, : self.window_size - self.horizon
-        ]
+        # Create tensors for all nodes at this window idx
+        x_windows = []
+        x_masks = []
+        y_windows = []
+        y_masks = []
+        node_indices = []
 
-        y_window = self.X_by_sensor[node_id][window_idx, -self.horizon :]
-        y_mask = self.masks_by_sensor[node_id][window_idx, -self.horizon :]
+        for i, node_id in enumerate(self.node_ids):
+            if node_id in self.X_by_sensor and window_idx < len(
+                self.X_by_sensor[node_id]
+            ):
+                # Get input window and masks
+                x_window = self.X_by_sensor[node_id][
+                    window_idx, : self.window_size - self.horizon
+                ]
+                x_mask = self.masks_by_sensor[node_id][
+                    window_idx, : self.window_size - self.horizon
+                ]
+
+                # Get target window and masks
+                y_window = self.X_by_sensor[node_id][window_idx, -self.horizon :]
+                y_mask = self.masks_by_sensor[node_id][window_idx, -self.horizon :]
+
+                x_windows.append(torch.FloatTensor(x_window))
+                x_masks.append(torch.FloatTensor(x_mask))
+                y_windows.append(torch.FloatTensor(y_window))
+                y_masks.append(torch.FloatTensor(y_mask))
+                node_indices.append(i)
+
+        # Stack into tensors [num_nodes, seq_len]
+        x = torch.stack(x_windows)
+        x_mask = torch.stack(x_masks)
+        y = torch.stack(y_windows)
+        y_mask = torch.stack(y_masks)
 
         return {
-            "x": torch.FloatTensor(x_window),
-            "x_mask": torch.FloatTensor(x_mask),
-            "y": torch.FloatTensor(y_window),
-            "y_mask": torch.FloatTensor(y_mask),
-            "node_idx": node_idx,
+            "x": x,
+            "x_mask": x_mask,
+            "y": y,
+            "y_mask": y_mask,
+            "node_indices": torch.tensor(node_indices),
             "adj": self.adj_matrix,
         }
 
 
 def collate_fn(batch):
     """
-    Custom collate function that creates batches of multiple time windows,
-    each containing data for all nodes present in the batch.
-
-    Parameters:
-    ----------
-    batch : List[Dict]
-        List of samples from the dataset.
-
-    Returns:
-    -------
-    Dict
-        x : Tensor [batch_size, num_nodes, seq_len, 1]
-        x_mask : Tensor [batch_size, num_nodes, seq_len, 1]
-        y : Tensor [batch_size, num_nodes, horizon, 1]
-        y_mask : Tensor [batch_size, num_nodes, horizon, 1]
-        node_indices : Tensor [num_nodes]
-        adj : Tensor [num_nodes, num_nodes]
+    Custom collate function for batching system snapshots.
+    Each item in the batch already contains all sensors for a specific time window.
     """
-    # Get all unique node indices in this batch
-    all_node_indices = sorted(list(set(item["node_idx"] for item in batch)))
-    node_idx_map = {idx: i for i, idx in enumerate(all_node_indices)}
+    # Extract tensors from batch
+    x = torch.stack([item["x"] for item in batch])
+    x_mask = torch.stack([item["x_mask"] for item in batch])
+    y = torch.stack([item["y"] for item in batch])
+    y_mask = torch.stack([item["y_mask"] for item in batch])
 
-    # Get window dimensions
-    seq_len = len(batch[0]["x"])
-    horizon = len(batch[0]["y"])
-
-    # Group samples by window_idx
-    # We'll use the relative position in the batch to create window groups
-    # This way, we'll create multiple windows in a batch
-    max_windows_per_batch = 32  # Maximum windows in a batch
-    window_groups = {}
-
-    for i, item in enumerate(batch):
-        # Assign a window group based on position in batch
-        window_group = i % max_windows_per_batch
-        if window_group not in window_groups:
-            window_groups[window_group] = []
-        window_groups[window_group].append(item)
-
-    # Calculate batch dimensions
-    batch_size = len(window_groups)
-    num_nodes = len(all_node_indices)
-
-    # print(f"DEBUG: Creating batch with dimensions: {batch_size} windows, {num_nodes} nodes")
-
-    # Initialize tensors with proper dimensions
-    x = torch.full((batch_size, num_nodes, seq_len, 1), -1.0)
-    x_mask = torch.zeros((batch_size, num_nodes, seq_len, 1))
-    y = torch.full((batch_size, num_nodes, horizon, 1), -1.0)
-    y_mask = torch.zeros((batch_size, num_nodes, horizon, 1))
-
-    # Fill tensors
-    for batch_idx, items in enumerate(window_groups.values()):
-        for item in items:
-            node_pos = node_idx_map[item["node_idx"]]
-
-            # Add data and masks (add feature dimension)
-            x[batch_idx, node_pos, :, 0] = item["x"]
-            x_mask[batch_idx, node_pos, :, 0] = item["x_mask"]
-            y[batch_idx, node_pos, :, 0] = item["y"]
-            y_mask[batch_idx, node_pos, :, 0] = item["y_mask"]
-
-    # Extract adjacency for these specific nodes
+    # Use the first item's adjacency matrix and node indices
     adj = batch[0]["adj"]
-    batch_adj = adj[all_node_indices][:, all_node_indices]
+    node_indices = batch[0]["node_indices"]
 
     return {
-        "x": x,
-        "x_mask": x_mask,
-        "y": y,
-        "y_mask": y_mask,
-        "node_indices": torch.tensor(all_node_indices),
-        "adj": batch_adj,
+        "x": x,  # [batch_size, num_nodes, seq_len, 1]
+        "x_mask": x_mask,  # [batch_size, num_nodes, seq_len, 1]
+        "y": y,  # [batch_size, num_nodes, horizon, 1]
+        "y_mask": y_mask,  # [batch_size, num_nodes, horizon, 1]
+        "node_indices": node_indices,
+        "adj": adj,
     }
 
 

@@ -21,6 +21,7 @@ def preprocess_data(
     horizon=6,
     stride=1,
     batch_size=32,
+    standardize=True,
     sigma_squared=0.1,
     epsilon=0.5,
 ):
@@ -70,8 +71,8 @@ def preprocess_data(
         missing_value=-1.0,
     )
 
-    X_by_sensor, masks_by_sensor, metadata_by_sensor = processor.create_windows(
-        resampled_data
+    X_by_sensor, masks_by_sensor, metadata_by_sensor = (
+        processor.create_windows_from_grid(resampled_data, standardize=standardize)
     )
 
     # Get list of sensors with valid windows

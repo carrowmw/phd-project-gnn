@@ -1,6 +1,7 @@
 Directory structure:
 └── gnn_package/
     ├── __init__.py
+    ├── __main__.py
     ├── digester.sh
     ├── config/
     │   ├── __init__.py
@@ -58,6 +59,12 @@ from .src import models
 from .src import training
 
 __all__ = ["paths", "data_utils", "preprocessing", "dataloaders", "models", "training"]
+
+
+
+================================================
+File: __main__.py
+================================================
 
 
 
@@ -2412,119 +2419,6 @@ class TimeSeriesPreprocessor:
         self.gap_threshold = gap_threshold
         self.missing_value = missing_value
 
-    # Change __getitem__ to work with the old segmented windows method
-    # def find_continuous_segments(
-    #     self, time_index: pd.DatetimeIndex, values: np.ndarray
-    # ) -> List[Tuple[int, int]]:
-    #     """
-    #     Find continuous segments of data without gaps.
-
-    #     Returns list of (start_idx, end_idx) tuples.
-    #     """
-    #     segments = []
-    #     start_idx = 0
-
-    #     for i in range(1, len(time_index)):
-    #         time_diff = time_index[i] - time_index[i - 1]
-
-    #         # Check for gaps in time or values
-    #         if (time_diff > self.gap_threshold) or (
-    #             np.isnan(values[i - 1]) or np.isnan(values[i])
-    #         ):
-    #             if i - start_idx >= self.window_size:
-    #                 segments.append((start_idx, i))
-    #             start_idx = i
-
-    #     # Add the last segment if it's long enough
-    #     if len(time_index) - start_idx >= self.window_size:
-    #         segments.append((start_idx, len(time_index)))
-
-    #     return segments
-
-    # def create_windows_from_segments(
-    #     self,
-    #     time_series_dict: Dict[str, pd.Series],
-    #     standardize: bool = True,
-    # ) -> Tuple[
-    #     Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, List[TimeWindow]]
-    # ]:
-    #     """
-    #     Create windowed data with masks for missing values.
-
-    #     Parameters:
-    #     -----------
-    #     time_series_dict : Dict[str, pd.Series]
-    #         Dictionary mapping node IDs to their time series
-    #     standardize : bool
-    #         Whether to standardize the data
-
-    #     Returns:
-    #     --------
-    #     X_by_sensor : Dict[str, np.ndarray]
-    #         Dictionary mapping node IDs to their windowed arrays
-    #             Array of shape (n_windows, n_nodes, window_size)
-    #     masks_by_sensor : Dict[str, np.ndarray]
-    #         Dictionary mapping node IDs to their binary masks
-    #     metadata : Dict[str,List[TimeWindow]
-    #         Metadata for each window
-    #     """
-    #     X_by_sensor = {}
-    #     masks_by_sensor = {}
-    #     metadata_by_sensor = {}
-
-    #     # Process each node's time series
-    #     for node_id, series in time_series_dict.items():
-    #         # Initialize lists for this node
-    #         sensor_windows = []
-    #         sensor_masks = []
-    #         sensor_metadata = []
-
-    #         # Find continuous segments
-    #         segments = self.find_continuous_segments(series.index, series.values)
-
-    #         # Process each segment
-    #         for start_seg, end_seg in segments:
-    #             segment_values = series.values[start_seg:end_seg]
-
-    #             if standardize:
-    #                 # Standardize non-missing values
-    #                 valid_mask = ~np.isnan(segment_values)
-    #                 valid_values = segment_values[valid_mask]
-    #                 if len(valid_values) > 0:
-    #                     mean = np.mean(valid_values)
-    #                     std = np.std(valid_values)
-    #                     segment_values = (segment_values - mean) / (std + 1e-8)
-
-    #             # Create windows for this segment
-    #             for i in range(
-    #                 0, len(segment_values) - self.window_size + 1, self.stride
-    #             ):
-    #                 window = segment_values[i : i + self.window_size]
-    #                 mask = ~np.isnan(window)
-
-    #                 # Replace NaN with missing_value
-    #                 window = np.where(mask, window, self.missing_value)
-
-    #                 sensor_windows.append(window)
-    #                 sensor_masks.append(mask)
-
-    #                 sensor_metadata.append(
-    #                     TimeWindow(
-    #                         start_idx=start_seg + i,
-    #                         end_idx=start_seg + i + self.window_size,
-    #                         node_id=node_id,
-    #                         mask=mask,
-    #                     )
-    #                 )
-
-    #             # Only add if we found windows for this sensor
-    #             if sensor_windows:
-    #                 X_by_sensor[node_id] = np.array(sensor_windows)
-    #                 masks_by_sensor[node_id] = np.array(sensor_masks)
-    #                 metadata_by_sensor[node_id] = sensor_metadata
-
-    #     return X_by_sensor, masks_by_sensor, metadata_by_sensor
-
     def create_windows_from_grid(
         self,
         time_series_dict: Dict[str, pd.Series],
@@ -2583,11 +2477,14 @@ class TimeSeriesPreprocessor:
                 end_idx = start_idx + self.window_size
                 window = common_series.iloc[start_idx:end_idx].values
 
-                # Create mask (True where data exists)
-                mask = ~np.isnan(window)
+                # Check for unexpected NaN values
+                if np.any(np.isnan(window)):
+                    raise ValueError(
+                        "Found NaN values in input data that should have been replaced already"
+                    )
 
-                # Replace NaN with missing_value
-                window = np.where(mask, window, self.missing_value)
+                # Create mask based ONLY on -1.0 values
+                mask = window != self.missing_value
 
                 # Standardize if requested
                 if standardize and np.any(mask):
