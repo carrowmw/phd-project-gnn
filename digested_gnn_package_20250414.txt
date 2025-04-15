@@ -738,7 +738,16 @@ class GraphConvolution(nn.Module):
         x: Node features [batch_size, num_nodes, in_features] or [batch_size, in_features]
         adj: Adjacency matrix [num_nodes, num_nodes]
         mask: Mask for valid values [batch_size, num_nodes, 1] or [batch_size, 1]
+
+        Returns:
+        --------
+        Tensor of shape [batch_size, num_nodes, out_features]
         """
+        # Print shapes for debugging
+        print(f"GraphConvolution input shapes - x: {x.shape}, adj: {adj.shape}")
+        if mask is not None:
+            print(f"mask shape: {mask.shape}")
+
         # First, we need to handle missing values (marked as -1)
         # Create a binary mask where 1 = valid data, 0 = missing data (-1)
         missing_mask = (x != -1.0).float()
@@ -753,10 +762,20 @@ class GraphConvolution(nn.Module):
         else:
             combined_mask = missing_mask
 
-        # Transform node features
-        support = torch.matmul(x_masked, self.weight)
+        # Check if we're dealing with batched input
+        is_batched = len(x.shape) == 3
 
-        # Propagate using normalized adjacency matrix
+        if is_batched:
+            batch_size, num_nodes, in_features = x.shape
+        else:
+            num_nodes, in_features = x.shape
+
+        # Check that adjacency matrix dimensions match num_nodes
+        if adj.shape[0] != num_nodes:
+            raise ValueError(
+                f"Adjacency matrix dimension ({adj.shape[0]}) doesn't match number of nodes ({num_nodes})"
+            )
+
         # Add identity to allow self-loops
         adj_with_self = adj + torch.eye(adj.size(0), device=adj.device)
 
@@ -769,11 +788,46 @@ class GraphConvolution(nn.Module):
             torch.matmul(d_mat_inv_sqrt, adj_with_self), d_mat_inv_sqrt
         )
 
-        # Propagate node features using normalized adjacency
-        output = torch.matmul(normalized_adj, support)
+        # Transform node features differently depending on whether we have batched input
+        if is_batched:
+            # Handle batched data - need to process each batch separately
+            outputs = []
 
-        # Re-apply mask to ensure missing values stay missing
-        output = output * combined_mask
+            for b in range(batch_size):
+                # Extract features for this batch
+                batch_features = x_masked[b]  # [num_nodes, in_features]
+
+                # Transform node features
+                batch_support = torch.matmul(
+                    batch_features, self.weight
+                )  # [num_nodes, out_features]
+
+                # Propagate using normalized adjacency
+                batch_output = torch.matmul(
+                    normalized_adj, batch_support
+                )  # [num_nodes, out_features]
+
+                # Add to outputs
+                outputs.append(batch_output)
+
+            # Stack back to batched tensor
+            output = torch.stack(
+                outputs, dim=0
+            )  # [batch_size, num_nodes, out_features]
+
+            # Re-apply mask
+            if mask is not None:
+                output = output * combined_mask
+        else:
+            # Transform node features
+            support = torch.matmul(x_masked, self.weight)  # [num_nodes, out_features]
+
+            # Propagate using normalized adjacency
+            output = torch.matmul(normalized_adj, support)  # [num_nodes, out_features]
+
+            # Re-apply mask
+            if mask is not None:
+                output = output * combined_mask
 
         # Add bias if needed
         if self.bias is not None:
@@ -854,9 +908,19 @@ class TemporalGCN(nn.Module):
         """
         x: Node features [batch_size, num_nodes, seq_len, input_dim]
         adj: Adjacency matrix [num_nodes, num_nodes]
-        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim]
+        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim] or [batch_size, num_nodes, seq_len]
         """
         batch_size, num_nodes, seq_len, features = x.size()
+
+        # Handle mask dimensions
+        if mask is not None:
+            # If mask has 3 dimensions [batch, nodes, seq_len], expand to 4
+            if len(mask.shape) == 3:
+                mask = mask.unsqueeze(-1)  # Add feature dimension
+
+                # If we need to match multiple features
+                if features > 1:
+                    mask = mask.expand(-1, -1, -1, features)
 
         # Process each time step through the GCN layers
         outputs = []
@@ -2632,15 +2696,32 @@ def resample_sensor_data(time_series_dict, freq="15min", fill_value=-1.0):
 File: src/training/__init__.py
 ================================================
 from .stgnn_training import preprocess_data, train_model
+from .stgnn_prediction import (
+    load_model,
+    fetch_recent_data,
+    plot_predictions,
+    predict_all_sensors,
+    predict_with_model,
+    format_predictions,
+)
 
-__all__ = ["preprocess_data", "train_model"]
+__all__ = [
+    "preprocess_data",
+    "train_model",
+    "load_model",
+    "fetch_recent_data",
+    "plot_predictions",
+    "predict_all_sensors",
+    "predict_with_model",
+    "format_predictions",
+]
 
 
 
 ================================================
 File: src/training/stgnn_prediction.py
 ================================================
-# gnn_package/src/models/predict.py
+# gnn_package/src/models/prediction.py
 
 import torch
 import numpy as np
@@ -2648,13 +2729,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 
-from gnn_package.src.preprocessing import (
-    load_graph_data,
-    compute_adjacency_matrix,
-    SensorDataFetcher,
-    TimeSeriesPreprocessor,
-    get_sensor_name_id_map,
+from private_uoapi import (
+    LSConfig,
+    LSAuth,
+    LightsailWrapper,
+    DateRangeParams,
+    convert_to_dataframe,
 )
+
+from gnn_package.src import training
+from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 from gnn_package.src.models.stgnn import create_stgnn_model
 
 
@@ -2688,143 +2772,92 @@ def load_model(
     return model
 
 
-def fetch_recent_data(node_ids, days_back=1, window_size=24):
+async def fetch_recent_data(node_ids, days_back=1, window_size=24, horizon=6):
     """
-    Fetch recent data for prediction
-
-    Parameters:
-    -----------
-    node_ids : list
-        List of node IDs to fetch data for
-    days_back : int
-        Number of days of historical data to fetch
-    window_size : int
-        Size of the input window for the model
-
-    Returns:
-    --------
-    Dict containing preprocessed data for prediction
+    Fetch recent data for prediction from the Urban Observatory API
+    using the same preprocessing pipeline as training data
     """
-    # Fetch sensor data
-    fetcher = SensorDataFetcher()
-    response = fetcher.get_sensor_data_batch(node_ids, days_back=days_back)
+    print(f"Fetching recent data for {len(node_ids)} nodes, {days_back} days back")
 
-    print(f"Fetched data for {len(response.data)} nodes")
-    print(
-        f"API Stats: {response.stats.successful_calls} successful, {response.stats.failed_calls} failed"
+    # Initialize API client
+    config = LSConfig()
+    auth = LSAuth(config)
+    client = LightsailWrapper(config, auth)
+
+    # Get sensor name to ID mapping (and reverse it for lookup)
+    name_id_map = get_sensor_name_id_map()
+    id_to_name_map = {v: k for k, v in name_id_map.items()}
+
+    # Determine date range for API request
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days_back)
+
+    # Create date range parameters
+    date_range_params = DateRangeParams(
+        start_date=start_date,
+        end_date=end_date,
+        max_date_range=timedelta(days=days_back + 1),  # Add buffer
     )
 
-    # Filter out empty results
-    time_series_dict = {
-        node_id: data for node_id, data in response.data.items() if data is not None
-    }
-    print(f"Nodes with valid data: {len(time_series_dict)}/{len(node_ids)}")
+    # Fetch data from API
+    print(f"Querying API for data from {start_date} to {end_date}")
+    count_data = await client.get_traffic_data(date_range_params)
+    counts_df = convert_to_dataframe(count_data)
 
-    # Create windows for time series
-    processor = TimeSeriesPreprocessor(
+    # Create time series dictionary
+    time_series_dict = {}
+    successful_nodes = 0
+
+    for node_id in node_ids:
+        # Look up location name for this node ID
+        location = id_to_name_map.get(node_id)
+        if not location:
+            print(f"Warning: No location found for node ID {node_id}")
+            continue
+
+        # Filter data for this location
+        df = counts_df[counts_df["location"] == location]
+
+        if df.empty:
+            print(f"No data found for node {node_id} (location: {location})")
+            continue
+
+        # Create time series
+        series = pd.Series(df["value"].values, index=df["dt"])
+
+        # Remove duplicates
+        series = series[~series.index.duplicated(keep="first")]
+
+        # Store in dictionary
+        time_series_dict[node_id] = series
+        successful_nodes += 1
+
+    print(f"Successfully fetched data for {successful_nodes}/{len(node_ids)} nodes")
+
+    # If no data was fetched, return early
+    if not time_series_dict:
+        print("No valid data fetched from API")
+        return {
+            "windows": {},
+            "masks": {},
+            "time_series": {},
+        }
+
+    # Use the same preprocessing pipeline as training
+    data_loaders = training.preprocess_data(
+        data=time_series_dict,  # Pass the data directly instead of a file
+        graph_prefix="25022025_test",  # Use the same graph prefix
         window_size=window_size,
-        stride=1,
-        gap_threshold=pd.Timedelta(minutes=15),
-        missing_value=-1.0,
+        horizon=horizon,
+        batch_size=1,  # Small batch size for prediction
+        standardize=True,  # Same standardization as training
     )
 
-    X_by_sensor, masks_by_sensor, metadata_by_sensor = processor.create_windows(
-        time_series_dict
-    )
-
-    # Get the most recent window for each sensor
-    latest_windows = {}
-    latest_masks = {}
-    time_indices = {}
-
-    for node_id in X_by_sensor:
-        if len(X_by_sensor[node_id]) > 0:
-            # Get the last window
-            latest_windows[node_id] = X_by_sensor[node_id][-1:]
-            latest_masks[node_id] = masks_by_sensor[node_id][-1:]
-
-            # Get time index information for this window
-            metadata = metadata_by_sensor[node_id][-1]
-            time_indices[node_id] = metadata
-
+    # Return a dict with the processed data
     return {
-        "windows": latest_windows,
-        "masks": latest_masks,
-        "metadata": time_indices,
+        "data_loaders": data_loaders,
         "time_series": time_series_dict,
     }
-
-
-def make_prediction(model, data, adj_matrix, node_ids, device=None):
-    """
-    Make predictions with the trained model
-
-    Parameters:
-    -----------
-    model : STGNN
-        Trained model
-    data : dict
-        Dict containing preprocessed data as returned by fetch_recent_data
-    adj_matrix : numpy.ndarray
-        Adjacency matrix for the graph
-    node_ids : list
-        List of node IDs
-    device : torch.device
-        Device to use for inference
-
-    Returns:
-    --------
-    Dict containing predictions and related information
-    """
-    if device is None:
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-
-    model.to(device)
-    model.eval()
-
-    # Prepare input data
-    all_inputs = []
-    all_masks = []
-    valid_nodes = []
-
-    for i, node_id in enumerate(node_ids):
-        if node_id in data["windows"]:
-            x = torch.FloatTensor(data["windows"][node_id])
-            mask = torch.FloatTensor(data["masks"][node_id])
-
-            all_inputs.append(x)
-            all_masks.append(mask)
-            valid_nodes.append(node_id)
-
-    if not all_inputs:
-        raise ValueError("No valid input data for prediction")
-
-    # Concatenate all inputs
-    x = torch.cat(all_inputs, dim=0)
-    mask = torch.cat(all_masks, dim=0)
-
-    # Convert to tensors and move to device
-    x = x.to(device)
-    mask = mask.to(device)
-    adj = torch.FloatTensor(adj_matrix).to(device)
-
-    # Add batch dimension if needed
-    if len(x.shape) == 2:
-        x = x.unsqueeze(0)
-        mask = mask.unsqueeze(0)
-
-    # For STGNN model, reshape input to [batch, nodes, time, features]
-    if len(x.shape) == 3:
-        x = x.unsqueeze(-1)  # Add feature dimension
-
-    # Make prediction
-    with torch.no_grad():
-        predictions = model(x, adj, mask)
-
-    # Move predictions to CPU
-    predictions = predictions.cpu().numpy()
-
-    return {"predictions": predictions, "valid_nodes": valid_nodes}
 
 
 def plot_predictions(predictions, data, node_ids, name_id_map=None):
@@ -2895,118 +2928,179 @@ def plot_predictions(predictions, data, node_ids, name_id_map=None):
     return fig
 
 
-def predict_all_sensors(model_path, graph_prefix, output_file=None, plot=True):
+async def predict_all_sensors(model_path, graph_prefix, output_file=None, plot=True):
     """
-    Make predictions for all available sensors
-
-    Parameters:
-    -----------
-    model_path : str
-        Path to the saved model
-    graph_prefix : str
-        Prefix for the graph data files
-    output_file : str, optional
-        Path to save predictions
-    plot : bool
-        Whether to generate and display plots
-
-    Returns:
-    --------
-    Dict containing predictions and related information
+    Make predictions for all available sensors using consistent preprocessing
     """
-    # Load graph data
-    adj_matrix, node_ids, metadata = load_graph_data(
-        prefix=graph_prefix, return_df=False
+    # Load model
+    print(f"Loading model from: {model_path}")
+    model = load_model(model_path)
+    print(f"Model loaded successfully")
+
+    # Fetch and preprocess recent data
+    print(f"Fetching and preprocessing recent data")
+    data = await fetch_recent_data(
+        node_ids=None,  # Fetch all available nodes
+        days_back=1,
+        window_size=24,
+        horizon=model.horizon,
     )
 
-    # Compute graph weights
-    weighted_adj = compute_adjacency_matrix(adj_matrix, sigma_squared=0.1, epsilon=0.5)
+    # Extract preprocessed data
+    data_loaders = data["data_loaders"]
+    time_series = data["time_series"]
 
-    # Load model
-    model = load_model(model_path)
+    # The adjacency matrix and node_ids are now consistent with the training data
+    adj_matrix = data_loaders["adj_matrix"]
+    node_ids = data_loaders["node_ids"]
 
-    # Fetch recent data
-    data = fetch_recent_data(node_ids, days_back=1, window_size=model.horizon)
+    print(f"Preprocessed data for {len(node_ids)} nodes")
 
-    # Get valid nodes for prediction
-    valid_nodes = list(data["windows"].keys())
+    # Make predictions using the validation dataloader
+    predictions = predict_with_model(model, data_loaders["val_loader"])
 
-    if not valid_nodes:
-        print("No valid data for prediction")
-        return None
-
-    # Create filtered adjacency matrix
-    valid_indices = [node_ids.index(nid) for nid in valid_nodes if nid in node_ids]
-    filtered_adj = weighted_adj[valid_indices, :][:, valid_indices]
-    filtered_nodes = [node_ids[idx] for idx in valid_indices]
-
-    # Make predictions
-    results = make_prediction(model, data, filtered_adj, filtered_nodes)
-
-    # Get mapping from ID to name
-    id_to_name = get_sensor_name_id_map()
-    id_to_name = {v: k for k, v in id_to_name.items()}
-
-    # Format predictions
-    preds = results["predictions"]
-    pred_nodes = results["valid_nodes"]
-
-    # Create results dataframe
-    last_times = {
-        node_id: data["time_series"][node_id].index[-1] for node_id in pred_nodes
-    }
-
-    # Convert predictions to dataframe
-    all_rows = []
-
-    for i, node_id in enumerate(pred_nodes):
-        node_preds = preds[i, 0, :, 0]  # [node_idx, batch=0, time, feature=0]
-        last_time = last_times[node_id]
-
-        for t, value in enumerate(node_preds):
-            future_time = last_time + timedelta(minutes=15 * (t + 1))
-
-            row = {
-                "node_id": node_id,
-                "sensor_name": id_to_name.get(node_id, ""),
-                "timestamp": future_time,
-                "prediction": value,
-                "horizon": t + 1,
-            }
-            all_rows.append(row)
-
-    results_df = pd.DataFrame(all_rows)
+    # Format results
+    results_df = format_predictions(predictions, time_series, node_ids)
 
     # Save to file if requested
-    if output_file:
+    if output_file and not results_df.empty:
         results_df.to_csv(output_file, index=False)
         print(f"Predictions saved to {output_file}")
 
     # Plot if requested
-    if plot:
-        fig = plot_predictions(results, data, filtered_nodes, id_to_name)
+    if plot and not results_df.empty:
+        fig = plot_predictions(predictions, time_series, node_ids)
         plt.show()
 
-    return {"predictions": results, "dataframe": results_df, "data": data}
+    return {
+        "predictions": predictions,
+        "dataframe": results_df,
+        "data": data,
+        "node_ids": node_ids,
+    }
 
 
-if __name__ == "__main__":
-    # Example usage
-    predictions = predict_all_sensors(
-        model_path="stgnn_model.pth",
-        graph_prefix="traffic_graph",
-        output_file="predictions.csv",
-        plot=True,
-    )
+def predict_with_model(model, dataloader, device=None):
+    """
+    Make predictions using a trained model and a dataloader.
 
-    # Print summary
-    if predictions:
-        df = predictions["dataframe"]
-        print(f"Generated {len(df)} predictions for {df['node_id'].nunique()} sensors")
+    Parameters:
+    -----------
+    model : STGNN
+        The trained model
+    dataloader : DataLoader
+        DataLoader containing the data to predict on
+    device : torch.device, optional
+        Device to use for inference
 
-        # Show prediction ranges
-        print("\nPrediction summary stats:")
-        print(df.groupby("horizon")["prediction"].describe())
+    Returns:
+    --------
+    dict
+        Dictionary containing predictions and metadata
+    """
+    if device is None:
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+    model.to(device)
+    model.eval()
+
+    # Get a single batch from the dataloader
+    # For prediction, we typically use just the most recent window
+    batch = next(iter(dataloader))
+
+    # Move data to device
+    x = batch["x"].to(device)
+    x_mask = batch["x_mask"].to(device)
+    adj = batch["adj"].to(device)
+
+    print(f"Input shapes - x: {x.shape}, x_mask: {x_mask.shape}, adj: {adj.shape}")
+
+    # Make prediction
+    with torch.no_grad():
+        predictions = model(x, adj, x_mask)
+
+    # Convert to numpy for easier handling
+    predictions_np = predictions.cpu().numpy()
+
+    return {
+        "predictions": predictions_np,
+        "input_data": {
+            "x": x.cpu().numpy(),
+            "x_mask": x_mask.cpu().numpy(),
+        },
+        "node_indices": batch["node_indices"].numpy(),
+    }
+
+
+def format_predictions(predictions_dict, time_series_dict, node_ids):
+    """
+    Format model predictions into a pandas DataFrame.
+
+    Parameters:
+    -----------
+    predictions_dict : dict
+        Dictionary returned by predict_with_model
+    time_series_dict : dict
+        Dictionary mapping node IDs to their original time series data
+    node_ids : list
+        List of node IDs in the order they appear in the predictions
+
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame containing formatted predictions
+    """
+    # Get prediction array and node indices
+    predictions = predictions_dict["predictions"]
+    node_indices = predictions_dict["node_indices"]
+
+    # Get name-to-ID mapping for sensor names
+    id_to_name_map = {v: k for k, v in get_sensor_name_id_map().items()}
+
+    # Create rows for the DataFrame
+    rows = []
+
+    # For each node that has predictions
+    for i, node_idx in enumerate(node_indices):
+        node_id = node_ids[node_idx]
+
+        # Skip if this node doesn't have time series data
+        if node_id not in time_series_dict:
+            continue
+
+        # Get the last timestamp from the original time series
+        series = time_series_dict[node_id]
+        last_time = series.index[-1]
+
+        # Extract predictions for this node
+        # Shape is typically [batch, nodes, horizon, features]
+        node_preds = predictions[
+            0, i, :, 0
+        ]  # First batch, node i, all horizons, first feature
+
+        # Create a row for each prediction horizon
+        for h, pred_value in enumerate(node_preds):
+            # Calculate the future timestamp
+            future_time = last_time + timedelta(minutes=15 * (h + 1))
+
+            # Create the row
+            row = {
+                "node_id": node_id,
+                "sensor_name": id_to_name_map.get(node_id, "Unknown"),
+                "timestamp": future_time,
+                "prediction": float(pred_value),  # Ensure it's a Python float
+                "horizon": h + 1,  # 1-based horizon index
+            }
+            rows.append(row)
+
+    # Create DataFrame
+    if rows:
+        return pd.DataFrame(rows)
+    else:
+        print("Warning: No predictions could be formatted")
+        return pd.DataFrame(
+            columns=["node_id", "sensor_name", "timestamp", "prediction", "horizon"]
+        )
 
 
 
@@ -3020,7 +3114,6 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from torch.utils.data import random_split
 from tqdm import tqdm, trange
 
 from gnn_package.src import preprocessing

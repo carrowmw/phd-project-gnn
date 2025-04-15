@@ -5,7 +5,6 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from torch.utils.data import random_split
 from tqdm import tqdm, trange
 
 from gnn_package.src import preprocessing

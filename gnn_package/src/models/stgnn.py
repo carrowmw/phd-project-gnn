@@ -44,7 +44,16 @@ class GraphConvolution(nn.Module):
         x: Node features [batch_size, num_nodes, in_features] or [batch_size, in_features]
         adj: Adjacency matrix [num_nodes, num_nodes]
         mask: Mask for valid values [batch_size, num_nodes, 1] or [batch_size, 1]
+
+        Returns:
+        --------
+        Tensor of shape [batch_size, num_nodes, out_features]
         """
+        # Print shapes for debugging
+        # print(f"DEBUG: GraphConvolution input shapes - x: {x.shape}, adj: {adj.shape}")
+        # if mask is not None:
+        #     print(f"DEBUG: mask shape: {mask.shape}")
+
         # First, we need to handle missing values (marked as -1)
         # Create a binary mask where 1 = valid data, 0 = missing data (-1)
         missing_mask = (x != -1.0).float()
@@ -59,10 +68,20 @@ class GraphConvolution(nn.Module):
         else:
             combined_mask = missing_mask
 
-        # Transform node features
-        support = torch.matmul(x_masked, self.weight)
+        # Check if we're dealing with batched input
+        is_batched = len(x.shape) == 3
 
-        # Propagate using normalized adjacency matrix
+        if is_batched:
+            batch_size, num_nodes, in_features = x.shape
+        else:
+            num_nodes, in_features = x.shape
+
+        # Check that adjacency matrix dimensions match num_nodes
+        if adj.shape[0] != num_nodes:
+            raise ValueError(
+                f"Adjacency matrix dimension ({adj.shape[0]}) doesn't match number of nodes ({num_nodes})"
+            )
+
         # Add identity to allow self-loops
         adj_with_self = adj + torch.eye(adj.size(0), device=adj.device)
 
@@ -75,11 +94,46 @@ class GraphConvolution(nn.Module):
             torch.matmul(d_mat_inv_sqrt, adj_with_self), d_mat_inv_sqrt
         )
 
-        # Propagate node features using normalized adjacency
-        output = torch.matmul(normalized_adj, support)
+        # Transform node features differently depending on whether we have batched input
+        if is_batched:
+            # Handle batched data - need to process each batch separately
+            outputs = []
 
-        # Re-apply mask to ensure missing values stay missing
-        output = output * combined_mask
+            for b in range(batch_size):
+                # Extract features for this batch
+                batch_features = x_masked[b]  # [num_nodes, in_features]
+
+                # Transform node features
+                batch_support = torch.matmul(
+                    batch_features, self.weight
+                )  # [num_nodes, out_features]
+
+                # Propagate using normalized adjacency
+                batch_output = torch.matmul(
+                    normalized_adj, batch_support
+                )  # [num_nodes, out_features]
+
+                # Add to outputs
+                outputs.append(batch_output)
+
+            # Stack back to batched tensor
+            output = torch.stack(
+                outputs, dim=0
+            )  # [batch_size, num_nodes, out_features]
+
+            # Re-apply mask
+            if mask is not None:
+                output = output * combined_mask
+        else:
+            # Transform node features
+            support = torch.matmul(x_masked, self.weight)  # [num_nodes, out_features]
+
+            # Propagate using normalized adjacency
+            output = torch.matmul(normalized_adj, support)  # [num_nodes, out_features]
+
+            # Re-apply mask
+            if mask is not None:
+                output = output * combined_mask
 
         # Add bias if needed
         if self.bias is not None:
@@ -160,9 +214,19 @@ class TemporalGCN(nn.Module):
         """
         x: Node features [batch_size, num_nodes, seq_len, input_dim]
         adj: Adjacency matrix [num_nodes, num_nodes]
-        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim]
+        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim] or [batch_size, num_nodes, seq_len]
         """
         batch_size, num_nodes, seq_len, features = x.size()
+
+        # Handle mask dimensions
+        if mask is not None:
+            # If mask has 3 dimensions [batch, nodes, seq_len], expand to 4
+            if len(mask.shape) == 3:
+                mask = mask.unsqueeze(-1)  # Add feature dimension
+
+                # If we need to match multiple features
+                if features > 1:
+                    mask = mask.expand(-1, -1, -1, features)
 
         # Process each time step through the GCN layers
         outputs = []
