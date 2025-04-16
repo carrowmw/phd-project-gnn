@@ -12,6 +12,7 @@ from private_uoapi import (
     convert_to_dataframe,
 )
 from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
+from gnn_package.config import get_config
 
 
 def load_sensor_data(data_file):
@@ -45,8 +46,34 @@ def load_sensor_data(data_file):
 
 
 async def fetch_and_save_sensor_data(
-    data_file, days_back=7, start_date=None, end_date=None
+    data_file,
+    days_back=None,
+    start_date=None,
+    end_date=None,
+    config=None,
 ):
+    """
+    Fetch sensor data from API and save to file.
+
+    Parameters:
+    -----------
+    data_file : str
+        Path where to save the data
+    days_back : int, optional
+        Number of days of historical data to fetch, overrides config if provided
+    start_date, end_date : datetime, optional
+        Specific date range to fetch, overrides days_back if provided
+    config : ExperimentConfig, optional
+        Centralized configuration object
+    """
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    # Use parameter or config value
+    if days_back is None:
+        days_back = config.data.days_back
+
     print(f"Fetching sensor data from API")
 
     # Initialize API client

@@ -1,0 +1,6 @@
+artifact_location: file:///Users/administrator/Code/python/phd-project-gnn/results/tuning/tuning_test_data_1mnth_20250415_191756/stage_1/mlruns/882293688297808275
+creation_time: 1744741076470
+experiment_id: '882293688297808275'
+last_update_time: 1744741076470
+lifecycle_stage: active
+name: tuning_test_data_1mnth_20250415_191756_stage_1

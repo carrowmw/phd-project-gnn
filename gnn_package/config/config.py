@@ -32,6 +32,29 @@ class DataConfig:
     days_back: int = 14
     stride: int = 1
     gap_threshold_minutes: int = 15
+    standardize: bool = True
+    sigma_squared: float = 0.1
+    epsilon: float = 0.5
+    normalization_factor: int = 10000
+    max_distance: float = 100.0  # For connected components
+    tolerance_decimal_places: int = 6  # For coordinate comparison
+    resampling_frequency: str = "15min"
+    missing_value: float = -1.0
+    sensor_id_prefix: str = "1"  # Added for sensor ID formatting
+    bbox_coords: List[float] = field(
+        default_factory=lambda: [
+            [-1.65327, 54.93188],
+            [-1.54993, 54.93188],
+            [-1.54993, 55.02084],
+            [-1.65327, 55.02084],
+        ]
+    )
+    bbox_crs: str = "EPSG:4326"
+    road_network_crs: str = "EPSG:27700"
+    network_type: str = "walk"
+    custom_filter: str = """["highway"~"footway|path|pedestrian|steps|corridor|'
+        'track|service|living_street|residential|unclassified"]'
+        '["area"!~"yes"]["access"!~"private"]"""
 
     @property
     def gap_threshold(self) -> pd.Timedelta:
@@ -48,6 +71,12 @@ class ModelConfig:
     output_dim: int
     num_layers: int = 2
     dropout: float = 0.2
+    num_gc_layers: int = 2
+    use_self_loops: bool = True
+    gcn_normalization: str = "symmetric"  # "symmetric", "random_walk", or "none"
+    decoder_layers: int = 2
+    attention_heads: int = 1
+    layer_norm: bool = False
 
 
 @dataclass
@@ -59,6 +88,7 @@ class TrainingConfig:
     num_epochs: int
     patience: int
     train_val_split: float = 0.8
+    device: Optional[str] = None
 
 
 @dataclass

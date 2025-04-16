@@ -2,6 +2,7 @@ from typing import Dict, List, Tuple
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
+from gnn_package.config import get_config
 
 
 @dataclass
@@ -15,38 +16,54 @@ class TimeWindow:
 class TimeSeriesPreprocessor:
     def __init__(
         self,
-        window_size: int,
-        stride: int,
-        gap_threshold: pd.Timedelta,
-        missing_value: float = -1.0,
+        window_size=None,
+        stride=None,
+        gap_threshold=None,
+        missing_value=None,
+        config=None,
     ):
         """
         Initialize the preprocessor for handling time series with gaps.
 
         Parameters:
         -----------
-        window_size : int
-            Size of the sliding window
-        stride : int
-            Number of steps to move the window
-        gap_threshold : pd.Timedelta
-            Maximum allowed time difference between consecutive points
-            e.g., pd.Timedelta(hours=1) for hourly data
-        missing_value : float
-            Value to use for marking missing data
+        window_size : int, optional
+            Size of the sliding window, overrides config if provided
+        stride : int, optional
+            Number of steps to move the window, overrides config if provided
+        gap_threshold : pd.Timedelta, optional
+            Maximum allowed time difference between consecutive points, overrides config if provided
+        missing_value : float, optional
+            Value to use for marking missing data, overrides config if provided
+        config : ExperimentConfig, optional
+            Centralized configuration object. If not provided, will use global config.
         """
-        self.window_size = window_size
-        self.stride = stride
-        self.gap_threshold = gap_threshold
-        self.missing_value = missing_value
+        # Get configuration
+        if config is None:
+            config = get_config()
+
+        # Use parameters or config values
+        self.window_size = (
+            window_size if window_size is not None else config.data.window_size
+        )
+        self.stride = stride if stride is not None else config.data.stride
+
+        # Handle gap_threshold (either Timedelta or minutes)
+        if gap_threshold is not None:
+            self.gap_threshold = gap_threshold
+        else:
+            self.gap_threshold = pd.Timedelta(minutes=config.data.gap_threshold_minutes)
+
+        self.missing_value = (
+            missing_value if missing_value is not None else config.data.missing_value
+        )
 
     def create_windows_from_grid(
         self,
-        time_series_dict: Dict[str, pd.Series],
-        standardize: bool = True,
-    ) -> Tuple[
-        Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, List[TimeWindow]]
-    ]:
+        time_series_dict,
+        standardize=None,
+        config=None,
+    ):
         """
         Create windowed data with common time boundaries across all sensors.
 
@@ -54,8 +71,10 @@ class TimeSeriesPreprocessor:
         -----------
         time_series_dict : Dict[str, pd.Series]
             Dictionary mapping node IDs to their time series
-        standardize : bool
-            Whether to standardize the data
+        standardize : bool, optional
+            Whether to standardize the data, overrides config if provided
+        config : ExperimentConfig, optional
+            Centralized configuration object. If not provided, will use global config.
 
         Returns:
         --------
@@ -67,6 +86,22 @@ class TimeSeriesPreprocessor:
         metadata : Dict[str,List[TimeWindow]
             Metadata for each window
         """
+
+        @dataclass
+        class TimeWindow:
+            start_idx: int
+            end_idx: int
+            node_id: str
+            mask: np.ndarray  # 1 for valid data, 0 for missing
+
+        # Get configuration
+        if config is None:
+            config = get_config()
+
+        # Use parameter or config value
+        if standardize is None:
+            standardize = config.data.standardize
+
         # Find global time range
         all_timestamps = set()
         for series in time_series_dict.values():
@@ -140,55 +175,8 @@ class TimeSeriesPreprocessor:
 
         return X_by_sensor, masks_by_sensor, metadata_by_sensor
 
-    def prepare_batch_data(
-        self,
-        X_by_sensor: Dict[str, np.ndarray],
-        masks_by_sensor: Dict[str, np.ndarray],
-        adj_matrix: np.ndarray,
-        node_ids: List[str],
-    ) -> Dict[str, np.ndarray]:
-        """
-        Prepare data for GNN training.
 
-        Parameters:
-        -----------
-        X_by_sensor : Dict[str, np.ndarray]
-            Dictionary mapping sensor IDs to their window arrays
-        masks_by_sensor : Dict[str, np.ndarray]
-            Dictionary mapping sensor IDs to their mask arrays
-        adj_matrix : np.ndarray
-            Adjacency matrix
-        node_ids : List[str]
-            List of node IDs in the same order as in the adjacency matrix
-
-        Returns:
-        --------
-        dict containing:
-            - node_features: Organized time series windows
-            - adjacency: Adjacency matrix
-            - mask: Binary mask for missing values
-        """
-        # Organize features in the same order as the adjacency matrix
-        features = []
-        masks = []
-
-        for node_id in node_ids:
-            if node_id in X_by_sensor:
-                features.append(X_by_sensor[node_id])
-                masks.append(masks_by_sensor[node_id])
-            else:
-                # Handle missing sensors
-                # You might want to create a dummy placeholder or skip
-                pass
-
-        return {
-            "node_features": features,  # Now a list of arrays organized by sensor
-            "adjacency": adj_matrix,
-            "mask": masks,  # Also organized by sensor
-        }
-
-
-def resample_sensor_data(time_series_dict, freq="15min", fill_value=-1.0):
+def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=None):
     """
     Resample all sensor time series to a consistent frequency and fill gaps.
 
@@ -196,16 +184,29 @@ def resample_sensor_data(time_series_dict, freq="15min", fill_value=-1.0):
     -----------
     time_series_dict : dict
         Dictionary mapping sensor IDs to their time series data
-    freq : str
-        Pandas frequency string (e.g., '15min', '1H')
-    fill_value : float
-        Value to use for filling gaps
+    freq : str, optional
+        Pandas frequency string (e.g., '15min', '1H'), overrides config if provided
+    fill_value : float, optional
+        Value to use for filling gaps, overrides config if provided
+    config : ExperimentConfig, optional
+        Centralized configuration object. If not provided, will use global config.
 
     Returns:
     --------
     dict
         Dictionary with resampled time series
     """
+
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    # Use parameters or config values
+    if freq is None:
+        freq = config.data.resampling_frequency
+    if fill_value is None:
+        fill_value = config.data.missing_value
+
     # Find global min and max dates
     all_dates = []
     for series in time_series_dict.values():

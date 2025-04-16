@@ -15,6 +15,7 @@ from gnn_package.config.paths import (
     SENSORS_DATA_DIR,
 )
 from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
+from gnn_package.config import get_config
 
 
 def read_or_create_sensor_nodes():
@@ -45,34 +46,44 @@ def read_or_create_sensor_nodes():
         return sensors_gdf
 
 
-def get_bbox_transformed():
-    polygon_bbox = Polygon(
-        [
-            [-1.65327, 54.93188],
-            [-1.54993, 54.93188],
-            [-1.54993, 55.02084],
-            [-1.65327, 55.02084],
-        ]
-    )
-    #     polygon_bbox = Polygon(
-    #     [
-    #         [-1.61327, 54.96188],
-    #         [-1.59993, 54.96188],
-    #         [-1.59993, 54.98084],
-    #         [-1.61327, 54.98084],
-    #     ]
-    #   )
+def get_bbox_transformed(bbox_coords=None, bbox_crs=None, road_network_crs=None):
+    """
+    Create a bounding box polygon for the area of interest and transform it to the desired CRS.
+
+    Returns:
+    --------
+    GeoDataFrame: Transformed bounding box polygon
+    """
+
+    config = get_config()
+
+    # Get coordinates from the config
+    if bbox_coords is None:
+        bbox_coords = config.data.bbox_coords
+    if bbox_crs is None:
+        bbox_crs = config.data.bbox_crs
+    if road_network_crs is None:
+        road_network_crs = config.data.road_network_crs
+
+    polygon_bbox = Polygon(bbox_coords)
 
     # Create a GeoDataFrame from the bounding box polygon
-    bbox_gdf = gpd.GeoDataFrame(geometry=[polygon_bbox], crs="EPSG:4326")
+    bbox_gdf = gpd.GeoDataFrame(geometry=[polygon_bbox], crs=bbox_crs)
 
     # Assuming your road data is in British National Grid (EPSG:27700)
     # Transform the bbox to match the road data's CRS
-    bbox_transformed = bbox_gdf.to_crs("EPSG:27700")
+    bbox_transformed = bbox_gdf.to_crs(road_network_crs)
+
+    print(
+        f"get_bbox_transformed: bbox transformed from {bbox_crs} to {road_network_crs}"
+    )
+
     return bbox_transformed
 
 
-def get_street_network_gdfs(place_name, to_crs="EPSG:27700"):
+def get_street_network_gdfs(
+    place_name, to_crs=None, network_type=None, custom_filter=None
+):
     """
     Extract the walkable network for a specified area as GeoDataFrames.
 
@@ -83,16 +94,27 @@ def get_street_network_gdfs(place_name, to_crs="EPSG:27700"):
     Returns:
     GeoDataFrame: Network edges as linestrings
     """
+    # Set default CRS if not provided
+    config = get_config()
+
+    if to_crs is None:
+        to_crs = config.data.road_network_crs
+        print(f"get_street_network_gdfs: using CRS from config {to_crs}")
+    if network_type is None:
+        network_type = config.data.network_type
+        print(f"get_street_network_gdfs: using network type from config {network_type}")
+    if custom_filter is None:
+        custom_filter = config.data.custom_filter
+        print(
+            f"get_street_network_gdfs: using custom filter from config {custom_filter}"
+        )
+
     # Configure OSMnx settings
     ox.settings.use_cache = True
     ox.settings.log_console = True
 
     # Custom filter for pedestrian-specific infrastructure
-    custom_filter = (
-        '["highway"~"footway|path|pedestrian|steps|corridor|'
-        'track|service|living_street|residential|unclassified"]'
-        '["area"!~"yes"]["access"!~"private"]'
-    )
+    custom_filter = custom_filter
 
     try:
         print(f"\nDownloading network for: {place_name}")

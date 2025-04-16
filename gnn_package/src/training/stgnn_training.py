@@ -10,24 +10,50 @@ from tqdm import tqdm, trange
 from gnn_package.src import preprocessing
 from gnn_package.src.dataloaders import create_dataloader
 from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
+from gnn_package.config import get_config
 
 
 def preprocess_data(
     data=None,
     data_file=None,
-    graph_prefix="graph",
-    window_size=24,
-    horizon=6,
-    stride=1,
-    batch_size=32,
-    standardize=True,
-    sigma_squared=0.1,
-    epsilon=0.5,
+    config=None,
+    **kwargs,
 ):
     """
     Load and preprocess graph and sensor data for training
-    with support for varying window counts per sensor
+    with support for varying window counts per sensor.
+
+    Parameters:
+    -----------
+    data : dict, optional
+        Dictionary mapping sensor IDs to their time series data
+    data_file : str, optional
+        Path to a pickled file containing sensor data
+    config : ExperimentConfig, optional
+        Centralized configuration object. If not provided, will use global config.
+    **kwargs : dict
+        Additional parameters to override config settings
+
+    Returns:
+    --------
+    dict
+        Dictionary containing preprocessed data loaders and metadata
     """
+
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    # Allow override of config parameters with kwargs
+    graph_prefix = kwargs.get("graph_prefix", config.data.graph_prefix)
+    window_size = kwargs.get("window_size", config.data.window_size)
+    horizon = kwargs.get("horizon", config.data.horizon)
+    stride = kwargs.get("stride", config.data.stride)
+    batch_size = kwargs.get("batch_size", config.data.batch_size)
+    standardize = kwargs.get("standardize", config.data.standardize)
+    sigma_squared = kwargs.get("sigma_squared", config.data.sigma_squared)
+    epsilon = kwargs.get("epsilon", config.data.epsilon)
+
     print("Loading graph data...")
 
     adj_matrix, node_ids, metadata = preprocessing.load_graph_data(
@@ -237,14 +263,8 @@ class TqdmSTGNNTrainer(STGNNTrainer):
 
 def train_model(
     data_loaders,
-    input_dim=1,
-    hidden_dim=64,
-    output_dim=1,
-    horizon=6,
-    learning_rate=0.001,
-    weight_decay=1e-5,
-    num_epochs=50,
-    patience=10,
+    config=None,
+    **kwargs,
 ):
     """
     Train the STGNN model with progress bars
@@ -253,28 +273,42 @@ def train_model(
     -----------
     data_loaders : dict
         Dict containing train_loader and val_loader
-    input_dim : int
-        Input dimension (number of features per node)
-    hidden_dim : int
-        Hidden dimension for model
-    output_dim : int
-        Output dimension (number of features to predict)
-    horizon : int
-        Number of future time steps to predict
-    learning_rate : float
-        Learning rate for optimizer
-    weight_decay : float
-        Weight decay for regularization
-    num_epochs : int
-        Maximum number of epochs to train
-    patience : int
-        Number of epochs to wait for improvement before early stopping
+    config : ExperimentConfig, optional
+        Centralized configuration object. If not provided, will use global config.
+    **kwargs : dict
+        Additional parameters to override config settings
 
     Returns:
     --------
-    Trained model and training metrics
+    dict
+        Dictionary containing trained model and training metrics
     """
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    # Allow override of config parameters with kwargs
+    input_dim = kwargs.get("input_dim", config.model.input_dim)
+    hidden_dim = kwargs.get("hidden_dim", config.model.hidden_dim)
+    output_dim = kwargs.get("output_dim", config.model.output_dim)
+    num_layers = kwargs.get("num_layers", config.model.num_layers)
+    dropout = kwargs.get("dropout", config.model.dropout)
+    learning_rate = kwargs.get("learning_rate", config.training.learning_rate)
+    weight_decay = kwargs.get("weight_decay", config.training.weight_decay)
+    num_epochs = kwargs.get("num_epochs", config.training.num_epochs)
+    patience = kwargs.get("patience", config.training.patience)
+    horizon = kwargs.get("horizon", config.data.horizon)
+
+    # Determine device (use config or auto-detect)
+    if config.training.device:
+        device = torch.device(config.training.device)
+    else:
+        device = torch.device(
+            "mps"
+            if torch.backends.mps.is_available()
+            else ("cuda" if torch.cuda.is_available() else "cpu")
+        )
     print(f"Using device: {device}")
 
     # Create model
@@ -283,6 +317,7 @@ def train_model(
         hidden_dim=hidden_dim,
         output_dim=output_dim,
         horizon=horizon,
+        num_layers=num_layers,
     )
 
     # Define optimizer and loss function
@@ -350,6 +385,16 @@ def train_model(
     plt.legend()
     plt.title("Training and Validation Loss")
     plt.tight_layout()
+
+    # Save model if path is specified in config
+    if hasattr(config.paths, "model_save_path") and config.paths.model_save_path:
+        model_path = (
+            config.paths.model_save_path
+            / f"{config.experiment.name.replace(' ', '_')}_model.pth"
+        )
+        model_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(model.state_dict(), model_path)
+        print(f"Model saved to {model_path}")
 
     return {
         "model": model,

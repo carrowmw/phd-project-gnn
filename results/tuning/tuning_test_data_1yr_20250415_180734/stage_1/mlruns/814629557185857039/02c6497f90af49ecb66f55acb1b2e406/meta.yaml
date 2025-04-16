@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/administrator/Code/python/phd-project-gnn/results/tuning/tuning_test_data_1yr_20250415_180734/stage_1/mlruns/814629557185857039/02c6497f90af49ecb66f55acb1b2e406/artifacts
+end_time: 1744779159855
+entry_point_name: ''
+experiment_id: '814629557185857039'
+lifecycle_stage: active
+run_id: 02c6497f90af49ecb66f55acb1b2e406
+run_name: trial_3
+run_uuid: 02c6497f90af49ecb66f55acb1b2e406
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1744779159839
+status: 3
+tags: []
+user_id: administrator

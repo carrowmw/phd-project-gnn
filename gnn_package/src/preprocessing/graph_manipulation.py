@@ -8,19 +8,40 @@ from shapely.ops import nearest_points
 from shapely.geometry import Point, LineString, MultiLineString
 from itertools import combinations
 
+from gnn_package.config import get_config
 
-def snap_points_to_network(points_gdf, network_gdf, tolerance_decimal_places=6):
+
+def snap_points_to_network(
+    points_gdf, network_gdf, config=None, tolerance_decimal_places=None
+):
     """
     Snap points to their nearest location on the network.
 
     Parameters:
-    points_gdf (GeoDataFrame): GeoDataFrame containing points to snap
-    network_gdf (GeoDataFrame): Network edges as GeoDataFrame
-    tolerance (float): Rounding tolerance for coordinate comparison
+    -----------
+    points_gdf : GeoDataFrame
+        GeoDataFrame containing points to snap
+    network_gdf : GeoDataFrame
+        Network edges as GeoDataFrame
+    config : ExperimentConfig, optional
+        Centralized configuration object. If not provided, will use global config.
+    tolerance_decimal_places : int, optional
+        Rounding tolerance for coordinate comparison, overrides config if provided
 
     Returns:
-    GeoDataFrame: Points snapped to nearest network vertices
+    --------
+    GeoDataFrame
+        Points snapped to nearest network vertices
     """
+
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    # Use parameter or config value
+    if tolerance_decimal_places is None:
+        tolerance_decimal_places = config.data.tolerance_decimal_places
+
     # Create unified network geometry
     print("Creating unified network geometry...")
     network_unary = network_gdf.geometry.union_all()
@@ -102,17 +123,40 @@ def snap_points_to_network(points_gdf, network_gdf, tolerance_decimal_places=6):
     return result_gdf
 
 
-def connect_components(edges_gdf, max_distance=100):
+def connect_components(edges_gdf, config=None, max_distance=None):
     """
     Connect nearby components in the network using NetworkX for speed.
 
     Parameters:
-    edges_gdf (GeoDataFrame): Network edges
-    max_distance (float): Maximum distance to connect components
+    -----------
+    edges_gdf : GeoDataFrame
+        Network edges
+    config : ExperimentConfig, optional
+        Centralized configuration object. If not provided, will use global config.
+    max_distance : float, optional
+        Maximum distance to connect components, overrides config if provided
 
     Returns:
-    GeoDataFrame: Updated network edges with new connections
+    --------
+    GeoDataFrame
+        Updated network edges with new connections
     """
+    import networkx as nx
+    import numpy as np
+    import geopandas as gpd
+    import pandas as pd
+    from shapely.geometry import LineString
+    from tqdm import tqdm
+    from gnn_package.config import get_config
+
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    # Use parameter or config value
+    if max_distance is None:
+        max_distance = config.data.max_distance
+
     # First convert to NetworkX graph for faster component analysis
     G = nx.Graph()
 

@@ -2,12 +2,15 @@
 import os
 import json
 from pathlib import Path
+import pandas as pd
 from gnn_package.config.paths import SENSORS_DATA_DIR  # Import from paths module
 
 from private_uoapi import LSConfig, LSAuth, LightsailWrapper
 
+from gnn_package.config import get_config
 
-def get_sensor_name_id_map():
+
+def get_sensor_name_id_map(format_prefix=None, config=None):
     """
     Create unique IDs for each sensor from the private UOAPI.
 
@@ -20,21 +23,36 @@ def get_sensor_name_id_map():
     Returns:
     dict: Mapping between sensor names (keys) and IDs (values)
     """
-    # Move the implementation here from graph_utils.py
+
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    if format_prefix is None:
+        format_prefix = (
+            config.data.sensor_id_prefix
+            if hasattr(config.data, "sensor_id_prefix")
+            else "1"
+        )
+
+    # Check if the mapping file already exists
     if not os.path.exists(SENSORS_DATA_DIR / "sensor_name_id_map.json"):
 
         config = LSConfig()
         auth = LSAuth(config)
         client = LightsailWrapper(config, auth)
         sensors = client.get_traffic_sensors()
-        import pandas as pd
 
         sensors = pd.DataFrame(sensors)
+
+        # Create mapping using configured format
         mapping = {
-            location: f"1{str(i).zfill(4)}"
+            location: f"{format_prefix}{str(i).zfill(4)}"
             for i, location in enumerate(sensors["location"])
         }
 
+        # Save the mapping to a JSON file
+        print("Saving sensor name to ID mapping to file.")
         with open(
             SENSORS_DATA_DIR / "sensor_name_id_map.json",
             "w",
@@ -42,6 +60,8 @@ def get_sensor_name_id_map():
         ) as f:
             json.dump(mapping, f, indent=4)
     else:
+        # Load the mapping from the JSON file
+        print("Loading sensor name to ID mapping from file.")
         with open(
             SENSORS_DATA_DIR / "sensor_name_id_map.json",
             "r",

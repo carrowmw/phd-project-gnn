@@ -1,0 +1,98 @@
+2025-04-15 15:11:04,624 - tuning - INFO - Using default config
+2025-04-15 15:11:04,625 - tuning - INFO - Running quick tuning (reduced trials and epochs for testing)
+2025-04-15 15:11:04,625 - tuning - INFO - Running hyperparameter tuning with experiment name: tuning_test_data_1wk_20250415_151104
+2025-04-15 15:11:04,628 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1wk_20250415_151104' with ID: 277157205310142323
+2025-04-15 15:11:07,535 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 5 trials
+2025-04-15 15:37:55,254 - tuning - INFO - Using default config
+2025-04-15 15:37:55,255 - tuning - INFO - Running quick tuning (reduced trials and epochs for testing)
+2025-04-15 15:37:55,255 - tuning - INFO - Running hyperparameter tuning with experiment name: tuning_test_data_1wk_20250415_153755
+2025-04-15 15:37:55,261 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1wk_20250415_153755' with ID: 189988995898227341
+2025-04-15 15:37:56,826 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 5 trials
+2025-04-15 15:41:33,059 - tuning - INFO - Using default config
+2025-04-15 15:41:33,059 - tuning - INFO - Running quick tuning (reduced trials and epochs for testing)
+2025-04-15 15:41:33,059 - tuning - INFO - Running hyperparameter tuning with experiment name: tuning_test_data_1wk_20250415_154133
+2025-04-15 15:41:33,063 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1wk_20250415_154133' with ID: 572144754872541090
+2025-04-15 15:41:33,549 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 5 trials
+2025-04-15 15:49:55,996 - gnn_package.src.tuning.tuning_utils - INFO - Best trial: #2
+2025-04-15 15:49:55,996 - gnn_package.src.tuning.tuning_utils - INFO - Best validation loss: 0.8243891835212708
+2025-04-15 15:49:55,997 - gnn_package.src.tuning.tuning_utils - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 1, 'model.num_gc_layers': 2, 'model.dropout': 0.28242799368681437, 'training.learning_rate': 0.0037183641805732083, 'training.weight_decay': 3.972110727381911e-06}
+2025-04-15 15:49:58,253 - gnn_package.src.tuning.experiment_manager - INFO - Trial reports saved to results/tuning/tuning_test_data_1wk_20250415_154133
+2025-04-15 15:49:58,254 - gnn_package.src.tuning.experiment_manager - INFO - Best configuration saved to results/tuning/tuning_test_data_1wk_20250415_154133/best_config.yml
+2025-04-15 15:49:58,618 - gnn_package.src.tuning.tuning_utils - WARNING - Error creating visualization plots: 
+Image export using the "kaleido" engine requires the kaleido package,
+which can be installed using pip:
+    $ pip install -U kaleido
+
+2025-04-15 15:49:58,618 - gnn_package.src.tuning.tuning_utils - INFO - Retraining with best parameters...
+2025-04-15 16:06:33,056 - gnn_package.src.tuning.tuning_utils - INFO - Best model results saved to results/tuning/tuning_test_data_1wk_20250415_154133/best_model
+2025-04-15 16:06:33,056 - tuning - INFO - Tuning completed. Results saved to results/tuning/tuning_test_data_1wk_20250415_154133
+2025-04-15 16:06:33,056 - tuning - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 1, 'model.num_gc_layers': 2, 'model.dropout': 0.28242799368681437, 'training.learning_rate': 0.0037183641805732083, 'training.weight_decay': 3.972110727381911e-06}
+2025-04-15 16:06:33,057 - tuning - INFO - Best validation loss: 0.8243891835212708
+2025-04-15 16:31:22,703 - tuning - INFO - Using default config
+2025-04-15 16:31:22,703 - tuning - INFO - Running quick tuning (reduced trials and epochs for testing)
+2025-04-15 16:31:22,704 - tuning - INFO - Running hyperparameter tuning with experiment name: tuning_test_data_1mnth_20250415_163122
+2025-04-15 16:31:22,708 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1mnth_20250415_163122' with ID: 409941433044709795
+2025-04-15 16:31:23,911 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 5 trials
+2025-04-15 17:05:28,655 - gnn_package.src.tuning.tuning_utils - INFO - Best trial: #4
+2025-04-15 17:05:28,655 - gnn_package.src.tuning.tuning_utils - INFO - Best validation loss: 0.6557608462042279
+2025-04-15 17:05:28,655 - gnn_package.src.tuning.tuning_utils - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 1, 'model.num_gc_layers': 2, 'model.dropout': 0.11375540844608736, 'training.learning_rate': 0.006586289317583112, 'training.weight_decay': 5.975027999960295e-06}
+2025-04-15 17:05:29,540 - gnn_package.src.tuning.experiment_manager - INFO - Trial reports saved to results/tuning/tuning_test_data_1mnth_20250415_163122
+2025-04-15 17:05:29,541 - gnn_package.src.tuning.experiment_manager - INFO - Best configuration saved to results/tuning/tuning_test_data_1mnth_20250415_163122/best_config.yml
+2025-04-15 17:05:29,885 - gnn_package.src.tuning.tuning_utils - WARNING - Error creating visualization plots: 
+Image export using the "kaleido" engine requires the kaleido package,
+which can be installed using pip:
+    $ pip install -U kaleido
+
+2025-04-15 17:05:29,886 - gnn_package.src.tuning.tuning_utils - INFO - Retraining with best parameters...
+2025-04-15 17:54:54,752 - gnn_package.src.tuning.tuning_utils - INFO - Best model results saved to results/tuning/tuning_test_data_1mnth_20250415_163122/best_model
+2025-04-15 17:54:54,752 - tuning - INFO - Tuning completed. Results saved to results/tuning/tuning_test_data_1mnth_20250415_163122
+2025-04-15 17:54:54,752 - tuning - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 1, 'model.num_gc_layers': 2, 'model.dropout': 0.11375540844608736, 'training.learning_rate': 0.006586289317583112, 'training.weight_decay': 5.975027999960295e-06}
+2025-04-15 17:54:54,752 - tuning - INFO - Best validation loss: 0.6557608462042279
+2025-04-15 18:07:34,088 - tuning - INFO - Using default config
+2025-04-15 18:07:34,089 - tuning - INFO - Running multi-stage tuning with experiment name: tuning_test_data_1yr_20250415_180734
+2025-04-15 18:07:34,089 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 1/3
+2025-04-15 18:07:34,089 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 15
+2025-04-15 18:07:34,089 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: 10
+2025-04-15 18:07:34,089 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 0.25
+2025-04-15 18:07:34,097 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1yr_20250415_180734_stage_1' with ID: 814629557185857039
+2025-04-15 18:07:36,069 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 15 trials
+2025-04-15 19:17:56,467 - tuning - INFO - Using default config
+2025-04-15 19:17:56,467 - tuning - INFO - Running multi-stage tuning with experiment name: tuning_test_data_1mnth_20250415_191756
+2025-04-15 19:17:56,467 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 1/3
+2025-04-15 19:17:56,467 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 15
+2025-04-15 19:17:56,467 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: 10
+2025-04-15 19:17:56,467 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 0.25
+2025-04-15 19:17:56,471 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1mnth_20250415_191756_stage_1' with ID: 882293688297808275
+2025-04-15 19:17:57,842 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 15 trials
+2025-04-16 00:49:53,298 - gnn_package.src.tuning.tuning_utils - INFO - Best trial: #7
+2025-04-16 00:49:53,298 - gnn_package.src.tuning.tuning_utils - INFO - Best validation loss: 0.6446069478988647
+2025-04-16 00:49:53,298 - gnn_package.src.tuning.tuning_utils - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 3, 'model.num_gc_layers': 1, 'model.dropout': 0.49475477464020695, 'training.learning_rate': 0.0035033984911586884, 'training.weight_decay': 3.945908811099999e-06}
+2025-04-16 00:49:54,059 - gnn_package.src.tuning.experiment_manager - INFO - Trial reports saved to results/tuning/tuning_test_data_1mnth_20250415_191756/stage_1
+2025-04-16 00:49:54,061 - gnn_package.src.tuning.experiment_manager - INFO - Best configuration saved to results/tuning/tuning_test_data_1mnth_20250415_191756/stage_1/best_config.yml
+2025-04-16 00:49:54,404 - gnn_package.src.tuning.tuning_utils - WARNING - Error creating visualization plots: 
+Image export using the "kaleido" engine requires the kaleido package,
+which can be installed using pip:
+    $ pip install -U kaleido
+
+2025-04-16 00:49:54,404 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 2/3
+2025-04-16 00:49:54,404 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 10
+2025-04-16 00:49:54,404 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: 20
+2025-04-16 00:49:54,404 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 0.5
+2025-04-16 00:49:54,406 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1mnth_20250415_191756_stage_2' with ID: 897054179849850516
+2025-04-16 00:49:54,476 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 10 trials
+2025-04-16 09:13:24,023 - gnn_package.src.tuning.tuning_utils - INFO - Best trial: #3
+2025-04-16 09:13:24,023 - gnn_package.src.tuning.tuning_utils - INFO - Best validation loss: 0.6373923603031371
+2025-04-16 09:13:24,023 - gnn_package.src.tuning.tuning_utils - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 3, 'model.num_gc_layers': 2, 'model.dropout': 0.40404485718420646, 'training.learning_rate': 0.004437244992271918, 'training.weight_decay': 1.3663423677503228e-06}
+2025-04-16 09:13:24,090 - gnn_package.src.tuning.experiment_manager - INFO - Trial reports saved to results/tuning/tuning_test_data_1mnth_20250415_191756/stage_2
+2025-04-16 09:13:24,091 - gnn_package.src.tuning.experiment_manager - INFO - Best configuration saved to results/tuning/tuning_test_data_1mnth_20250415_191756/stage_2/best_config.yml
+2025-04-16 09:13:24,095 - gnn_package.src.tuning.tuning_utils - WARNING - Error creating visualization plots: 
+Image export using the "kaleido" engine requires the kaleido package,
+which can be installed using pip:
+    $ pip install -U kaleido
+
+2025-04-16 09:13:24,096 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 3/3
+2025-04-16 09:13:24,096 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 5
+2025-04-16 09:13:24,096 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: None
+2025-04-16 09:13:24,096 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 1.0
+2025-04-16 09:13:24,098 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1mnth_20250415_191756_stage_3' with ID: 979612080568969675
+2025-04-16 09:13:24,180 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 5 trials

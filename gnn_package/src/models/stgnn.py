@@ -4,9 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from gnn_package.config import get_config
+
 
 class GraphConvolution(nn.Module):
-    def __init__(self, in_features, out_features, bias=True):
+    def __init__(self, in_features, out_features, config=None, bias=True):
         """
         Initialize the GraphConvolution layer.
 
@@ -22,6 +24,24 @@ class GraphConvolution(nn.Module):
         super(GraphConvolution, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
+
+        if config is None:
+            config = get_config()
+
+        # Get parameters from config or kwargs
+        self.use_self_loops = (
+            config.model.use_self_loops
+            if hasattr(config.model, "use_self_loops")
+            else True
+        )
+        self.normalization = (
+            config.model.gcn_normalization
+            if hasattr(config.model, "gcn_normalization")
+            else "symmetric"
+        )
+        self.missing_value = (
+            config.data.missing_value if hasattr(config.data, "missing_value") else -1.0
+        )
 
         # Define learnable parameters
         self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
@@ -184,12 +204,39 @@ class TemporalGCN(nn.Module):
     Temporal Graph Convolutional Network with attention for missing data.
     """
 
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers=1, dropout=0.2):
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim,
+        output_dim,
+        config=None,
+        **kwargs,
+    ):
         super(TemporalGCN, self).__init__()
 
-        # Graph Convolutional layers
-        self.gc1 = GraphConvolution(input_dim, hidden_dim)
-        self.gc2 = GraphConvolution(hidden_dim, hidden_dim)
+        if config is None:
+            config = get_config()
+
+        # Get parameters from config or kwargs
+        num_layers = kwargs.get("num_layers", config.model.num_layers)
+        dropout = kwargs.get("dropout", config.model.dropout)
+
+        # Number of GC layers from config
+        num_gc_layers = (
+            config.model.num_gc_layers if hasattr(config.model, "num_gc_layers") else 2
+        )
+
+        # Graph Convolutional layers (dynamic based on config)
+        self.gc_layers = nn.ModuleList()
+
+        # First layer
+        self.gc_layers.append(GraphConvolution(input_dim, hidden_dim))
+
+        # Additional layers based on config
+        for i in range(1, num_gc_layers):
+            self.gc_layers.append(
+                GraphConvolution(hidden_dim, hidden_dim, config=config)
+            )
 
         # Attention layers
         self.node_attention = AttentionLayer(hidden_dim)
@@ -241,14 +288,14 @@ class TemporalGCN(nn.Module):
             else:
                 mask_t = None
 
-            # Apply GC layers with explicit handling of missing values
-            h = self.gc1(x_t, adj, mask_t)  # First GC layer
-            h = F.relu(h)  # Activation
-            h = self.dropout(h)  # Apply dropout
-            h = self.gc2(h, adj, mask_t)  # Second GC layer
+            # Apply GCN layers
+            for gc_layer in self.gc_layers:
+                x_t = gc_layer(x_t, adj, mask_t)
+                x_t = F.relu(x_t)  # Activation
+                x_t = self.dropout(x_t)  # Apply dropout
 
             # Store the processed features for this timestep
-            outputs.append(h)  # [batch_size, num_nodes, hidden_dim]
+            outputs.append(x_t)  # [batch_size, num_nodes, hidden_dim]
 
         # Stack outputs along time dimension
         # This gives us [batch_size, num_nodes, seq_len, hidden_dim]
@@ -296,9 +343,24 @@ class STGNN(nn.Module):
     """
 
     def __init__(
-        self, input_dim, hidden_dim, output_dim, horizon, num_layers=1, dropout=0.2
+        self,
+        input_dim,
+        hidden_dim,
+        output_dim,
+        horizon,
+        config=None,
+        **kwargs,
     ):
         super(STGNN, self).__init__()
+
+        # Get configuration or use default
+        if config is None:
+            config = get_config()
+
+        # Allow overriding config with kwargs
+        num_layers = kwargs.get("num_layers", config.model.num_layers)
+        dropout = kwargs.get("dropout", config.model.dropout)
+        decoder_layers = kwargs.get("decoder_layer", config.model.decoder_layers)
 
         self.horizon = horizon
 
@@ -309,15 +371,19 @@ class STGNN(nn.Module):
             output_dim=hidden_dim,
             num_layers=num_layers,
             dropout=dropout,
+            config=config,
         )
 
-        # Decoder: predict future values
-        self.decoder = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, output_dim * horizon),
-        )
+        if decoder_layers == 1:
+            # If only one layer, use a simple linear layer
+            self.decoder = nn.Linear(hidden_dim, output_dim * horizon)
+        else:
+            decoder_layers = []
+            decoder_layers.append(nn.Linear(hidden_dim, hidden_dim))
+            decoder_layers.append(nn.ReLU())
+            decoder_layers.append(nn.Dropout(dropout))
+            decoder_layers.append(nn.Linear(hidden_dim, output_dim * horizon))
+            self.decoder = nn.Sequential(*decoder_layers)
 
     def forward(self, x, adj, x_mask=None):
         """
@@ -436,16 +502,69 @@ class STGNNTrainer:
         return total_loss / max(1, num_batches)
 
 
-# Example usage
 def create_stgnn_model(
-    input_dim=1, hidden_dim=64, output_dim=1, horizon=6, num_layers=2
+    config=None,
+    **kwargs,
 ):
-    """Create a Spatio-Temporal GNN model with specified parameters"""
+    """
+    Create a Spatio-Temporal GNN model with parameters from configuration.
+
+    Parameters:
+    -----------
+    config : ExperimentConfig, optional
+        Configuration object
+    **kwargs : dict
+        Parameters that override the configuration
+
+    Returns:
+    --------
+    STGNN
+        Configured model instance
+    """
+    # Get configuration if not provided
+    if config is None:
+        from gnn_package.config import get_config
+
+        config = get_config()
+
+    # Extract parameters with overrides from kwargs
+    input_dim = kwargs.get("input_dim", config.model.input_dim)
+    hidden_dim = kwargs.get("hidden_dim", config.model.hidden_dim)
+    output_dim = kwargs.get("output_dim", config.model.output_dim)
+    horizon = kwargs.get("horizon", config.data.horizon)
+    num_layers = kwargs.get("num_layers", config.model.num_layers)
+    dropout = kwargs.get("dropout", config.model.dropout)
+
+    # Get additional parameters that might be in the config
+    num_gc_layers = kwargs.get(
+        "num_gc_layers", getattr(config.model, "num_gc_layers", 2)
+    )
+    decoder_layers = kwargs.get(
+        "decoder_layers", getattr(config.model, "decoder_layers", 2)
+    )
+
+    # Log the configuration being used
+    print(f"Creating STGNN model with:")
+    print(f"  input_dim: {input_dim}")
+    print(f"  hidden_dim: {hidden_dim}")
+    print(f"  output_dim: {output_dim}")
+    print(f"  horizon: {horizon}")
+    print(f"  num_layers: {num_layers}")
+    print(f"  num_gc_layers: {num_gc_layers}")
+    print(f"  decoder_layers: {decoder_layers}")
+    print(f"  dropout: {dropout}")
+
+    # Create model with config and any overrides
     model = STGNN(
         input_dim=input_dim,
         hidden_dim=hidden_dim,
         output_dim=output_dim,
         horizon=horizon,
+        config=config,  # Pass the config object to the model
         num_layers=num_layers,
+        dropout=dropout,
+        num_gc_layers=num_gc_layers,
+        decoder_layers=decoder_layers,
     )
+
     return model

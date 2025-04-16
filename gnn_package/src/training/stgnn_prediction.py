@@ -17,40 +17,73 @@ from private_uoapi import (
 from gnn_package.src import training
 from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 from gnn_package.src.models.stgnn import create_stgnn_model
+from gnn_package.config import ExperimentConfig, get_config
 
 
-def load_model(
-    model_path, input_dim=1, hidden_dim=64, output_dim=1, horizon=6, num_layers=2
-):
+def load_model(model_path, config=None, **kwargs):
     """
-    Load a trained STGNN model
+    Load a trained STGNN model with parameters from config
 
     Parameters:
     -----------
     model_path : str
         Path to the saved model
-    input_dim, hidden_dim, output_dim, horizon, num_layers : model parameters
+    config : ExperimentConfig, optional
+        Configuration object to use for model parameters
+    **kwargs : dict
+        Additional parameters to override config values
 
     Returns:
     --------
     Loaded model
     """
+    from gnn_package.config import get_config
+
+    # Use provided config, or get default config
+    if config is None:
+        config = get_config()
+
+    # Extract parameters from config with optional overrides from kwargs
+    input_dim = kwargs.get("input_dim", config.model.input_dim)
+    hidden_dim = kwargs.get("hidden_dim", config.model.hidden_dim)
+    output_dim = kwargs.get("output_dim", config.model.output_dim)
+    horizon = kwargs.get("horizon", config.data.horizon)
+    num_layers = kwargs.get("num_layers", config.model.num_layers)
+    dropout = kwargs.get("dropout", config.model.dropout)
+
+    # Get additional model parameters if they exist in the config
+    num_gc_layers = kwargs.get(
+        "num_gc_layers", getattr(config.model, "num_gc_layers", 2)
+    )
+
+    # Create model with the parameters
     model = create_stgnn_model(
         input_dim=input_dim,
         hidden_dim=hidden_dim,
         output_dim=output_dim,
         horizon=horizon,
         num_layers=num_layers,
+        dropout=dropout,
+        num_gc_layers=num_gc_layers,
+        config=config,  # Pass the complete config for any other parameters
     )
 
+    # Load state dict and set to eval mode
     model.load_state_dict(torch.load(model_path))
     model.eval()
+
+    # Print model configuration for debugging
+    print(f"Loaded model with parameters:")
+    print(f"  hidden_dim: {hidden_dim}")
+    print(f"  num_layers: {num_layers}")
+    print(f"  num_gc_layers: {num_gc_layers}")
+    print(f"  horizon: {horizon}")
 
     return model
 
 
 async def fetch_recent_data_for_validation(
-    node_ids=None, days_back=2, window_size=24, horizon=6
+    config=None, node_ids=None, days_back=None, window_size=None, horizon=None
 ):
     """
     Fetch recent data for validation, ensuring we have enough data to both
@@ -58,13 +91,15 @@ async def fetch_recent_data_for_validation(
 
     Parameters:
     -----------
+    config : ExperimentConfig, optional
+        Configuration object
     node_ids : list, optional
         List of node IDs to fetch data for. If None, fetch all available.
-    days_back : int
+    days_back : int, optional
         Number of days of historical data to fetch
-    window_size : int
+    window_size : int, optional
         Size of the input window for the model
-    horizon : int
+    horizon : int, optional
         Number of time steps to predict ahead
 
     Returns:
@@ -72,14 +107,25 @@ async def fetch_recent_data_for_validation(
     dict
         Dictionary containing processed data for validation
     """
+    # Get configuration if not provided
+    if config is None:
+        config = get_config()
 
-    # Initialize API client
-    config = LSConfig()
-    auth = LSAuth(config)
-    client = LightsailWrapper(config, auth)
+    # Use provided values or fall back to config
+    if days_back is None:
+        days_back = getattr(config.data, "days_back", 2)
 
-    # Get sensor name to ID mapping (and reverse it for lookup)
-    name_id_map = get_sensor_name_id_map()
+    if window_size is None:
+        window_size = config.data.window_size
+
+    if horizon is None:
+        horizon = config.data.horizon
+
+    api_config = LSConfig()
+    auth = LSAuth(api_config)
+    client = LightsailWrapper(api_config, auth)
+
+    name_id_map = get_sensor_name_id_map(config=config)
     id_to_name_map = {v: k for k, v in name_id_map.items()}
 
     # If node_ids is None, use all available node IDs from the mapping
@@ -88,12 +134,15 @@ async def fetch_recent_data_for_validation(
         print(f"Using all available {len(node_ids)} nodes")
 
     print(f"Fetching recent data for {len(node_ids)} nodes, {days_back} days back")
+    print(f"Using window_size={window_size}, horizon={horizon}")
 
     # Determine date range for API request
+
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days_back)
 
     # Create date range parameters
+
     date_range_params = DateRangeParams(
         start_date=start_date,
         end_date=end_date,
@@ -103,9 +152,9 @@ async def fetch_recent_data_for_validation(
     # Fetch data from API
     print(f"Querying API for data from {start_date} to {end_date}")
     count_data = await client.get_traffic_data(date_range_params)
+
     counts_df = convert_to_dataframe(count_data)
 
-    # Create time series dictionary
     time_series_dict = {}
     successful_nodes = 0
 
@@ -162,14 +211,14 @@ async def fetch_recent_data_for_validation(
             validation_dict[node_id] = series
             input_dict[node_id] = series
 
-    # Use the same preprocessing pipeline as training but with the shortened data
     input_data_loaders = training.preprocess_data(
         data=input_dict,  # Pass the shortened data directly
-        graph_prefix="25022025_test",  # Use the same graph prefix
+        graph_prefix=config.data.graph_prefix,  # Use graph prefix from config
         window_size=window_size,
         horizon=horizon,
-        batch_size=1,  # Small batch size for prediction
-        standardize=True,  # Same standardization as training
+        batch_size=config.data.batch_size,  # Use batch size from config
+        standardize=config.data.standardize,  # Use standardization setting from config
+        config=config,  # Pass the full config for any other settings
     )
 
     # Return a dict with the processed data
@@ -320,7 +369,11 @@ def plot_predictions_with_validation(
 
 
 async def predict_all_sensors_with_validation(
-    model_path, graph_prefix, output_file=None, plot=True
+    model_path,
+    graph_prefix,
+    output_file=None,
+    plot=True,
+    config_path=None,
 ):
     """
     Make predictions for all available sensors and validate against actual data
@@ -341,11 +394,24 @@ async def predict_all_sensors_with_validation(
     dict
         Dictionary containing predictions, actual values, and evaluation metrics
     """
-    import matplotlib.pyplot as plt
 
-    # Load model
+    # Load configuration
+    config = None
+    if config_path:
+        try:
+            config = ExperimentConfig(config_path)
+            print(f"Loaded configuration from {config_path}")
+        except Exception as e:
+            print(f"Warning: Could not load configuration from {config_path}: {e}")
+            config = get_config()
+            print("Using default configuration")
+    else:
+        config = get_config()
+        print("Using default configuration")
+
+    # Load model with the config
     print(f"Loading model from: {model_path}")
-    model = load_model(model_path)
+    model = load_model(model_path=model_path, config=config)
     print(f"Model loaded successfully")
 
     # Fetch and preprocess recent data for validation
@@ -353,7 +419,7 @@ async def predict_all_sensors_with_validation(
     data = await fetch_recent_data_for_validation(
         node_ids=None,  # Fetch all available nodes
         days_back=2,
-        window_size=24,
+        window_size=config.data.window_size,
         horizon=model.horizon,
     )
 
