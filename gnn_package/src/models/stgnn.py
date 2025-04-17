@@ -3,50 +3,49 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import logging
 
 from gnn_package.config import get_config
 
+logger = logging.getLogger(__name__)
+
 
 class GraphConvolution(nn.Module):
-    def __init__(self, in_features, out_features, config=None, bias=True):
+    def __init__(self, config, layer_id, in_features, out_features, bias=True):
         """
-        Initialize the GraphConvolution layer.
+        Initialize the GraphConvolution layer with explicit parameters.
 
         Parameters:
         -----------
+        config : ExperimentConfig
+            Configuration object containing global settings
+        layer_id : int
+            Identifier for this layer
         in_features : int
-            Number of input features per node
+            Number of input features
         out_features : int
-            Number of output features per node
-        bias : bool, optional
-            Whether to include bias term
+            Number of output features
+        bias : bool
+            Whether to include bias term (this can remain a default)
         """
         super(GraphConvolution, self).__init__()
+
+        # Store parameters without defaults
         self.in_features = in_features
         self.out_features = out_features
+        self.layer_id = layer_id
 
-        if config is None:
-            config = get_config()
-
-        # Get parameters from config or kwargs
-        self.use_self_loops = (
-            config.model.use_self_loops
-            if hasattr(config.model, "use_self_loops")
-            else True
-        )
-        self.normalization = (
-            config.model.gcn_normalization
-            if hasattr(config.model, "gcn_normalization")
-            else "symmetric"
-        )
-        self.missing_value = (
-            config.data.missing_value if hasattr(config.data, "missing_value") else -1.0
-        )
+        # Get required values from config
+        self.use_self_loop = config.model.use_self_loops
+        self.normalization = config.model.gcn_normalization
+        self.missing_value = config.data.missing_value
 
         # Define learnable parameters
-        self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
+        self.weight = nn.Parameter(
+            torch.FloatTensor(self.in_features, self.out_features)
+        )
         if bias:
-            self.bias = nn.Parameter(torch.FloatTensor(out_features))
+            self.bias = nn.Parameter(torch.FloatTensor(self.out_features))
         else:
             self.register_parameter("bias", None)
 
@@ -69,17 +68,10 @@ class GraphConvolution(nn.Module):
         --------
         Tensor of shape [batch_size, num_nodes, out_features]
         """
-        # Print shapes for debugging
-        # print(f"DEBUG: GraphConvolution input shapes - x: {x.shape}, adj: {adj.shape}")
-        # if mask is not None:
-        #     print(f"DEBUG: mask shape: {mask.shape}")
-
-        # First, we need to handle missing values (marked as -1)
-        # Create a binary mask where 1 = valid data, 0 = missing data (-1)
-        missing_mask = (x != -1.0).float()
+        # Create a binary mask where 1 = valid data, 0 = missing data
+        missing_mask = (x != self.missing_value).float()
 
         # Apply the mask and replace missing values with zeros for computation
-        # (zeros won't contribute to the convolution)
         x_masked = x * missing_mask
 
         # If a separate mask is provided, combine it with the missing mask
@@ -95,6 +87,12 @@ class GraphConvolution(nn.Module):
             batch_size, num_nodes, in_features = x.shape
         else:
             num_nodes, in_features = x.shape
+
+        # Check that input features match weight dimensions
+        if in_features != self.in_features:
+            raise ValueError(
+                f"Input features ({in_features}) don't match weight dimensions ({self.in_features})"
+            )
 
         # Check that adjacency matrix dimensions match num_nodes
         if adj.shape[0] != num_nodes:
@@ -204,38 +202,55 @@ class TemporalGCN(nn.Module):
     Temporal Graph Convolutional Network with attention for missing data.
     """
 
-    def __init__(
-        self,
-        input_dim,
-        hidden_dim,
-        output_dim,
-        config=None,
-        **kwargs,
-    ):
+    def __init__(self, config, input_dim, hidden_dim, output_dim):
+        """
+        Initialize the TemporalGCN with explicit parameters.
+
+        Parameters:
+        -----------
+        config : ExperimentConfig
+            Configuration object
+        input_dim : int
+            Input feature dimension
+        hidden_dim : int
+            Hidden layer dimension
+        output_dim : int
+            Output feature dimension
+        """
         super(TemporalGCN, self).__init__()
 
-        if config is None:
-            config = get_config()
+        # Store parameters without defaults
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
 
-        # Get parameters from config or kwargs
-        num_layers = kwargs.get("num_layers", config.model.num_layers)
-        dropout = kwargs.get("dropout", config.model.dropout)
+        # Get values from config
+        num_layers = config.model.num_layers
+        dropout = config.model.dropout
+        num_gc_layers = config.model.num_gc_layers  # This should be required in config
 
-        # Number of GC layers from config
-        num_gc_layers = (
-            config.model.num_gc_layers if hasattr(config.model, "num_gc_layers") else 2
-        )
-
-        # Graph Convolutional layers (dynamic based on config)
+        # Graph Convolutional layers
         self.gc_layers = nn.ModuleList()
 
-        # First layer
-        self.gc_layers.append(GraphConvolution(input_dim, hidden_dim))
+        # First layer (input_dim to hidden_dim)
+        self.gc_layers.append(
+            GraphConvolution(
+                config=config,
+                layer_id=0,
+                in_features=self.input_dim,
+                out_features=self.hidden_dim,
+            )
+        )
 
-        # Additional layers based on config
+        # Additional layers (hidden_dim to hidden_dim)
         for i in range(1, num_gc_layers):
             self.gc_layers.append(
-                GraphConvolution(hidden_dim, hidden_dim, config=config)
+                GraphConvolution(
+                    config=config,
+                    layer_id=i,
+                    in_features=self.hidden_dim,
+                    out_features=self.hidden_dim,
+                )
             )
 
         # Attention layers
@@ -342,48 +357,47 @@ class STGNN(nn.Module):
     Spatio-Temporal Graph Neural Network with attention for traffic prediction
     """
 
-    def __init__(
-        self,
-        input_dim,
-        hidden_dim,
-        output_dim,
-        horizon,
-        config=None,
-        **kwargs,
-    ):
+    def __init__(self, config):
+        """
+        Initialize STGNN model with configuration.
+
+        Parameters:
+        -----------
+        config : ExperimentConfig
+            Configuration object
+        """
         super(STGNN, self).__init__()
 
-        # Get configuration or use default
-        if config is None:
-            config = get_config()
-
-        # Allow overriding config with kwargs
-        num_layers = kwargs.get("num_layers", config.model.num_layers)
-        dropout = kwargs.get("dropout", config.model.dropout)
-        decoder_layers = kwargs.get("decoder_layer", config.model.decoder_layers)
+        # Get required parameters from config
+        input_dim = config.model.input_dim
+        hidden_dim = config.model.hidden_dim
+        output_dim = config.model.output_dim
+        horizon = config.data.horizon
+        dropout = config.model.dropout
+        decoder_layers = (
+            config.model.decoder_layers
+        )  # This should be required in config
 
         self.horizon = horizon
 
         # Encoder: process historical data
         self.encoder = TemporalGCN(
+            config=config,
             input_dim=input_dim,
             hidden_dim=hidden_dim,
             output_dim=hidden_dim,
-            num_layers=num_layers,
-            dropout=dropout,
-            config=config,
         )
 
         if decoder_layers == 1:
             # If only one layer, use a simple linear layer
             self.decoder = nn.Linear(hidden_dim, output_dim * horizon)
         else:
-            decoder_layers = []
-            decoder_layers.append(nn.Linear(hidden_dim, hidden_dim))
-            decoder_layers.append(nn.ReLU())
-            decoder_layers.append(nn.Dropout(dropout))
-            decoder_layers.append(nn.Linear(hidden_dim, output_dim * horizon))
-            self.decoder = nn.Sequential(*decoder_layers)
+            decoder_layers_list = []
+            decoder_layers_list.append(nn.Linear(hidden_dim, hidden_dim))
+            decoder_layers_list.append(nn.ReLU())
+            decoder_layers_list.append(nn.Dropout(dropout))
+            decoder_layers_list.append(nn.Linear(hidden_dim, output_dim * horizon))
+            self.decoder = nn.Sequential(*decoder_layers_list)
 
     def forward(self, x, adj, x_mask=None):
         """
@@ -419,11 +433,53 @@ class STGNN(nn.Module):
 
 
 class STGNNTrainer:
-    def __init__(self, model, optimizer, criterion, device):
+    def __init__(self, model, config):
+        """
+        Initialize the trainer with the model and config.
+
+        Parameters:
+        -----------
+        model : STGNN
+            The model to train
+        config : ExperimentConfig
+            Configuration object
+        """
+        # Get device from config or auto-detect
+        device_name = getattr(config.training, "device", None)
+        if device_name:
+            device = torch.device(device_name)
+        else:
+            if torch.backends.mps.is_available():
+                device = torch.device("mps")
+            elif torch.cuda.is_available():
+                device = torch.device("cuda")
+            else:
+                device = torch.device("cpu")
+
+        logger.info(f"Using device: {device}")
+
+        # Create optimizer based on config
+        learning_rate = config.training.learning_rate
+        weight_decay = config.training.weight_decay
+
+        optimizer = torch.optim.Adam(
+            model.parameters(), lr=learning_rate, weight_decay=weight_decay
+        )
+
+        # Use MSE loss
+        criterion = torch.nn.MSELoss(reduction="none")
+
         self.model = model.to(device)
         self.optimizer = optimizer
         self.criterion = criterion
         self.device = device
+        self.config = config
+
+        logger.info(
+            f"STGNNTrainer.__init__(): Model inistialized with {sum(p.numel() for p in model.parameters())} parameters"
+        )
+        logger.info(f"STGNNTrainer.__init__(): Optimizer: {optimizer}")
+        logger.info(f"STGNNTrainer.__init__(): Loss function: {criterion}")
 
     def train_epoch(self, dataloader):
         """Train for one epoch"""
@@ -438,12 +494,6 @@ class STGNNTrainer:
             y = batch["y"].to(self.device)
             y_mask = batch["y_mask"].to(self.device)
             adj = batch["adj"].to(self.device)
-
-            # # Print shapes for debugging
-            # print(f"DEBUG: Batch shapes: x={x.shape}, y={y.shape}")
-            # print(
-            #     f"DEBUG: Mask non-zero values: {x_mask.sum().item()} out of {x_mask.numel()}"
-            # )
 
             # Forward pass
             self.optimizer.zero_grad()
@@ -502,69 +552,40 @@ class STGNNTrainer:
         return total_loss / max(1, num_batches)
 
 
-def create_stgnn_model(
-    config=None,
-    **kwargs,
-):
+def create_stgnn_model(config):
     """
     Create a Spatio-Temporal GNN model with parameters from configuration.
 
     Parameters:
     -----------
-    config : ExperimentConfig, optional
+    config : ExperimentConfig
         Configuration object
-    **kwargs : dict
-        Parameters that override the configuration
 
     Returns:
     --------
     STGNN
         Configured model instance
     """
-    # Get configuration if not provided
-    if config is None:
-        from gnn_package.config import get_config
-
-        config = get_config()
-
-    # Extract parameters with overrides from kwargs
-    input_dim = kwargs.get("input_dim", config.model.input_dim)
-    hidden_dim = kwargs.get("hidden_dim", config.model.hidden_dim)
-    output_dim = kwargs.get("output_dim", config.model.output_dim)
-    horizon = kwargs.get("horizon", config.data.horizon)
-    num_layers = kwargs.get("num_layers", config.model.num_layers)
-    dropout = kwargs.get("dropout", config.model.dropout)
-
-    # Get additional parameters that might be in the config
-    num_gc_layers = kwargs.get(
-        "num_gc_layers", getattr(config.model, "num_gc_layers", 2)
-    )
-    decoder_layers = kwargs.get(
-        "decoder_layers", getattr(config.model, "decoder_layers", 2)
-    )
+    # Validate that all required configuration parameters are present
+    try:
+        # This will raise an error if any required parameter is missing
+        config.validate()
+    except ValueError as e:
+        logger.error(f"Invalid configuration: {e}")
+        raise
 
     # Log the configuration being used
-    print(f"Creating STGNN model with:")
-    print(f"  input_dim: {input_dim}")
-    print(f"  hidden_dim: {hidden_dim}")
-    print(f"  output_dim: {output_dim}")
-    print(f"  horizon: {horizon}")
-    print(f"  num_layers: {num_layers}")
-    print(f"  num_gc_layers: {num_gc_layers}")
-    print(f"  decoder_layers: {decoder_layers}")
-    print(f"  dropout: {dropout}")
+    logger.info(f"Creating STGNN model with config from {config.config_path}")
+    logger.info(f"  input_dim: {config.model.input_dim}")
+    logger.info(f"  hidden_dim: {config.model.hidden_dim}")
+    logger.info(f"  output_dim: {config.model.output_dim}")
+    logger.info(f"  horizon: {config.data.horizon}")
+    logger.info(f"  num_layers: {config.model.num_layers}")
+    logger.info(f"  num_gc_layers: {config.model.num_gc_layers}")
+    logger.info(f"  decoder_layers: {config.model.decoder_layers}")
+    logger.info(f"  dropout: {config.model.dropout}")
 
-    # Create model with config and any overrides
-    model = STGNN(
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        horizon=horizon,
-        config=config,  # Pass the config object to the model
-        num_layers=num_layers,
-        dropout=dropout,
-        num_gc_layers=num_gc_layers,
-        decoder_layers=decoder_layers,
-    )
+    # Create model with config
+    model = STGNN(config=config)
 
     return model

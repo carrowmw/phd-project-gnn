@@ -1,6 +1,7 @@
 # gnn_package/config/config_manager.py
 
 import os
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 import yaml
@@ -13,6 +14,9 @@ from .config import (
     PathsConfig,
     VisualizationConfig,
 )
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Singleton pattern for global configuration
 _CONFIG_INSTANCE = None
@@ -41,13 +45,19 @@ def get_config(config_path: Optional[str] = None) -> ExperimentConfig:
 
     # Create new instance if path provided or no instance exists
     if config_path is not None or _CONFIG_INSTANCE is None:
-        _CONFIG_INSTANCE = ExperimentConfig(config_path)
+        try:
+            _CONFIG_INSTANCE = ExperimentConfig(config_path)
+        except FileNotFoundError:
+            print("No configuration file found. Creating default configuration.")
+            _CONFIG_INSTANCE = create_default_config("config.yml")
+            print("Default configuration created.")
 
     return _CONFIG_INSTANCE
 
 
 def reset_config():
     """Reset the global configuration instance."""
+    print("reset_config: Resetting global config instance.")
     global _CONFIG_INSTANCE
     _CONFIG_INSTANCE = None
 
@@ -76,6 +86,7 @@ def create_default_config(output_path: str = "config.yml") -> ExperimentConfig:
 
     # Default data configuration
     data = {
+        # Time-related parameters
         "start_date": "2024-02-18 00:00:00",
         "end_date": "2024-02-25 00:00:00",
         "graph_prefix": "25022025_test",
@@ -86,6 +97,12 @@ def create_default_config(output_path: str = "config.yml") -> ExperimentConfig:
         "stride": 1,
         "gap_threshold_minutes": 15,
         "standardize": True,
+        "n_splits": 3,
+        "val_size_days": 30,
+        "train_ratio": None,
+        "cutoff_date": None,
+        "split_method": "rolling_window",  # Options: "rolling_window", "time_based"
+        # Graph-related parameters
         "sigma_squared": 0.1,
         "epsilon": 0.5,
         "normalization_factor": 10000,
@@ -100,6 +117,7 @@ def create_default_config(output_path: str = "config.yml") -> ExperimentConfig:
             [-1.54993, 55.02084],
             [-1.65327, 55.02084],
         ],
+        "place_name": "Newcastle upon Tyne, UK",
         "bbox_crs": "EPSG:4326",
         "road_network_crs": "EPSG:27700",
         "network_type": "walk",
@@ -116,7 +134,7 @@ def create_default_config(output_path: str = "config.yml") -> ExperimentConfig:
         "num_layers": 2,
         "dropout": 0.2,
         "num_gc_layers": 2,
-        "decode_layers": 2,
+        "decoder_layers": 2,
     }
 
     # Default training configuration
@@ -126,6 +144,7 @@ def create_default_config(output_path: str = "config.yml") -> ExperimentConfig:
         "num_epochs": 50,
         "patience": 10,
         "train_val_split": 0.8,
+        "cross_validation": True,
     }
 
     # Default paths

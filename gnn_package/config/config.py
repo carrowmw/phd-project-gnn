@@ -23,6 +23,7 @@ class ExperimentMetadata:
 class DataConfig:
     """Configuration for data processing."""
 
+    # Time series data parameters
     start_date: str
     end_date: str
     graph_prefix: str
@@ -33,6 +34,13 @@ class DataConfig:
     stride: int = 1
     gap_threshold_minutes: int = 15
     standardize: bool = True
+    n_splits: int = 3
+    val_size_days: int = 30
+    train_ratio: float = None
+    cutoff_date: str = None
+    split_method: str = "rolling_window"  # Options: "rolling_window", "time_based"
+
+    # Graph-related parameters
     sigma_squared: float = 0.1
     epsilon: float = 0.5
     normalization_factor: int = 10000
@@ -49,6 +57,7 @@ class DataConfig:
             [-1.65327, 55.02084],
         ]
     )
+    place_name: str = "Newcastle upon Tyne, UK"  # For osmnx graph creation
     bbox_crs: str = "EPSG:4326"
     road_network_crs: str = "EPSG:27700"
     network_type: str = "walk"
@@ -89,6 +98,7 @@ class TrainingConfig:
     patience: int
     train_val_split: float = 0.8
     device: Optional[str] = None
+    cross_validation: bool = True
 
 
 @dataclass
@@ -128,11 +138,30 @@ class ExperimentConfig:
             Path to the YAML configuration file. If not provided,
             looks for 'config.yml' in the current directory.
         """
+        self._initializing = True
+
         if config_path is None:
             config_path = os.path.join(os.getcwd(), "config.yml")
 
         self.config_path = Path(config_path)
         self._load_config()
+
+        # Mark initialization as complete and freeze the config
+        self._initialzing = False
+        self._frozen = True
+
+        # Validate the configuration
+        self.validate()
+
+        # Log the configuration
+        self.log()
+
+    def __setattr__(self, name, value):
+        if hasattr(self, "_frozen") and self._frozen:
+            raise AttributeError(
+                f"Cannot modify configuration after initialization: {name}"
+            )
+        super().__setattr__(name, value)
 
     def _load_config(self):
         """Load configuration from YAML file."""
@@ -152,6 +181,101 @@ class ExperimentConfig:
 
         # Store the raw dict for any additional access
         self._config_dict = config_dict
+
+    def validate(self) -> bool:
+        """
+        Validate that all required configuration values are present and valid.
+
+        Returns:
+        --------
+        bool
+            True if validation passes (raises exceptions otherwise)
+        """
+        # Check for required model parameters
+        required_model_params = [
+            "input_dim",
+            "hidden_dim",
+            "output_dim",
+            "num_layers",
+            "dropout",
+            "num_gc_layers",
+            "use_self_loops",
+            "gcn_normalization",
+            "decoder_layers",
+        ]
+
+        for param in required_model_params:
+            if not hasattr(self.model, param):
+                raise ValueError(f"Missing required config value: model.{param}")
+
+        # Check for required data parameters
+        required_data_params = [
+            "window_size",
+            "horizon",
+            "missing_value",
+            # Add any other required data parameters
+        ]
+
+        for param in required_data_params:
+            if not hasattr(self.data, param):
+                raise ValueError(f"Missing required config value: data.{param}")
+
+        # Check for required training parameters
+        required_training_params = [
+            "learning_rate",
+            "weight_decay",
+            "num_epochs",
+            "patience",
+            # Add any other required training parameters
+        ]
+
+        for param in required_training_params:
+            if not hasattr(self.training, param):
+                raise ValueError(f"Missing required config value: training.{param}")
+
+        # Type checking and value validation
+        if self.data.window_size <= 0:
+            raise ValueError("window_size must be positive")
+        if self.data.horizon <= 0:
+            raise ValueError("horizon must be positive")
+        if self.training.learning_rate <= 0:
+            raise ValueError("learning_rate must be positive")
+        if self.model.num_gc_layers <= 0:
+            raise ValueError("num_gc_layers must be positive")
+
+        return True
+
+    def log(self, logger=None):
+        """
+        Log the configuration details.
+
+        Parameters:
+        -----------
+        logger : logging.Logger, optional
+            Logger to use. If None, creates or gets a default logger.
+        """
+        if logger is None:
+            import logging
+
+            logger = logging.getLogger(__name__)
+
+        logger.info("Configuration loaded from: %s", self.config_path)
+
+        logger.info(f"Experiment: {self.experiment.name} (v{self.experiment.version})")
+        logger.info(f"Description: {self.experiment.description}")
+        logger.info(
+            f"Data config: window_size={self.data.window_size}, horizon={self.data.horizon}"
+        )
+        logger.info(
+            f"Model config: hidden_dim={self.model.hidden_dim}, layers={self.model.num_layers}"
+        )
+        logger.info(
+            f"Training config: epochs={self.training.num_epochs}, lr={self.training.learning_rate}"
+        )
+
+        # Log paths
+        logger.info(f"Model save path: {self.paths.model_save_path}")
+        logger.info(f"Results directory: {self.paths.results_dir}")
 
     def save(self, path: Optional[str] = None):
         """

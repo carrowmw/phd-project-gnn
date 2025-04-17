@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
+import logging
+from pathlib import Path
 
 from private_uoapi import (
     LSConfig,
@@ -19,142 +21,98 @@ from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 from gnn_package.src.models.stgnn import create_stgnn_model
 from gnn_package.config import ExperimentConfig, get_config
 
+logger = logging.getLogger(__name__)
 
-def load_model(model_path, config=None, **kwargs):
+
+def load_model(model_path, config):
     """
-    Load a trained STGNN model with parameters from config
+    Load a trained STGNN model using parameters from config.
 
     Parameters:
     -----------
     model_path : str
         Path to the saved model
-    config : ExperimentConfig, optional
+    config : ExperimentConfig
         Configuration object to use for model parameters
-    **kwargs : dict
-        Additional parameters to override config values
 
     Returns:
     --------
     Loaded model
     """
-    from gnn_package.config import get_config
+    logger.info(f"Loading model using configuration from {config.config_path}")
 
-    # Use provided config, or get default config
-    if config is None:
-        config = get_config()
-
-    # Extract parameters from config with optional overrides from kwargs
-    input_dim = kwargs.get("input_dim", config.model.input_dim)
-    hidden_dim = kwargs.get("hidden_dim", config.model.hidden_dim)
-    output_dim = kwargs.get("output_dim", config.model.output_dim)
-    horizon = kwargs.get("horizon", config.data.horizon)
-    num_layers = kwargs.get("num_layers", config.model.num_layers)
-    dropout = kwargs.get("dropout", config.model.dropout)
-
-    # Get additional model parameters if they exist in the config
-    num_gc_layers = kwargs.get(
-        "num_gc_layers", getattr(config.model, "num_gc_layers", 2)
-    )
-
-    # Create model with the parameters
-    model = create_stgnn_model(
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        horizon=horizon,
-        num_layers=num_layers,
-        dropout=dropout,
-        num_gc_layers=num_gc_layers,
-        config=config,  # Pass the complete config for any other parameters
-    )
+    # Create model with parameters from config
+    model = create_stgnn_model(config=config)
 
     # Load state dict and set to eval mode
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
     model.eval()
 
-    # Print model configuration for debugging
-    print(f"Loaded model with parameters:")
-    print(f"  hidden_dim: {hidden_dim}")
-    print(f"  num_layers: {num_layers}")
-    print(f"  num_gc_layers: {num_gc_layers}")
-    print(f"  horizon: {horizon}")
+    # Log model configuration
+    logger.info(f"Loaded model with parameters:")
+    logger.info(f"  hidden_dim: {config.model.hidden_dim}")
+    logger.info(f"  num_layers: {config.model.num_layers}")
+    logger.info(f"  num_gc_layers: {getattr(config.model, 'num_gc_layers', 2)}")
+    logger.info(f"  horizon: {config.data.horizon}")
 
     return model
 
 
-async def fetch_recent_data_for_validation(
-    config=None, node_ids=None, days_back=None, window_size=None, horizon=None
-):
+async def fetch_recent_data_for_validation(config):
     """
-    Fetch recent data for validation, ensuring we have enough data to both
-    make predictions and validate them against actual values.
+    Fetch recent data for validation using the configuration.
 
     Parameters:
     -----------
-    config : ExperimentConfig, optional
-        Configuration object
-    node_ids : list, optional
-        List of node IDs to fetch data for. If None, fetch all available.
-    days_back : int, optional
-        Number of days of historical data to fetch
-    window_size : int, optional
-        Size of the input window for the model
-    horizon : int, optional
-        Number of time steps to predict ahead
+    config : ExperimentConfig
+        Configuration object containing all parameters
 
     Returns:
     --------
     dict
         Dictionary containing processed data for validation
     """
-    # Get configuration if not provided
-    if config is None:
-        config = get_config()
+    logger.info(f"Using configuration from {config.config_path}")
 
-    # Use provided values or fall back to config
-    if days_back is None:
-        days_back = getattr(config.data, "days_back", 2)
-
-    if window_size is None:
-        window_size = config.data.window_size
-
-    if horizon is None:
-        horizon = config.data.horizon
-
+    # Initialize API client
     api_config = LSConfig()
     auth = LSAuth(api_config)
     client = LightsailWrapper(api_config, auth)
 
+    # Get sensor name to ID mapping
     name_id_map = get_sensor_name_id_map(config=config)
     id_to_name_map = {v: k for k, v in name_id_map.items()}
 
-    # If node_ids is None, use all available node IDs from the mapping
-    if node_ids is None:
-        node_ids = list(name_id_map.values())
-        print(f"Using all available {len(node_ids)} nodes")
+    # Use all available node IDs by default
+    node_ids = list(name_id_map.values())
+    logger.info(f"Using all available {len(node_ids)} nodes")
 
-    print(f"Fetching recent data for {len(node_ids)} nodes, {days_back} days back")
-    print(f"Using window_size={window_size}, horizon={horizon}")
+    # Get parameters from config
+    days_back = getattr(config.data, "days_back", 2)
+    window_size = config.data.window_size
+    horizon = config.data.horizon
+
+    logger.info(
+        f"Fetching data for {days_back} days with window_size={window_size}, horizon={horizon}"
+    )
 
     # Determine date range for API request
-
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days_back)
 
     # Create date range parameters
-
     date_range_params = DateRangeParams(
         start_date=start_date,
         end_date=end_date,
-        max_date_range=timedelta(days=days_back + 1),  # Add buffer
+        max_date_range=timedelta(days=days_back + 1),
     )
 
     # Fetch data from API
-    print(f"Querying API for data from {start_date} to {end_date}")
+    logger.info(f"Querying API for data from {start_date} to {end_date}")
     count_data = await client.get_traffic_data(date_range_params)
-
     counts_df = convert_to_dataframe(count_data)
 
+    # Create time series dictionary
     time_series_dict = {}
     successful_nodes = 0
 
@@ -162,14 +120,14 @@ async def fetch_recent_data_for_validation(
         # Look up location name for this node ID
         location = id_to_name_map.get(node_id)
         if not location:
-            print(f"Warning: No location found for node ID {node_id}")
+            logger.warning(f"No location found for node ID {node_id}")
             continue
 
         # Filter data for this location
         df = counts_df[counts_df["location"] == location]
 
         if df.empty:
-            print(f"No data found for node {node_id} (location: {location})")
+            logger.warning(f"No data found for node {node_id} (location: {location})")
             continue
 
         # Create time series
@@ -182,11 +140,13 @@ async def fetch_recent_data_for_validation(
         time_series_dict[node_id] = series
         successful_nodes += 1
 
-    print(f"Successfully fetched data for {successful_nodes}/{len(node_ids)} nodes")
+    logger.info(
+        f"Successfully fetched data for {successful_nodes}/{len(node_ids)} nodes"
+    )
 
     # If no data was fetched, return early
     if not time_series_dict:
-        print("No valid data fetched from API")
+        logger.warning("No valid data fetched from API")
         return {
             "windows": {},
             "masks": {},
@@ -204,34 +164,28 @@ async def fetch_recent_data_for_validation(
             # Use shortened series for prediction input
             input_dict[node_id] = series[:-horizon]
         else:
-            print(
-                f"Warning: Not enough data points for node {node_id}, needs at least {horizon+1} points"
+            logger.warning(
+                f"Not enough data points for node {node_id}, needs at least {horizon+1} points"
             )
             # Still include it but with the same data, may not be able to validate effectively
             validation_dict[node_id] = series
             input_dict[node_id] = series
 
+    # Process data using the config
     input_data_loaders = training.preprocess_data(
-        data=input_dict,  # Pass the shortened data directly
-        graph_prefix=config.data.graph_prefix,  # Use graph prefix from config
-        window_size=window_size,
-        horizon=horizon,
-        batch_size=config.data.batch_size,  # Use batch size from config
-        standardize=config.data.standardize,  # Use standardization setting from config
-        config=config,  # Pass the full config for any other settings
+        data=input_dict,
+        config=config,
     )
 
     # Return a dict with the processed data
     return {
         "data_loaders": input_data_loaders,
-        "time_series": validation_dict,  # Full time series for validation
-        "input_series": input_dict,  # Shortened time series used as input
+        "time_series": validation_dict,
+        "input_series": input_dict,
     }
 
 
-def plot_predictions_with_validation(
-    predictions_dict, data, node_ids, name_id_map=None, validation_window=6
-):
+def plot_predictions_with_validation(predictions_dict, data, node_ids, config):
     """
     Plot predictions alongside actual data for validation
 
@@ -243,30 +197,22 @@ def plot_predictions_with_validation(
         Dict containing time series data from fetch_recent_data
     node_ids : list
         List of node IDs
-    name_id_map : dict, optional
-        Mapping from node IDs to sensor names
-    validation_window : int
-        Number of time steps to use for validation (should match horizon)
+    config : ExperimentConfig
+        Configuration object
 
     Returns:
     --------
     matplotlib figure
     """
-    import numpy as np
-    import matplotlib.pyplot as plt
-    from datetime import timedelta
+    # Get validation window from config
+    validation_window = config.data.horizon
 
-    if name_id_map is None:
-        from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
-
-        name_id_map = get_sensor_name_id_map()
-        # Reverse the mapping to go from id to name
-        name_id_map = {v: k for k, v in name_id_map.items()}
+    # Get name-to-id mapping
+    name_id_map = get_sensor_name_id_map(config=config)
+    name_id_map = {v: k for k, v in name_id_map.items()}
 
     # Get predictions array and node indices
     pred_array = predictions_dict["predictions"]
-
-    # Get the nodes that were used for prediction
     node_indices = predictions_dict["node_indices"]
     valid_nodes = [node_ids[idx] for idx in node_indices]
 
@@ -284,7 +230,7 @@ def plot_predictions_with_validation(
 
         # Get full historical data
         if node_id not in time_series_dict:
-            print(f"Warning: No historical data found for node {node_id}")
+            logger.warning(f"No historical data found for node {node_id}")
             continue
 
         historical = time_series_dict[node_id]
@@ -296,7 +242,7 @@ def plot_predictions_with_validation(
         # Get prediction for this node
         node_position = np.where(node_indices == node_ids.index(node_id))[0]
         if len(node_position) == 0:
-            print(f"Warning: Cannot find node {node_id} in prediction data")
+            logger.warning(f"Cannot find node {node_id} in prediction data")
             continue
 
         node_idx = node_position[0]
@@ -369,11 +315,7 @@ def plot_predictions_with_validation(
 
 
 async def predict_all_sensors_with_validation(
-    model_path,
-    graph_prefix,
-    output_file=None,
-    plot=True,
-    config_path=None,
+    model_path, config, output_file=None, plot=True
 ):
     """
     Make predictions for all available sensors and validate against actual data
@@ -382,8 +324,8 @@ async def predict_all_sensors_with_validation(
     -----------
     model_path : str
         Path to the saved model file
-    graph_prefix : str
-        Prefix for the graph data files
+    config : ExperimentConfig
+        Configuration object
     output_file : str, optional
         Path to save the prediction results
     plot : bool
@@ -394,67 +336,46 @@ async def predict_all_sensors_with_validation(
     dict
         Dictionary containing predictions, actual values, and evaluation metrics
     """
-
-    # Load configuration
-    config = None
-    if config_path:
-        try:
-            config = ExperimentConfig(config_path)
-            print(f"Loaded configuration from {config_path}")
-        except Exception as e:
-            print(f"Warning: Could not load configuration from {config_path}: {e}")
-            config = get_config()
-            print("Using default configuration")
-    else:
-        config = get_config()
-        print("Using default configuration")
+    logger.info(f"Using configuration from {config.config_path}")
 
     # Load model with the config
-    print(f"Loading model from: {model_path}")
+    logger.info(f"Loading model from: {model_path}")
     model = load_model(model_path=model_path, config=config)
-    print(f"Model loaded successfully")
+    logger.info(f"Model loaded successfully")
 
     # Fetch and preprocess recent data for validation
-    print(f"Fetching and preprocessing recent data for validation")
-    data = await fetch_recent_data_for_validation(
-        node_ids=None,  # Fetch all available nodes
-        days_back=2,
-        window_size=config.data.window_size,
-        horizon=model.horizon,
-    )
-
-    # Print the structure of the data for debugging
-    print("Data keys:", data.keys())
+    logger.info(f"Fetching and preprocessing recent data for validation")
+    data = await fetch_recent_data_for_validation(config=config)
 
     # Extract preprocessed data
     data_loaders = data["data_loaders"]
     time_series = data["time_series"]  # Full time series
 
-    # The adjacency matrix and node_ids are now consistent with the training data
+    # The adjacency matrix and node_ids are consistent with the training data
     adj_matrix = data_loaders["adj_matrix"]
     node_ids = data_loaders["node_ids"]
 
-    print(f"Preprocessed data for {len(node_ids)} nodes")
+    logger.info(f"Preprocessed data for {len(node_ids)} nodes")
 
     # Make predictions using the validation dataloader
-    predictions = predict_with_model(model, data_loaders["val_loader"])
+    predictions = predict_with_model(model, data_loaders["val_loader"], config=config)
 
     # Format results
     results_df = format_predictions_with_validation(
-        predictions, time_series, node_ids, model.horizon
+        predictions, time_series, node_ids, config=config
     )
 
     # Save to file if requested
     if output_file and not results_df.empty:
         results_df.to_csv(output_file, index=False)
-        print(f"Predictions saved to {output_file}")
+        logger.info(f"Predictions saved to {output_file}")
 
     # Plot if requested
     if plot and not results_df.empty:
         # Create a data structure compatible with plot_predictions
         plot_data = {"time_series": time_series}
         fig = plot_predictions_with_validation(
-            predictions, plot_data, node_ids, validation_window=model.horizon
+            predictions, plot_data, node_ids, config=config
         )
         plt.show()
 
@@ -466,7 +387,7 @@ async def predict_all_sensors_with_validation(
                 else f"{output_file}_plot.png"
             )
             fig.savefig(plot_filename, dpi=300, bbox_inches="tight")
-            print(f"Plot saved to {plot_filename}")
+            logger.info(f"Plot saved to {plot_filename}")
 
     return {
         "predictions": predictions,
@@ -476,7 +397,7 @@ async def predict_all_sensors_with_validation(
     }
 
 
-def predict_with_model(model, dataloader, device=None):
+def predict_with_model(model, dataloader, config):
     """
     Make predictions using a trained model and a dataloader.
 
@@ -486,22 +407,31 @@ def predict_with_model(model, dataloader, device=None):
         The trained model
     dataloader : DataLoader
         DataLoader containing the data to predict on
-    device : torch.device, optional
-        Device to use for inference
+    config : ExperimentConfig
+        Configuration object
 
     Returns:
     --------
     dict
         Dictionary containing predictions and metadata
     """
-    if device is None:
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    # Get device from config if specified, otherwise use best available
+    device_name = getattr(config.training, "device", None)
+    if device_name:
+        device = torch.device(device_name)
+    else:
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+        else:
+            device = torch.device("cpu")
 
+    logger.info(f"Using device: {device}")
     model.to(device)
     model.eval()
 
     # Get a single batch from the dataloader
-    # For prediction, we typically use just the most recent window
     batch = next(iter(dataloader))
 
     # Move data to device
@@ -509,7 +439,9 @@ def predict_with_model(model, dataloader, device=None):
     x_mask = batch["x_mask"].to(device)
     adj = batch["adj"].to(device)
 
-    print(f"Input shapes - x: {x.shape}, x_mask: {x_mask.shape}, adj: {adj.shape}")
+    logger.info(
+        f"Input shapes - x: {x.shape}, x_mask: {x_mask.shape}, adj: {adj.shape}"
+    )
 
     # Make prediction
     with torch.no_grad():
@@ -529,7 +461,7 @@ def predict_with_model(model, dataloader, device=None):
 
 
 def format_predictions_with_validation(
-    predictions_dict, time_series_dict, node_ids, horizon
+    predictions_dict, time_series_dict, node_ids, config
 ):
     """
     Format model predictions into a pandas DataFrame and include actual values for comparison.
@@ -542,25 +474,22 @@ def format_predictions_with_validation(
         Dictionary mapping node IDs to their original time series data
     node_ids : list
         List of node IDs in the order they appear in the predictions
-    horizon : int
-        Number of time steps predicted ahead
+    config : ExperimentConfig
+        Configuration object
 
     Returns:
     --------
     pandas.DataFrame
         DataFrame containing formatted predictions and actual values
     """
-    import pandas as pd
-    from datetime import timedelta
-
     # Get prediction array and node indices
     predictions = predictions_dict["predictions"]
     node_indices = predictions_dict["node_indices"]
+    horizon = config.data.horizon
 
     # Get name-to-ID mapping for sensor names
-    from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
-
-    id_to_name_map = {v: k for k, v in get_sensor_name_id_map().items()}
+    name_id_map = get_sensor_name_id_map(config=config)
+    id_to_name_map = {v: k for k, v in name_id_map.items()}
 
     # Create rows for the DataFrame
     rows = []
@@ -576,20 +505,16 @@ def format_predictions_with_validation(
         # Get the time series for this node
         series = time_series_dict[node_id]
 
-        # Get input end point (the last point used for input, before the validation period)
+        # Skip if not enough data
         if len(series) <= horizon:
-            print(f"Warning: Not enough data for node {node_id} to validate")
+            logger.warning(f"Not enough data for node {node_id} to validate")
             continue
 
-        input_end_time = series.index[-(horizon + 1)]
-
-        # Get validation data (actual values)
+        # Get the validation data
         validation_data = series.iloc[-horizon:]
 
         # Extract predictions for this node
-        node_preds = predictions[
-            0, i, :, 0
-        ]  # First batch, node i, all horizons, first feature
+        node_preds = predictions[0, i, :, 0]
 
         # Create a row for each prediction horizon
         for h, pred_value in enumerate(node_preds):
@@ -617,10 +542,10 @@ def format_predictions_with_validation(
         # Calculate overall metrics
         mse = (df["error"] ** 2).mean()
         mae = df["abs_error"].mean()
-        print(f"Overall MSE: {mse:.4f}, MAE: {mae:.4f}")
+        logger.info(f"Overall MSE: {mse:.4f}, MAE: {mae:.4f}")
         return df
     else:
-        print("Warning: No predictions could be validated against actual data")
+        logger.warning("No predictions could be validated against actual data")
         return pd.DataFrame(
             columns=[
                 "node_id",

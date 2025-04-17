@@ -12,7 +12,9 @@ from gnn_package.config import get_config
 
 
 def snap_points_to_network(
-    points_gdf, network_gdf, config=None, tolerance_decimal_places=None
+    points_gdf,
+    network_gdf,
+    config=None,
 ):
     """
     Snap points to their nearest location on the network.
@@ -38,9 +40,7 @@ def snap_points_to_network(
     if config is None:
         config = get_config()
 
-    # Use parameter or config value
-    if tolerance_decimal_places is None:
-        tolerance_decimal_places = config.data.tolerance_decimal_places
+    tolerance_decimal_places = config.data.tolerance_decimal_places
 
     # Create unified network geometry
     print("Creating unified network geometry...")
@@ -123,7 +123,7 @@ def snap_points_to_network(
     return result_gdf
 
 
-def connect_components(edges_gdf, config=None, max_distance=None):
+def connect_components(edges_gdf, config=None):
     """
     Connect nearby components in the network using NetworkX for speed.
 
@@ -141,21 +141,12 @@ def connect_components(edges_gdf, config=None, max_distance=None):
     GeoDataFrame
         Updated network edges with new connections
     """
-    import networkx as nx
-    import numpy as np
-    import geopandas as gpd
-    import pandas as pd
-    from shapely.geometry import LineString
-    from tqdm import tqdm
-    from gnn_package.config import get_config
 
     # Get configuration
     if config is None:
         config = get_config()
 
-    # Use parameter or config value
-    if max_distance is None:
-        max_distance = config.data.max_distance
+    max_distance = config.data.max_distance
 
     # First convert to NetworkX graph for faster component analysis
     G = nx.Graph()

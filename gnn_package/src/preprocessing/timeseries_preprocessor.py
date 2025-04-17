@@ -1,4 +1,5 @@
 from typing import Dict, List, Tuple
+from datetime import timedelta
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
@@ -16,10 +17,6 @@ class TimeWindow:
 class TimeSeriesPreprocessor:
     def __init__(
         self,
-        window_size=None,
-        stride=None,
-        gap_threshold=None,
-        missing_value=None,
         config=None,
     ):
         """
@@ -40,28 +37,20 @@ class TimeSeriesPreprocessor:
         """
         # Get configuration
         if config is None:
+            print("TimeSeriesPreprocessor: No config provided, using global config")
             config = get_config()
 
-        # Use parameters or config values
-        self.window_size = (
-            window_size if window_size is not None else config.data.window_size
-        )
-        self.stride = stride if stride is not None else config.data.stride
+        self.window_size = config.data.window_size
+        self.stride = config.data.stride
+        self.gap_threshold = pd.Timedelta(minutes=config.data.gap_threshold_minutes)
+        self.missing_value = config.data.missing_value
 
-        # Handle gap_threshold (either Timedelta or minutes)
-        if gap_threshold is not None:
-            self.gap_threshold = gap_threshold
-        else:
-            self.gap_threshold = pd.Timedelta(minutes=config.data.gap_threshold_minutes)
-
-        self.missing_value = (
-            missing_value if missing_value is not None else config.data.missing_value
-        )
+        # Store full config for other methods
+        self.config = config
 
     def create_windows_from_grid(
         self,
         time_series_dict,
-        standardize=None,
         config=None,
     ):
         """
@@ -87,20 +76,19 @@ class TimeSeriesPreprocessor:
             Metadata for each window
         """
 
+        # Get configuration
+        if config is None:
+            config = self.config
+
+        # Use parameters or config values
+        standardize = config.data.standardize
+
         @dataclass
         class TimeWindow:
             start_idx: int
             end_idx: int
             node_id: str
             mask: np.ndarray  # 1 for valid data, 0 for missing
-
-        # Get configuration
-        if config is None:
-            config = get_config()
-
-        # Use parameter or config value
-        if standardize is None:
-            standardize = config.data.standardize
 
         # Find global time range
         all_timestamps = set()
@@ -175,6 +163,184 @@ class TimeSeriesPreprocessor:
 
         return X_by_sensor, masks_by_sensor, metadata_by_sensor
 
+    def create_rolling_window_splits(
+        self,
+        time_series_dict,
+        config=None,
+    ):
+        """
+        Create multiple time-based splits using a rolling window approach.
+
+        Parameters:
+        -----------
+        time_series_dict : Dict[str, pd.Series]
+            Dictionary mapping node IDs to their time series data
+        n_splits : int
+            Number of different train/validation splits to create
+        val_size_days : int
+            Size of validation window in days
+        train_ratio : float, optional
+            If provided, use this ratio of data for training instead of fixed validation size
+
+        Returns:
+        --------
+        List[Dict[str, Dict[str, pd.Series]]]
+            List of dictionaries, each containing a train/validation split
+        """
+        # Get configuration
+        if config is None:
+            config = self.config
+
+        val_size_days = config.data.val_size_days
+        train_ratio = config.data.train_ratio
+        n_splits = config.data.n_splits
+
+        # Find global min and max dates
+        all_dates = []
+        for series in time_series_dict.values():
+            if len(series) > 0:
+                all_dates.extend(series.index)
+
+        min_date = min(all_dates)
+        max_date = max(all_dates)
+        total_days = (max_date - min_date).days
+
+        splits = []
+
+        if train_ratio is not None:
+            # Create splits based on training ratio
+            for i in range(n_splits):
+                # Calculate step size for this approach
+                step_size = (
+                    (total_days * (1 - train_ratio)) / (n_splits - 1)
+                    if n_splits > 1
+                    else 0
+                )
+
+                # Calculate cutoff point (end of training data)
+                train_days = total_days * train_ratio + (i * step_size)
+                cutoff = min_date + timedelta(days=train_days)
+
+                # Skip if cutoff would be beyond available data
+                if cutoff >= max_date:
+                    continue
+
+                train_dict = {}
+                val_dict = {}
+
+                for node_id, series in time_series_dict.items():
+                    # Get training data (everything before cutoff)
+                    train_series = series[series.index < cutoff]
+
+                    # Get validation data (everything after cutoff)
+                    val_series = series[series.index >= cutoff]
+
+                    # Only include if both parts have data
+                    if len(train_series) > 0 and len(val_series) > 0:
+                        train_dict[node_id] = train_series
+                        val_dict[node_id] = val_series
+
+                splits.append({"train": train_dict, "val": val_dict})
+        else:
+            # Create splits based on fixed validation size
+            # Calculate step size between splits
+            effective_days = total_days - val_size_days
+            step_days = effective_days // n_splits if n_splits > 0 else effective_days
+
+            if step_days <= 0:
+                raise ValueError(
+                    f"Not enough data for {n_splits} splits with {val_size_days} validation days"
+                )
+
+            for i in range(n_splits):
+                # Calculate cutoff for this split
+                cutoff = min_date + timedelta(days=i * step_days)
+                val_end = cutoff + timedelta(days=val_size_days)
+
+                # Skip if validation would go beyond available data
+                if val_end > max_date:
+                    continue
+
+                train_dict = {}
+                val_dict = {}
+
+                for node_id, series in time_series_dict.items():
+                    # Get training data (everything before cutoff)
+                    train_series = series[series.index < cutoff]
+
+                    # Get validation data (time window after cutoff)
+                    val_series = series[
+                        (series.index >= cutoff) & (series.index < val_end)
+                    ]
+
+                    # Only include if both parts have data
+                    if len(train_series) > 0 and len(val_series) > 0:
+                        train_dict[node_id] = train_series
+                        val_dict[node_id] = val_series
+
+                splits.append({"train": train_dict, "val": val_dict})
+
+        return splits
+
+    def create_time_based_split(
+        self,
+        time_series_dict,
+        config=None,
+    ):
+        """
+        Split data based on time, either using a ratio or a specific cutoff date (simple solution).
+
+        Parameters:
+        -----------
+        time_series_dict : Dict[str, pd.Series]
+            Dictionary mapping node IDs to their time series data
+        train_ratio : float, optional
+            Ratio of data to use for training (by time, not by sample count)
+        cutoff_date : datetime, optional
+            Specific date to use as the split point (overrides train_ratio)
+
+        Returns:
+        --------
+        Dict[str, Dict[str, pd.Series]]
+            Dictionary containing train and validation series for each node
+        """
+        # Get configuration
+        if config is None:
+            config = self.config
+
+        train_ratio = config.data.train_ratio
+        cutoff_date = config.data.cutoff_date
+
+        train_dict = {}
+        val_dict = {}
+
+        # Find global min and max dates if we need to calculate cutoff
+        if cutoff_date is None:
+            all_dates = []
+            for series in time_series_dict.values():
+                if len(series) > 0:
+                    all_dates.extend(series.index)
+
+            min_date = min(all_dates)
+            max_date = max(all_dates)
+            total_days = (max_date - min_date).days
+
+            # Calculate cutoff date based on train_ratio
+            cutoff_date = min_date + timedelta(days=int(total_days * train_ratio))
+
+        # Split each sensor's data
+        for node_id, series in time_series_dict.items():
+            # Split based on date
+            train_series = series[series.index < cutoff_date]
+            val_series = series[series.index >= cutoff_date]
+
+            # Only include if both parts have data
+            if len(train_series) > 0 and len(val_series) > 0:
+                train_dict[node_id] = train_series
+                val_dict[node_id] = val_series
+
+        return {"train": train_dict, "val": val_dict}
+
 
 def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=None):
     """
@@ -199,6 +365,7 @@ def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=No
 
     # Get configuration
     if config is None:
+        print("resample_sensor_data: No config provided, using global config")
         config = get_config()
 
     # Use parameters or config values

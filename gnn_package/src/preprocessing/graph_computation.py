@@ -9,7 +9,11 @@ from itertools import combinations
 from gnn_package.config import get_config
 
 
-def compute_shortest_paths(network_gdf, snapped_points_gdf, tolerance=None):
+def compute_shortest_paths(
+    network_gdf,
+    snapped_points_gdf,
+    config=None,
+):
     """
     Compute shortest paths between all pairs of snapped points.
     Assumes points have been validated using validate_snapped_points().
@@ -22,9 +26,10 @@ def compute_shortest_paths(network_gdf, snapped_points_gdf, tolerance=None):
     Returns:
     GeoDataFrame: Shortest paths between points
     """
-    config = get_config()
-    if tolerance is None:
-        tolerance = config.data.tolerance_decimal_places
+    if config is None:
+        config = get_config()
+
+    tolerance = config.data.tolerance_decimal_places
 
     # Create NetworkX graph from network GeoDataFrame
     G = nx.Graph()
@@ -152,9 +157,7 @@ def create_weighted_graph_from_paths(paths_gdf):
 
 def compute_adjacency_matrix(
     adj_matrix: np.ndarray,
-    sigma_squared=None,
-    epsilon=None,
-    normalization_factor=None,
+    config=None,
 ) -> np.ndarray:
     """
     Computes a weighted adjacency matrix from a distance matrix using a Gaussian kernel function.
@@ -192,13 +195,13 @@ def compute_adjacency_matrix(
     # a high value e.g. 0.95 means that only very strong connections are kept
     # for small areas epsilon=0.5 will likely be fully connected
 
-    config = get_config()
-    if sigma_squared is None:
-        sigma_squared = config.data.sigma_squared
-    if epsilon is None:
-        epsilon = config.data.epsilon
-    if normalization_factor is None:
-        normalization_factor = config.data.normalization_factor
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    sigma_squared = config.data.sigma_squared
+    epsilon = config.data.epsilon
+    normalization_factor = config.data.normalization_factor
 
     a = adj_matrix / normalization_factor  # Normalize distances
     a_squared = a * a  # Square distances

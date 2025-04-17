@@ -17,7 +17,6 @@ def preprocess_data(
     data=None,
     data_file=None,
     config=None,
-    **kwargs,
 ):
     """
     Load and preprocess graph and sensor data for training
@@ -44,15 +43,20 @@ def preprocess_data(
     if config is None:
         config = get_config()
 
-    # Allow override of config parameters with kwargs
-    graph_prefix = kwargs.get("graph_prefix", config.data.graph_prefix)
-    window_size = kwargs.get("window_size", config.data.window_size)
-    horizon = kwargs.get("horizon", config.data.horizon)
-    stride = kwargs.get("stride", config.data.stride)
-    batch_size = kwargs.get("batch_size", config.data.batch_size)
-    standardize = kwargs.get("standardize", config.data.standardize)
-    sigma_squared = kwargs.get("sigma_squared", config.data.sigma_squared)
-    epsilon = kwargs.get("epsilon", config.data.epsilon)
+    # Use parameters from config
+    graph_prefix = config.data.graph_prefix
+    window_size = config.data.window_size
+    horizon = config.data.horizon
+    stride = config.data.stride
+    batch_size = config.data.batch_size
+    standardize = config.data.standardize
+    sigma_squared = config.data.sigma_squared
+    epsilon = config.data.epsilon
+    train_ratio = config.data.train_ratio
+    cutoff_date = config.data.cutoff_date
+    split_method = config.data.split_method
+    val_size_days = config.data.val_size_days
+    n_splits = config.data.n_splits
 
     print("Loading graph data...")
 
@@ -61,9 +65,7 @@ def preprocess_data(
     )
 
     # Compute graph weights using Gaussian kernel
-    weighted_adj = preprocessing.compute_adjacency_matrix(
-        adj_matrix, sigma_squared=sigma_squared, epsilon=epsilon
-    )
+    weighted_adj = preprocessing.compute_adjacency_matrix(adj_matrix)
 
     print(
         f"Loaded adjacency matrix of shape {adj_matrix.shape} with {len(node_ids)} nodes"
@@ -84,25 +86,84 @@ def preprocess_data(
             sys.exit(1)
 
     resampled_data = preprocessing.resample_sensor_data(
-        data, freq="15min", fill_value=-1.0
+        data,
     )
 
     # Create windows for time series
     print(f"Creating windows with size={window_size}, horizon={horizon}...")
-    processor = preprocessing.TimeSeriesPreprocessor(
-        window_size=window_size,
-        stride=stride,
-        gap_threshold=pd.Timedelta(minutes=15),
-        missing_value=-1.0,
-    )
+    processor = preprocessing.TimeSeriesPreprocessor()
 
-    X_by_sensor, masks_by_sensor, metadata_by_sensor = (
-        processor.create_windows_from_grid(resampled_data, standardize=standardize)
-    )
+    # Use the specified split method
+    if split_method:
+        if split_method == "time_based":
+            # Create time-based split
+            print(
+                f"Using time-based split with train ratio {train_ratio} and cutoff date {cutoff_date}"
+            )
+            split_data = processor.create_time_based_split(
+                resampled_data,
+            )
+        elif split_method == "rolling_window":
+            # Create rolling window split
+            print(
+                f"Using rolling window split with train_ratio {train_ratio}, val_size_days {val_size_days} and n_splits {n_splits}"
+            )
+            split_data = processor.create_rolling_window_splits(
+                resampled_data,
+            )
+        else:
+            raise ValueError(f"Unknown split method: {split_method}")
 
-    # Get list of sensors with valid windows
-    valid_sensors = list(X_by_sensor.keys())
-    print(f"Found {len(valid_sensors)} sensors with valid windows")
+        # Create windows for each split
+        print("Creating windows for training data...")
+        X_train_by_sensor, masks_train_by_sensor, _ = (
+            processor.create_windows_from_grid(
+                split_data["train"], standardize=standardize
+            )
+        )
+
+        print("Creating windows for validation data...")
+        X_val_by_sensor, masks_val_by_sensor, _ = processor.create_windows_from_grid(
+            split_data["val"], standardize=standardize
+        )
+
+        # Get valid sensors (those with windows in both train and val)
+        valid_sensors = list(
+            set(X_train_by_sensor.keys()) & set(X_val_by_sensor.keys())
+        )
+        print(
+            f"Found {len(valid_sensors)} sensors with valid windows in both train and validation sets"
+        )
+
+    else:
+        # Original behavior: create windows first, then split
+        print(f"Creating windows with size={window_size}, horizon={horizon}...")
+        X_by_sensor, masks_by_sensor, _ = processor.create_windows_from_grid(
+            resampled_data, standardize=standardize
+        )
+
+        # Get list of sensors with valid windows
+        valid_sensors = list(X_by_sensor.keys())
+        print(f"Found {len(valid_sensors)} sensors with valid windows")
+
+        # For each sensor, split its data into train and validation
+        X_train_by_sensor = {}
+        X_val_by_sensor = {}
+        masks_train_by_sensor = {}
+        masks_val_by_sensor = {}
+
+        # Add progress bar for splitting data
+        for node_id in tqdm(
+            valid_sensors, desc="Splitting data into train/validation sets"
+        ):
+            n_windows = len(X_by_sensor[node_id])
+            train_size = int(n_windows * 0.8)
+
+            X_train_by_sensor[node_id] = X_by_sensor[node_id][:train_size]
+            X_val_by_sensor[node_id] = X_by_sensor[node_id][train_size:]
+
+            masks_train_by_sensor[node_id] = masks_by_sensor[node_id][:train_size]
+            masks_val_by_sensor[node_id] = masks_by_sensor[node_id][train_size:]
 
     if len(valid_sensors) == 0:
         raise ValueError(
@@ -113,25 +174,6 @@ def preprocess_data(
     valid_indices = [node_ids.index(sid) for sid in valid_sensors if sid in node_ids]
     valid_adj = weighted_adj[valid_indices, :][:, valid_indices]
     valid_node_ids = [node_ids[idx] for idx in valid_indices]
-
-    # For each sensor, split its data into train and validation
-    X_train_by_sensor = {}
-    X_val_by_sensor = {}
-    masks_train_by_sensor = {}
-    masks_val_by_sensor = {}
-
-    # Add progress bar for splitting data
-    for node_id in tqdm(
-        valid_sensors, desc="Splitting data into train/validation sets"
-    ):
-        n_windows = len(X_by_sensor[node_id])
-        train_size = int(n_windows * 0.8)
-
-        X_train_by_sensor[node_id] = X_by_sensor[node_id][:train_size]
-        X_val_by_sensor[node_id] = X_by_sensor[node_id][train_size:]
-
-        masks_train_by_sensor[node_id] = masks_by_sensor[node_id][:train_size]
-        masks_val_by_sensor[node_id] = masks_by_sensor[node_id][train_size:]
 
     # Calculate total windows
     total_train = sum(len(windows) for windows in X_train_by_sensor.values())
@@ -175,6 +217,23 @@ class TqdmSTGNNTrainer(STGNNTrainer):
     """
     Extension of STGNNTrainer that adds progress bars using tqdm
     """
+
+    def __init__(self, model, config):
+        """
+        Initialize the trainer with model and configuration.
+
+        Parameters:
+        -----------
+        model : STGNN
+            The model to train
+        config : ExperimentConfig
+            Configuration object
+        """
+        # Call the parent class constructor to handle device, optimizer, and criterion
+        super().__init__(model, config)
+
+        # Additional tqdm-specific initialization can go here if needed
+        self.log_interval = getattr(config.training, "log_interval", 10)
 
     def train_epoch(self, dataloader):
         """Train for one epoch with progress bar"""
@@ -264,7 +323,6 @@ class TqdmSTGNNTrainer(STGNNTrainer):
 def train_model(
     data_loaders,
     config=None,
-    **kwargs,
 ):
     """
     Train the STGNN model with progress bars
@@ -288,17 +346,8 @@ def train_model(
     if config is None:
         config = get_config()
 
-    # Allow override of config parameters with kwargs
-    input_dim = kwargs.get("input_dim", config.model.input_dim)
-    hidden_dim = kwargs.get("hidden_dim", config.model.hidden_dim)
-    output_dim = kwargs.get("output_dim", config.model.output_dim)
-    num_layers = kwargs.get("num_layers", config.model.num_layers)
-    dropout = kwargs.get("dropout", config.model.dropout)
-    learning_rate = kwargs.get("learning_rate", config.training.learning_rate)
-    weight_decay = kwargs.get("weight_decay", config.training.weight_decay)
-    num_epochs = kwargs.get("num_epochs", config.training.num_epochs)
-    patience = kwargs.get("patience", config.training.patience)
-    horizon = kwargs.get("horizon", config.data.horizon)
+    num_epochs = config.training.num_epochs
+    patience = config.training.patience
 
     # Determine device (use config or auto-detect)
     if config.training.device:
@@ -312,24 +361,10 @@ def train_model(
     print(f"Using device: {device}")
 
     # Create model
-    model = create_stgnn_model(
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        horizon=horizon,
-        num_layers=num_layers,
-    )
-
-    # Define optimizer and loss function
-    optimizer = torch.optim.Adam(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay
-    )
-
-    # Mean Squared Error loss
-    criterion = torch.nn.MSELoss(reduction="none")
+    model = create_stgnn_model(config)
 
     # Create trainer with tqdm support
-    trainer = TqdmSTGNNTrainer(model, optimizer, criterion, device)
+    trainer = TqdmSTGNNTrainer(model, config)
 
     # Training loop with early stopping and overall progress bar
     train_losses = []
@@ -467,6 +502,99 @@ def predict_and_evaluate(model, dataloader, device=None):
         "masks": masks,
         "mse": mse,
         "mae": mae,
+    }
+
+
+def cross_validate_model(data=None, data_file=None, config=None, **kwargs):
+    """
+    Train and evaluate model using time-based cross-validation.
+
+    Parameters:
+    -----------
+    data : dict, optional
+        Dictionary mapping sensor IDs to their time series data
+    data_file : str, optional
+        Path to a pickled file containing sensor data
+    config : ExperimentConfig, optional
+        Centralized configuration object
+    **kwargs : dict
+        Additional parameters to pass to preprocess_data and train_model
+        n_splits : int
+            Number of validation splits to use
+        val_size_days : int
+            Size of validation window in days
+    Returns:
+    --------
+    dict
+        Dictionary containing cross-validation results
+    """
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    # Allow override of config parameters with kwargs
+    n_splits = kwargs.get("n_splits", config.data.n_splits)
+    val_size_days = kwargs.get("val_size_days", config.data.val_size_days)
+
+    # Load sensor data if not provided
+    if data is None:
+        if data_file is None:
+            raise ValueError("Either data or data_file must be provided")
+        data = preprocessing.load_sensor_data(data_file)
+
+    # Resample data to consistent frequency
+    resampled_data = preprocessing.resample_sensor_data(
+        data,
+    )
+
+    # Create processor with appropriate settings
+    processor = preprocessing.TimeSeriesPreprocessor()
+
+    # Create rolling window splits
+    print(f"Creating {n_splits} time-based cross-validation splits...")
+    splits = processor.create_rolling_window_splits(
+        resampled_data, n_splits=n_splits, val_size_days=val_size_days
+    )
+
+    print(f"Generated {len(splits)} valid split(s)")
+
+    # Train and evaluate on each split
+    results = []
+    for i, split in enumerate(tqdm(splits, desc="Training on CV splits")):
+        print(f"\nTraining on split {i+1}/{len(splits)}")
+
+        # Process this split into windows
+        split_data_loaders = preprocess_data(
+            data=split,  # Pass the split directly
+            config=config,
+            use_time_split=False,  # Already split by time
+            **kwargs,
+        )
+
+        # Train on this split
+        split_results = train_model(
+            data_loaders=split_data_loaders, config=config, **kwargs
+        )
+
+        # Save results for this split
+        results.append(
+            {
+                "split": i,
+                "train_losses": split_results["train_losses"],
+                "val_losses": split_results["val_losses"],
+                "best_val_loss": split_results["best_val_loss"],
+            }
+        )
+
+    # Calculate overall metrics
+    best_val_losses = [r["best_val_loss"] for r in results]
+
+    return {
+        "results": results,
+        "mean_val_loss": np.mean(best_val_losses),
+        "std_val_loss": np.std(best_val_losses),
+        "min_val_loss": np.min(best_val_losses),
+        "max_val_loss": np.max(best_val_losses),
     }
 
 

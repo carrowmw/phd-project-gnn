@@ -46,7 +46,7 @@ def read_or_create_sensor_nodes():
         return sensors_gdf
 
 
-def get_bbox_transformed(bbox_coords=None, bbox_crs=None, road_network_crs=None):
+def get_bbox_transformed(config=None):
     """
     Create a bounding box polygon for the area of interest and transform it to the desired CRS.
 
@@ -55,15 +55,17 @@ def get_bbox_transformed(bbox_coords=None, bbox_crs=None, road_network_crs=None)
     GeoDataFrame: Transformed bounding box polygon
     """
 
-    config = get_config()
+    # Get configuration
+    if config is None:
+        config = get_config()
 
-    # Get coordinates from the config
-    if bbox_coords is None:
-        bbox_coords = config.data.bbox_coords
-    if bbox_crs is None:
-        bbox_crs = config.data.bbox_crs
-    if road_network_crs is None:
-        road_network_crs = config.data.road_network_crs
+    bbox_coords = config.data.bbox_coords
+    bbox_crs = config.data.bbox_crs
+    road_network_crs = config.data.road_network_crs
+
+    print(f"get_bbox_transformed: bbox coords: {bbox_coords}")
+    print(f"get_bbox_transformed: bbox crs: {bbox_crs}")
+    print(f"get_bbox_transformed: road network crs: {road_network_crs}")
 
     polygon_bbox = Polygon(bbox_coords)
 
@@ -82,7 +84,7 @@ def get_bbox_transformed(bbox_coords=None, bbox_crs=None, road_network_crs=None)
 
 
 def get_street_network_gdfs(
-    place_name, to_crs=None, network_type=None, custom_filter=None
+    config=None,
 ):
     """
     Extract the walkable network for a specified area as GeoDataFrames.
@@ -94,33 +96,32 @@ def get_street_network_gdfs(
     Returns:
     GeoDataFrame: Network edges as linestrings
     """
-    # Set default CRS if not provided
-    config = get_config()
+    # Get configuration
+    if config is None:
+        config = get_config()
 
-    if to_crs is None:
-        to_crs = config.data.road_network_crs
-        print(f"get_street_network_gdfs: using CRS from config {to_crs}")
-    if network_type is None:
-        network_type = config.data.network_type
-        print(f"get_street_network_gdfs: using network type from config {network_type}")
-    if custom_filter is None:
-        custom_filter = config.data.custom_filter
-        print(
-            f"get_street_network_gdfs: using custom filter from config {custom_filter}"
-        )
+    # Use parameters from the config
+    to_crs = config.data.road_network_crs
+    network_type = config.data.network_type
+    custom_filter = config.data.custom_filter
+    place_name = config.data.place_name
+
+    print(f"get_street_network_gdfs: {place_name} with network type: {network_type}")
+    print(f"get_street_network_gdfs: custom filter: {custom_filter}")
+    print(f"get_street_network_gdfs: to_crs: {to_crs}")
 
     # Configure OSMnx settings
     ox.settings.use_cache = True
     ox.settings.log_console = True
 
-    # Custom filter for pedestrian-specific infrastructure
-    custom_filter = custom_filter
-
     try:
         print(f"\nDownloading network for: {place_name}")
         # Download and project the network
         G = ox.graph_from_place(
-            place_name, network_type="walk", custom_filter=custom_filter, simplify=True
+            place_name,
+            network_type=network_type,
+            custom_filter=custom_filter,
+            simplify=True,
         )
         G = ox.project_graph(G, to_crs=to_crs)
 

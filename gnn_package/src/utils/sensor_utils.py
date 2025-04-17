@@ -10,7 +10,7 @@ from private_uoapi import LSConfig, LSAuth, LightsailWrapper
 from gnn_package.config import get_config
 
 
-def get_sensor_name_id_map(format_prefix=None, config=None):
+def get_sensor_name_id_map(config=None):
     """
     Create unique IDs for each sensor from the private UOAPI.
 
@@ -28,12 +28,7 @@ def get_sensor_name_id_map(format_prefix=None, config=None):
     if config is None:
         config = get_config()
 
-    if format_prefix is None:
-        format_prefix = (
-            config.data.sensor_id_prefix
-            if hasattr(config.data, "sensor_id_prefix")
-            else "1"
-        )
+    sensor_id_prefix = config.data.sensor_id_prefix
 
     # Check if the mapping file already exists
     if not os.path.exists(SENSORS_DATA_DIR / "sensor_name_id_map.json"):
@@ -47,7 +42,7 @@ def get_sensor_name_id_map(format_prefix=None, config=None):
 
         # Create mapping using configured format
         mapping = {
-            location: f"{format_prefix}{str(i).zfill(4)}"
+            location: f"{sensor_id_prefix}{str(i).zfill(4)}"
             for i, location in enumerate(sensors["location"])
         }
 
