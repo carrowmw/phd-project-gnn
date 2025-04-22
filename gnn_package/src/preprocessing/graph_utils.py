@@ -59,9 +59,9 @@ def get_bbox_transformed(config=None):
     if config is None:
         config = get_config()
 
-    bbox_coords = config.data.bbox_coords
-    bbox_crs = config.data.bbox_crs
-    road_network_crs = config.data.road_network_crs
+    bbox_coords = config.data.general.bbox_coords
+    bbox_crs = config.data.general.bbox_crs
+    road_network_crs = config.data.general.road_network_crs
 
     print(f"get_bbox_transformed: bbox coords: {bbox_coords}")
     print(f"get_bbox_transformed: bbox crs: {bbox_crs}")
@@ -101,10 +101,10 @@ def get_street_network_gdfs(
         config = get_config()
 
     # Use parameters from the config
-    to_crs = config.data.road_network_crs
-    network_type = config.data.network_type
-    custom_filter = config.data.custom_filter
-    place_name = config.data.place_name
+    to_crs = config.data.general.road_network_crs
+    network_type = config.data.general.network_type
+    custom_filter = config.data.general.custom_filter
+    place_name = config.data.general.place_name
 
     print(f"get_street_network_gdfs: {place_name} with network type: {network_type}")
     print(f"get_street_network_gdfs: custom filter: {custom_filter}")

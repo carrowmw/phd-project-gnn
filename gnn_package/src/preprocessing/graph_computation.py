@@ -29,7 +29,7 @@ def compute_shortest_paths(
     if config is None:
         config = get_config()
 
-    tolerance = config.data.tolerance_decimal_places
+    tolerance = config.data.general.tolerance_decimal_places
 
     # Create NetworkX graph from network GeoDataFrame
     G = nx.Graph()
@@ -199,9 +199,9 @@ def compute_adjacency_matrix(
     if config is None:
         config = get_config()
 
-    sigma_squared = config.data.sigma_squared
-    epsilon = config.data.epsilon
-    normalization_factor = config.data.normalization_factor
+    sigma_squared = config.data.general.sigma_squared
+    epsilon = config.data.general.epsilon
+    normalization_factor = config.data.general.normalization_factor
 
     a = adj_matrix / normalization_factor  # Normalize distances
     a_squared = a * a  # Square distances

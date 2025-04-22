@@ -40,7 +40,7 @@ def snap_points_to_network(
     if config is None:
         config = get_config()
 
-    tolerance_decimal_places = config.data.tolerance_decimal_places
+    tolerance_decimal_places = config.data.general.tolerance_decimal_places
 
     # Create unified network geometry
     print("Creating unified network geometry...")
@@ -146,7 +146,7 @@ def connect_components(edges_gdf, config=None):
     if config is None:
         config = get_config()
 
-    max_distance = config.data.max_distance
+    max_distance = config.data.general.max_distance
 
     # First convert to NetworkX graph for faster component analysis
     G = nx.Graph()

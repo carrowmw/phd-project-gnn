@@ -20,34 +20,29 @@ class ExperimentMetadata:
 
 
 @dataclass
-class DataConfig:
-    """Configuration for data processing."""
+class GeneralDataConfig:
+    """Configuration for data processing shared across training and prediction."""
 
-    # Time series data parameters
-    start_date: str
-    end_date: str
-    graph_prefix: str
-    window_size: int
-    horizon: int
-    batch_size: int
-    days_back: int = 14
+    # Time series-related parameters
+    window_size: int = 24
+    horizon: int = 6
     stride: int = 1
     gap_threshold_minutes: int = 15
+    missing_value: float = -1.0
+    resampling_frequency: str = "15min"
     standardize: bool = True
-    n_splits: int = 3
-    val_size_days: int = 30
-    train_ratio: float = None
-    cutoff_date: str = None
-    split_method: str = "rolling_window"  # Options: "rolling_window", "time_based"
+    batch_size: int = 32
+    buffer_factor: float = 1.0
 
     # Graph-related parameters
+    graph_prefix: str = "25022025_test"  # TO DEPRECATE
     sigma_squared: float = 0.1
     epsilon: float = 0.5
     normalization_factor: int = 10000
     max_distance: float = 100.0  # For connected components
     tolerance_decimal_places: int = 6  # For coordinate comparison
     resampling_frequency: str = "15min"
-    missing_value: float = -1.0
+    missing_value: float = -999.0
     sensor_id_prefix: str = "1"  # Added for sensor ID formatting
     bbox_coords: List[float] = field(
         default_factory=lambda: [
@@ -72,12 +67,42 @@ class DataConfig:
 
 
 @dataclass
+class TrainingDataConfig:
+    """Configuration specific to training data processing."""
+
+    start_date: str = "2024-02-18 00:00:00"
+    end_date: str = "2024-02-25 00:00:00"
+    n_splits: int = 3  # For rolling window splits
+    use_cross_validation: bool = True
+    split_method: str = "rolling_window"  # Options: "rolling_window", "time_based"
+    train_ratio: float = 0.8  # For rolling window splits
+    cutoff_date: str = None  # Instead of train_ratio for time-based splits
+    cv_split_index: int = -1  # For cross-validation
+
+
+@dataclass
+class PredictionDataConfig:
+    """Configuration specific to prediction/testing."""
+
+    days_back: int  # How much historical data to use
+
+
+@dataclass
+class DataConfig:
+    """Complete data configuration."""
+
+    general: GeneralDataConfig
+    training: TrainingDataConfig
+    prediction: PredictionDataConfig
+
+
+@dataclass
 class ModelConfig:
     """Configuration for the model architecture."""
 
-    input_dim: int
-    hidden_dim: int
-    output_dim: int
+    input_dim: int = 1
+    hidden_dim: int = 64
+    output_dim: int = 1
     num_layers: int = 2
     dropout: float = 0.2
     num_gc_layers: int = 2
@@ -92,13 +117,11 @@ class ModelConfig:
 class TrainingConfig:
     """Configuration for model training."""
 
-    learning_rate: float
-    weight_decay: float
-    num_epochs: int
-    patience: int
-    train_val_split: float = 0.8
+    learning_rate: float = 0.001
+    weight_decay: float = 1e-5
+    num_epochs: int = 50
+    patience: int = 10
     device: Optional[str] = None
-    cross_validation: bool = True
 
 
 @dataclass
@@ -128,17 +151,21 @@ class VisualizationConfig:
 class ExperimentConfig:
     """Main configuration class for experiments."""
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(
+        self, config_path: Optional[str] = None, is_prediction_mode: bool = False
+    ):
         """
         Initialize configuration from a YAML file.
 
         Parameters:
         -----------
         config_path : str, optional
-            Path to the YAML configuration file. If not provided,
-            looks for 'config.yml' in the current directory.
+            Path to the YAML configuration file
+        is_prediction_mode : bool
+            Whether this configuration is for prediction (vs training)
         """
         self._initializing = True
+        self.is_prediction_mode = is_prediction_mode
 
         if config_path is None:
             config_path = os.path.join(os.getcwd(), "config.yml")
@@ -171,9 +198,17 @@ class ExperimentConfig:
         with open(self.config_path, "r") as f:
             config_dict = yaml.safe_load(f)
 
-        # Initialize sub-configs
+        # Initialize sub-configs with proper handling of nested structures
         self.experiment = ExperimentMetadata(**config_dict.get("experiment", {}))
-        self.data = DataConfig(**config_dict.get("data", {}))
+
+        # Properly handle nested data configuration
+        data_dict = config_dict.get("data", {})
+        self.data = DataConfig(
+            general=GeneralDataConfig(**data_dict.get("general", {})),
+            training=TrainingDataConfig(**data_dict.get("training", {})),
+            prediction=PredictionDataConfig(**data_dict.get("prediction", {})),
+        )
+
         self.model = ModelConfig(**config_dict.get("model", {}))
         self.training = TrainingConfig(**config_dict.get("training", {}))
         self.paths = PathsConfig(**config_dict.get("paths", {}))
@@ -213,12 +248,19 @@ class ExperimentConfig:
             "window_size",
             "horizon",
             "missing_value",
-            # Add any other required data parameters
         ]
 
         for param in required_data_params:
-            if not hasattr(self.data, param):
-                raise ValueError(f"Missing required config value: data.{param}")
+            if not hasattr(self.data.general, param):
+                # Add detailed debugging info
+                print(f"DEBUG: Validation failed for {param}")
+                print(
+                    f"DEBUG: self.data.general has attributes: {dir(self.data.general)}"
+                )
+                print(
+                    f"DEBUG: Raw config contains: {self._config_dict.get('data', {}).get('general', {})}"
+                )
+                raise ValueError(f"Missing required config value: data.general.{param}")
 
         # Check for required training parameters
         required_training_params = [
@@ -234,9 +276,9 @@ class ExperimentConfig:
                 raise ValueError(f"Missing required config value: training.{param}")
 
         # Type checking and value validation
-        if self.data.window_size <= 0:
+        if self.data.general.window_size <= 0:
             raise ValueError("window_size must be positive")
-        if self.data.horizon <= 0:
+        if self.data.general.horizon <= 0:
             raise ValueError("horizon must be positive")
         if self.training.learning_rate <= 0:
             raise ValueError("learning_rate must be positive")
@@ -264,7 +306,7 @@ class ExperimentConfig:
         logger.info(f"Experiment: {self.experiment.name} (v{self.experiment.version})")
         logger.info(f"Description: {self.experiment.description}")
         logger.info(
-            f"Data config: window_size={self.data.window_size}, horizon={self.data.horizon}"
+            f"Data config: window_size={self.data.general.window_size}, horizon={self.data.general.horizon}"
         )
         logger.info(
             f"Model config: hidden_dim={self.model.hidden_dim}, layers={self.model.num_layers}"
@@ -349,7 +391,7 @@ class ExperimentConfig:
         return (
             f"ExperimentConfig(\n"
             f"  experiment: {self.experiment.name} (v{self.experiment.version})\n"
-            f"  data: window_size={self.data.window_size}, horizon={self.data.horizon}\n"
+            f"  data: window_size={self.data.general.window_size}, horizon={self.data.general.horizon}\n"
             f"  model: hidden_dim={self.model.hidden_dim}, layers={self.model.num_layers}\n"
             f"  training: epochs={self.training.num_epochs}, lr={self.training.learning_rate}\n"
             f")"

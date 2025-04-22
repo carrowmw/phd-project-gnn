@@ -133,6 +133,16 @@ def create_objective_function(
                 config=trial_config,
             )
 
+            # Extract standardization stats if available
+            standardization_stats = {}
+            if hasattr(data_loaders, "preprocessing_stats"):
+                standardization_stats = data_loaders.preprocessing_stats.get(
+                    "standardization", {}
+                )
+
+            # Add to trial attributes for later analysis
+            trial.set_user_attr("standardization_stats", standardization_stats)
+
             # Train model with updated config
             results = training.train_model(
                 data_loaders=data_loaders,
@@ -161,7 +171,7 @@ def create_objective_function(
             # Free up memory
             del data_loaders
             del results
-            torch.cuda.empty_cache() if torch.cuda.is_available() else None
+            torch.mps.empty_cache() if torch.backends.mps.is_available() else None
 
             return best_val_loss
 
@@ -174,7 +184,7 @@ def create_objective_function(
     return objective
 
 
-def train_with_best_params(
+async def train_with_best_params(
     data_file: Union[str, Path],
     best_params: Dict[str, Any],
     output_dir: Union[str, Path],
@@ -218,6 +228,20 @@ def train_with_best_params(
         data_loaders = training.preprocess_data(
             data_file=data_file,
             config=best_config,
+        )
+
+        # Extract standardization stats
+        standardization_stats = {}
+        if hasattr(data_loaders, "preprocessing_stats"):
+            standardization_stats = data_loaders.preprocessing_stats.get(
+                "standardization", {}
+            )
+
+        mlflow.log_params(
+            {
+                "standardization_mean": standardization_stats.get("mean", 0),
+                "standardization_std": standardization_stats.get("std", 1),
+            }
         )
 
         # Train model with best configuration

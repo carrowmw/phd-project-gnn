@@ -38,7 +38,7 @@ class GraphConvolution(nn.Module):
         # Get required values from config
         self.use_self_loop = config.model.use_self_loops
         self.normalization = config.model.gcn_normalization
-        self.missing_value = config.data.missing_value
+        self.missing_value = config.data.general.missing_value
 
         # Define learnable parameters
         self.weight = nn.Parameter(
@@ -372,7 +372,7 @@ class STGNN(nn.Module):
         input_dim = config.model.input_dim
         hidden_dim = config.model.hidden_dim
         output_dim = config.model.output_dim
-        horizon = config.data.horizon
+        horizon = config.data.general.horizon
         dropout = config.model.dropout
         decoder_layers = (
             config.model.decoder_layers
@@ -579,7 +579,7 @@ def create_stgnn_model(config):
     logger.info(f"  input_dim: {config.model.input_dim}")
     logger.info(f"  hidden_dim: {config.model.hidden_dim}")
     logger.info(f"  output_dim: {config.model.output_dim}")
-    logger.info(f"  horizon: {config.data.horizon}")
+    logger.info(f"  horizon: {config.data.general.horizon}")
     logger.info(f"  num_layers: {config.model.num_layers}")
     logger.info(f"  num_gc_layers: {config.model.num_gc_layers}")
     logger.info(f"  decoder_layers: {config.model.decoder_layers}")

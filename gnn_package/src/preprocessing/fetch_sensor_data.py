@@ -72,7 +72,7 @@ async def fetch_and_save_sensor_data(
 
     # Use parameter or config value
     if days_back is None:
-        days_back = config.data.days_back
+        days_back = config.data.prediction.days_back
 
     print(f"Fetching sensor data from API")
 

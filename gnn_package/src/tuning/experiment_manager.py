@@ -13,6 +13,8 @@ import optuna
 import pandas as pd
 from tabulate import tabulate
 
+from gnn_package.config import get_config
+
 from gnn_package.config import ExperimentConfig
 
 logger = logging.getLogger(__name__)
@@ -79,7 +81,9 @@ def setup_mlflow_experiment(
     return experiment_id
 
 
-def log_trial_metrics(metrics: Dict[str, Any]) -> None:
+def log_trial_metrics(
+    metrics: Dict[str, Any], standardization_stats: Dict[str, Any]
+) -> None:
     """
     Log metrics from a trial to MLflow.
 
@@ -87,10 +91,17 @@ def log_trial_metrics(metrics: Dict[str, Any]) -> None:
     -----------
     metrics : Dict[str, Any]
         Dictionary of metrics to log
+    standardization_stats : Dict[str, Any]
+        Dictionary of standardization statistics from preprocessing
     """
     for name, value in metrics.items():
         if isinstance(value, (int, float)):
             mlflow.log_metric(name, value)
+
+    # Log standardization statistics separately
+    if standardization_stats:
+        mlflow.log_param("standardization_mean", standardization_stats.get("mean", 0))
+        mlflow.log_param("standardization_std", standardization_stats.get("std", 1))
 
 
 def save_config_from_params(
@@ -110,8 +121,6 @@ def save_config_from_params(
     base_config : ExperimentConfig, optional
         Base configuration to update with params
     """
-    from gnn_package.config import get_config
-
     # Get base config
     if base_config is None:
         config = get_config()

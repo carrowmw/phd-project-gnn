@@ -10,7 +10,7 @@ MAX_FILE_SIZE_KB=500  # Set maximum file size to 500 KB
 MAX_FILE_SIZE_BYTES=$((MAX_FILE_SIZE_KB * 1024))
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-OUTPUT_FILE="$PROJECT_ROOT/digested_gnn_package_$(date +%Y%m%d).txt"
+OUTPUT_FILE="$PROJECT_ROOT/digested_gnn_package.txt"
 
 # Check if gitingest is installed
 if ! command -v gitingest &> /dev/null; then

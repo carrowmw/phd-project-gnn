@@ -21,6 +21,7 @@ from .graph_computation import (
 from .timeseries_preprocessor import (
     TimeSeriesPreprocessor,
     resample_sensor_data,
+    standardize_sensor_data,  # Add this line
 )
 
 
@@ -33,6 +34,7 @@ __all__ = [
     "compute_adjacency_matrix",
     "TimeSeriesPreprocessor",
     "resample_sensor_data",
+    "standardize_sensor_data",  # Add this line
     "fetch_and_save_sensor_data",
     "load_sensor_data",
 ]

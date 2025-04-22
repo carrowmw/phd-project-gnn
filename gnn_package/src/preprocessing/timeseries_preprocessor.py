@@ -40,10 +40,12 @@ class TimeSeriesPreprocessor:
             print("TimeSeriesPreprocessor: No config provided, using global config")
             config = get_config()
 
-        self.window_size = config.data.window_size
-        self.stride = config.data.stride
-        self.gap_threshold = pd.Timedelta(minutes=config.data.gap_threshold_minutes)
-        self.missing_value = config.data.missing_value
+        self.window_size = config.data.general.window_size
+        self.stride = config.data.general.stride
+        self.gap_threshold = pd.Timedelta(
+            minutes=config.data.general.gap_threshold_minutes
+        )
+        self.missing_value = config.data.general.missing_value
 
         # Store full config for other methods
         self.config = config
@@ -60,8 +62,6 @@ class TimeSeriesPreprocessor:
         -----------
         time_series_dict : Dict[str, pd.Series]
             Dictionary mapping node IDs to their time series
-        standardize : bool, optional
-            Whether to standardize the data, overrides config if provided
         config : ExperimentConfig, optional
             Centralized configuration object. If not provided, will use global config.
 
@@ -80,8 +80,7 @@ class TimeSeriesPreprocessor:
         if config is None:
             config = self.config
 
-        # Use parameters or config values
-        standardize = config.data.standardize
+        # Note: We removed standardize parameter since it's now handled earlier in the pipeline
 
         @dataclass
         class TimeWindow:
@@ -127,17 +126,10 @@ class TimeSeriesPreprocessor:
                         "Found NaN values in input data that should have been replaced already"
                     )
 
-                # Create mask based ONLY on -1.0 values
+                # Create mask based ONLY on missing value
                 mask = window != self.missing_value
 
-                # Standardize if requested
-                if standardize and np.any(mask):
-                    valid_values = window[mask]
-                    mean = np.mean(valid_values)
-                    std = np.std(valid_values)
-                    window = np.where(
-                        mask, (window - mean) / (std + 1e-8), self.missing_value
-                    )
+                # Note: Standardization is now removed from here since it's done globally
 
                 # Add feature dimension if needed
                 if len(window.shape) == 1:
@@ -175,12 +167,6 @@ class TimeSeriesPreprocessor:
         -----------
         time_series_dict : Dict[str, pd.Series]
             Dictionary mapping node IDs to their time series data
-        n_splits : int
-            Number of different train/validation splits to create
-        val_size_days : int
-            Size of validation window in days
-        train_ratio : float, optional
-            If provided, use this ratio of data for training instead of fixed validation size
 
         Returns:
         --------
@@ -191,9 +177,13 @@ class TimeSeriesPreprocessor:
         if config is None:
             config = self.config
 
-        val_size_days = config.data.val_size_days
-        train_ratio = config.data.train_ratio
-        n_splits = config.data.n_splits
+        train_ratio = config.data.training.train_ratio
+        n_splits = config.data.training.n_splits
+
+        # Get the window size from config to use as buffer
+        window_size_timedelta = pd.Timedelta(
+            minutes=15 * self.window_size * config.data.general.buffer_factor
+        )  # Assuming 15-min frequency
 
         # Find global min and max dates
         all_dates = []
@@ -207,78 +197,45 @@ class TimeSeriesPreprocessor:
 
         splits = []
 
-        if train_ratio is not None:
-            # Create splits based on training ratio
-            for i in range(n_splits):
-                # Calculate step size for this approach
-                step_size = (
-                    (total_days * (1 - train_ratio)) / (n_splits - 1)
-                    if n_splits > 1
-                    else 0
-                )
+        # Create splits based on training ratio
+        for i in range(n_splits):
+            # Calculate step size for this approach
+            step_size = (
+                (total_days * (1 - train_ratio)) / (n_splits - 1) if n_splits > 1 else 0
+            )
 
-                # Calculate cutoff point (end of training data)
-                train_days = total_days * train_ratio + (i * step_size)
-                cutoff = min_date + timedelta(days=train_days)
+            # Calculate cutoff point (end of training data)
+            train_days = total_days * train_ratio + (i * step_size)
 
-                # Skip if cutoff would be beyond available data
-                if cutoff >= max_date:
-                    continue
+            # Training data cutoff
+            train_cutoff = min_date + timedelta(days=train_days)
 
-                train_dict = {}
-                val_dict = {}
+            # Add buffer period between training and validation
+            buffer_cutoff = train_cutoff + window_size_timedelta
 
-                for node_id, series in time_series_dict.items():
-                    # Get training data (everything before cutoff)
-                    train_series = series[series.index < cutoff]
+            # Validation end
+            val_end = max_date  # Use all available data after buffer
 
-                    # Get validation data (everything after cutoff)
-                    val_series = series[series.index >= cutoff]
+            # Skip if buffer would go beyond available data
+            if buffer_cutoff >= max_date:
+                continue
 
-                    # Only include if both parts have data
-                    if len(train_series) > 0 and len(val_series) > 0:
-                        train_dict[node_id] = train_series
-                        val_dict[node_id] = val_series
+            train_dict = {}
+            val_dict = {}
 
-                splits.append({"train": train_dict, "val": val_dict})
-        else:
-            # Create splits based on fixed validation size
-            # Calculate step size between splits
-            effective_days = total_days - val_size_days
-            step_days = effective_days // n_splits if n_splits > 0 else effective_days
+            for node_id, series in time_series_dict.items():
+                # Get training data (everything before train cutoff)
+                train_series = series[series.index < train_cutoff]
 
-            if step_days <= 0:
-                raise ValueError(
-                    f"Not enough data for {n_splits} splits with {val_size_days} validation days"
-                )
+                # Get validation data (everything after buffer cutoff)
+                val_series = series[series.index >= buffer_cutoff]
 
-            for i in range(n_splits):
-                # Calculate cutoff for this split
-                cutoff = min_date + timedelta(days=i * step_days)
-                val_end = cutoff + timedelta(days=val_size_days)
+                # Only include if both parts have data
+                if len(train_series) > 0 and len(val_series) > 0:
+                    train_dict[node_id] = train_series
+                    val_dict[node_id] = val_series
 
-                # Skip if validation would go beyond available data
-                if val_end > max_date:
-                    continue
-
-                train_dict = {}
-                val_dict = {}
-
-                for node_id, series in time_series_dict.items():
-                    # Get training data (everything before cutoff)
-                    train_series = series[series.index < cutoff]
-
-                    # Get validation data (time window after cutoff)
-                    val_series = series[
-                        (series.index >= cutoff) & (series.index < val_end)
-                    ]
-
-                    # Only include if both parts have data
-                    if len(train_series) > 0 and len(val_series) > 0:
-                        train_dict[node_id] = train_series
-                        val_dict[node_id] = val_series
-
-                splits.append({"train": train_dict, "val": val_dict})
+            splits.append({"train": train_dict, "val": val_dict})
 
         return splits
 
@@ -308,8 +265,13 @@ class TimeSeriesPreprocessor:
         if config is None:
             config = self.config
 
-        train_ratio = config.data.train_ratio
-        cutoff_date = config.data.cutoff_date
+        train_ratio = config.data.training.train_ratio
+        cutoff_date = config.data.training.cutoff_date
+
+        # Get the window size from config to use as buffer
+        window_size_timedelta = pd.Timedelta(
+            minutes=15 * self.window_size * config.data.general.buffer_factor
+        )  # Assuming 15-min frequency
 
         train_dict = {}
         val_dict = {}
@@ -328,18 +290,23 @@ class TimeSeriesPreprocessor:
             # Calculate cutoff date based on train_ratio
             cutoff_date = min_date + timedelta(days=int(total_days * train_ratio))
 
+        # Calculate buffer end date
+        buffer_end = cutoff_date + window_size_timedelta
+
         # Split each sensor's data
         for node_id, series in time_series_dict.items():
             # Split based on date
             train_series = series[series.index < cutoff_date]
-            val_series = series[series.index >= cutoff_date]
+
+            # Validation data starts after the buffer period
+            val_series = series[series.index >= buffer_end]
 
             # Only include if both parts have data
             if len(train_series) > 0 and len(val_series) > 0:
                 train_dict[node_id] = train_series
                 val_dict[node_id] = val_series
 
-        return {"train": train_dict, "val": val_dict}
+        return [{"train": train_dict, "val": val_dict}]
 
 
 def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=None):
@@ -362,7 +329,6 @@ def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=No
     dict
         Dictionary with resampled time series
     """
-
     # Get configuration
     if config is None:
         print("resample_sensor_data: No config provided, using global config")
@@ -370,9 +336,9 @@ def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=No
 
     # Use parameters or config values
     if freq is None:
-        freq = config.data.resampling_frequency
+        freq = config.data.general.resampling_frequency
     if fill_value is None:
-        fill_value = config.data.missing_value
+        fill_value = config.data.general.missing_value
 
     # Find global min and max dates
     all_dates = []
@@ -412,4 +378,94 @@ def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=No
     print(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
     print(f"Each sensor now has {len(date_range)} data points")
 
-    return resampled_dict
+    # Create a new dictionary to return
+    result_dict = resampled_dict.copy()
+
+    # Apply standardization if enabled in config
+    if config.data.general.standardize:
+        print("Applying global standardization to sensor data")
+        resampled_dict, stats = standardize_sensor_data(resampled_dict, config)
+
+        print(
+            f"Standardization complete: mean={stats['mean']:.2f}, std={stats['std']:.2f}"
+        )
+
+        # Store stats in a special key that won't interfere with sensor data
+        result_dict = resampled_dict.copy()  # Update with standardized data
+        result_dict["__stats__"] = (
+            stats  # Use a special key unlikely to conflict with sensor IDs
+        )
+
+    return result_dict
+
+
+def standardize_sensor_data(time_series_dict, config=None):
+    """
+    Standardize sensor data globally across all sensors while preserving missing values.
+
+    Parameters:
+    -----------
+    time_series_dict : Dict[str, pd.Series]
+        Dictionary mapping sensor IDs to their time series data
+    config : ExperimentConfig, optional
+        Configuration object. If not provided, will use global config.
+
+    Returns:
+    --------
+    Tuple[Dict[str, pd.Series], Dict[str, float]]
+        Tuple containing:
+        - Dictionary with standardized time series
+        - Dictionary with statistics (mean, std) for inverse transformation
+    """
+    # Get configuration
+    if config is None:
+        config = get_config()
+
+    # Get missing value from config
+    missing_value = config.data.general.missing_value
+
+    # Step 1: Collect all valid values across all sensors
+    all_valid_values = []
+    for series in time_series_dict.values():
+        # Skip completely empty series
+        if len(series) == 0:
+            continue
+
+        valid_mask = series.values != missing_value
+        all_valid_values.append(series.values[valid_mask])
+
+    # If we have no valid values, return the original data
+    if not all_valid_values:
+        print("Warning: No valid values found for standardization")
+        return time_series_dict, {"mean": 0.0, "std": 1.0}
+
+    all_valid_values = np.concatenate(all_valid_values)
+
+    # Step 2: Calculate global statistics from all valid values
+    global_mean = np.mean(all_valid_values)
+    global_std = np.std(all_valid_values)
+
+    # Add a small epsilon to avoid division by zero
+    if global_std < 1e-8:
+        print("Warning: Very small standard deviation detected, using default value")
+        global_std = 1.0
+
+    # Store these for later inverse transformation
+    stats = {"mean": global_mean, "std": global_std}
+
+    print(f"Global standardization: mean={global_mean:.2f}, std={global_std:.2f}")
+
+    # Step 3: Apply standardization while preserving missing values
+    standardized_dict = {}
+    for sensor_id, series in time_series_dict.items():
+        standardized_series = series.copy()
+        valid_mask = series.values != missing_value
+
+        # Only standardize valid values
+        standardized_series.values[valid_mask] = (
+            series.values[valid_mask] - global_mean
+        ) / global_std
+
+        standardized_dict[sensor_id] = standardized_series
+
+    return standardized_dict, stats

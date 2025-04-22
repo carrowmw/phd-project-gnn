@@ -28,7 +28,7 @@ def get_sensor_name_id_map(config=None):
     if config is None:
         config = get_config()
 
-    sensor_id_prefix = config.data.sensor_id_prefix
+    sensor_id_prefix = config.data.general.sensor_id_prefix
 
     # Check if the mapping file already exists
     if not os.path.exists(SENSORS_DATA_DIR / "sensor_name_id_map.json"):

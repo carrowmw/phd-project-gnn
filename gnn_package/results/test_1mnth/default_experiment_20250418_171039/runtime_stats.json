@@ -1,0 +1,21 @@
+{
+  "preprocessing": {
+    "start_time": "2025-04-18T17:10:40.002025",
+    "end_time": "2025-04-18T17:10:40.732962",
+    "duration_seconds": 0.730937,
+    "standardization": {
+      "mean": 18.592608326253185,
+      "std": 50.44364303547578
+    }
+  },
+  "standardization": {},
+  "training": {
+    "start_time": "2025-04-18T17:10:40.738945",
+    "end_time": "2025-04-18T17:28:52.390143",
+    "duration_seconds": 1091.651198,
+    "epochs_trained": 32,
+    "best_epoch": 21,
+    "best_validation_loss": 0.9845922887325287
+  },
+  "data_file": "/Users/administrator/Code/python/phd-project-gnn/gnn_package/data/raw/timeseries/test_data_1wk.pkl"
+}

@@ -60,7 +60,7 @@ def main():
     )
     print(f"Description: {config.experiment.description}")
     print(
-        f"Data config: window_size={config.data.window_size}, horizon={config.data.horizon}"
+        f"Data config: window_size={config.data.general.window_size}, horizon={config.data.general.horizon}"
     )
     print(
         f"Model config: hidden_dim={config.model.hidden_dim}, layers={config.model.num_layers}"
@@ -71,7 +71,8 @@ def main():
 
     # Set up paths
     raw_file_name = args.data or os.path.join(
-        "gnn_package/data/raw/timeseries", f"test_data_{config.data.days_back}d.pkl"
+        "gnn_package/data/raw/timeseries",
+        f"test_data_{config.data.prediction.days_back}d.pkl",
     )
     print(f"Using data file: {raw_file_name}")
 

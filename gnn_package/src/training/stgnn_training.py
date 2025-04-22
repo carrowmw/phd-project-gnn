@@ -1,4 +1,4 @@
-# gnn_package/src/models/train_stgnn.py
+# gnn_package/src/training/stgnn_training.py
 
 import sys
 import torch
@@ -11,206 +11,73 @@ from gnn_package.src import preprocessing
 from gnn_package.src.dataloaders import create_dataloader
 from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
 from gnn_package.config import get_config
+from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
+from gnn_package.src.data.data_sources import FileDataSource
 
 
-def preprocess_data(
-    data=None,
-    data_file=None,
-    config=None,
+# gnn_package/src/training/stgnn_training.py
+
+
+async def preprocess_data(
+    data=None, data_file=None, config=None, mode=None, verbose=True
 ):
-    """
-    Load and preprocess graph and sensor data for training
-    with support for varying window counts per sensor.
-
-    Parameters:
-    -----------
-    data : dict, optional
-        Dictionary mapping sensor IDs to their time series data
-    data_file : str, optional
-        Path to a pickled file containing sensor data
-    config : ExperimentConfig, optional
-        Centralized configuration object. If not provided, will use global config.
-    **kwargs : dict
-        Additional parameters to override config settings
-
-    Returns:
-    --------
-    dict
-        Dictionary containing preprocessed data loaders and metadata
-    """
+    """Load and preprocess graph and sensor data for training."""
+    print("Training.preprocess_data: Starting preprocessing")
 
     # Get configuration
     if config is None:
-        config = get_config()
+        if verbose:
+            print("No configuration explicitly provided, using global config...")
+        config = get_config(verbose=verbose)
 
-    # Use parameters from config
-    graph_prefix = config.data.graph_prefix
-    window_size = config.data.window_size
-    horizon = config.data.horizon
-    stride = config.data.stride
-    batch_size = config.data.batch_size
-    standardize = config.data.standardize
-    sigma_squared = config.data.sigma_squared
-    epsilon = config.data.epsilon
-    train_ratio = config.data.train_ratio
-    cutoff_date = config.data.cutoff_date
-    split_method = config.data.split_method
-    val_size_days = config.data.val_size_days
-    n_splits = config.data.n_splits
-
-    print("Loading graph data...")
-
-    adj_matrix, node_ids, metadata = preprocessing.load_graph_data(
-        prefix=graph_prefix, return_df=False
-    )
-
-    # Compute graph weights using Gaussian kernel
-    weighted_adj = preprocessing.compute_adjacency_matrix(adj_matrix)
-
-    print(
-        f"Loaded adjacency matrix of shape {adj_matrix.shape} with {len(node_ids)} nodes"
-    )
-
-    # Load sensor data if not provided
-    if data is None:
-        if data_file is None:
-            raise ValueError(
-                "Either data or data_file must be provided to load sensor data."
-            )
-
-        try:
-            data = preprocessing.load_sensor_data(data_file)
-        except FileNotFoundError as e:
-            print(e)
-            print("Please run 'python fetch_sensor_data.py' first to fetch the data.")
-            sys.exit(1)
-
-    resampled_data = preprocessing.resample_sensor_data(
-        data,
-    )
-
-    # Create windows for time series
-    print(f"Creating windows with size={window_size}, horizon={horizon}...")
-    processor = preprocessing.TimeSeriesPreprocessor()
-
-    # Use the specified split method
-    if split_method:
-        if split_method == "time_based":
-            # Create time-based split
-            print(
-                f"Using time-based split with train ratio {train_ratio} and cutoff date {cutoff_date}"
-            )
-            split_data = processor.create_time_based_split(
-                resampled_data,
-            )
-        elif split_method == "rolling_window":
-            # Create rolling window split
-            print(
-                f"Using rolling window split with train_ratio {train_ratio}, val_size_days {val_size_days} and n_splits {n_splits}"
-            )
-            split_data = processor.create_rolling_window_splits(
-                resampled_data,
-            )
-        else:
-            raise ValueError(f"Unknown split method: {split_method}")
-
-        # Create windows for each split
-        print("Creating windows for training data...")
-        X_train_by_sensor, masks_train_by_sensor, _ = (
-            processor.create_windows_from_grid(
-                split_data["train"], standardize=standardize
-            )
-        )
-
-        print("Creating windows for validation data...")
-        X_val_by_sensor, masks_val_by_sensor, _ = processor.create_windows_from_grid(
-            split_data["val"], standardize=standardize
-        )
-
-        # Get valid sensors (those with windows in both train and val)
-        valid_sensors = list(
-            set(X_train_by_sensor.keys()) & set(X_val_by_sensor.keys())
-        )
-        print(
-            f"Found {len(valid_sensors)} sensors with valid windows in both train and validation sets"
-        )
-
+    # Determine mode
+    if mode is None:
+        # Default to training
+        processor_mode = ProcessorMode.TRAINING
     else:
-        # Original behavior: create windows first, then split
-        print(f"Creating windows with size={window_size}, horizon={horizon}...")
-        X_by_sensor, masks_by_sensor, _ = processor.create_windows_from_grid(
-            resampled_data, standardize=standardize
-        )
+        processor_mode = ProcessorMode(mode)
 
-        # Get list of sensors with valid windows
-        valid_sensors = list(X_by_sensor.keys())
-        print(f"Found {len(valid_sensors)} sensors with valid windows")
+    print(f"Using processor mode: {processor_mode}")
 
-        # For each sensor, split its data into train and validation
-        X_train_by_sensor = {}
-        X_val_by_sensor = {}
-        masks_train_by_sensor = {}
-        masks_val_by_sensor = {}
+    # Create data source based on inputs
+    if data is not None:
+        print("Using provided data")
 
-        # Add progress bar for splitting data
-        for node_id in tqdm(
-            valid_sensors, desc="Splitting data into train/validation sets"
-        ):
-            n_windows = len(X_by_sensor[node_id])
-            train_size = int(n_windows * 0.8)
+        # Custom in-memory data source using the provided data
+        class CustomDataSource(FileDataSource):
+            async def get_data(self, config):
+                return data
 
-            X_train_by_sensor[node_id] = X_by_sensor[node_id][:train_size]
-            X_val_by_sensor[node_id] = X_by_sensor[node_id][train_size:]
+        data_source = CustomDataSource(None)
+    elif data_file is not None:
+        print(f"Using data file: {data_file}")
+        data_source = FileDataSource(data_file)
+    else:
+        print("WARNING: No data or data_file provided")
+        data_source = None  # Will be created by factory if needed
 
-            masks_train_by_sensor[node_id] = masks_by_sensor[node_id][:train_size]
-            masks_val_by_sensor[node_id] = masks_by_sensor[node_id][train_size:]
-
-    if len(valid_sensors) == 0:
-        raise ValueError(
-            "No valid windows found! Try increasing days_back or decreasing window_size."
-        )
-
-    # Create a smaller adjacency matrix for only the valid sensors
-    valid_indices = [node_ids.index(sid) for sid in valid_sensors if sid in node_ids]
-    valid_adj = weighted_adj[valid_indices, :][:, valid_indices]
-    valid_node_ids = [node_ids[idx] for idx in valid_indices]
-
-    # Calculate total windows
-    total_train = sum(len(windows) for windows in X_train_by_sensor.values())
-    total_val = sum(len(windows) for windows in X_val_by_sensor.values())
-    print(f"Total training windows: {total_train}")
-    print(f"Total validation windows: {total_val}")
-
-    print("Creating dataloaders...")
-    # Create dataloaders with the updated implementation
-    train_loader = create_dataloader(
-        X_train_by_sensor,
-        masks_train_by_sensor,
-        valid_adj,
-        valid_node_ids,
-        window_size,
-        horizon,
-        batch_size,
-        shuffle=True,
+    # Create processor using factory
+    print("Creating data processor...")
+    processor = DataProcessorFactory.create_processor(
+        mode=processor_mode, config=config, data_source=data_source
     )
 
-    val_loader = create_dataloader(
-        X_val_by_sensor,
-        masks_val_by_sensor,
-        valid_adj,
-        valid_node_ids,
-        window_size,
-        horizon,
-        batch_size,
-        shuffle=False,
-    )
+    print(f"Processor created: {type(processor).__name__}")
 
-    return {
-        "train_loader": train_loader,
-        "val_loader": val_loader,
-        "adj_matrix": valid_adj,
-        "node_ids": valid_node_ids,
-    }
+    # Process data according to mode
+    try:
+        print("Calling processor.process_data()...")
+        result = await processor.process_data()
+        print(f"Processor returned: {type(result)}")
+        if result is None:
+            print("WARNING: processor.process_data() returned None!")
+        return result
+    except Exception as e:
+        print(f"ERROR in processor.process_data(): {e}")
+        import traceback
+
+        traceback.print_exc()
+        raise
 
 
 class TqdmSTGNNTrainer(STGNNTrainer):
@@ -421,15 +288,15 @@ def train_model(
     plt.title("Training and Validation Loss")
     plt.tight_layout()
 
-    # Save model if path is specified in config
+    # Save model and configuration together
     if hasattr(config.paths, "model_save_path") and config.paths.model_save_path:
-        model_path = (
-            config.paths.model_save_path
-            / f"{config.experiment.name.replace(' ', '_')}_model.pth"
+        from gnn_package.src.utils.config_utils import save_model_with_config
+
+        model_dir = (
+            config.paths.model_save_path / f"{config.experiment.name.replace(' ', '_')}"
         )
-        model_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(model.state_dict(), model_path)
-        print(f"Model saved to {model_path}")
+        save_model_with_config(model, config, model_dir)
+        print(f"Model and configuration saved to {model_dir}")
 
     return {
         "model": model,
@@ -505,7 +372,7 @@ def predict_and_evaluate(model, dataloader, device=None):
     }
 
 
-def cross_validate_model(data=None, data_file=None, config=None, **kwargs):
+def cross_validate_model(data=None, data_file=None, config=None):
     """
     Train and evaluate model using time-based cross-validation.
 
@@ -517,12 +384,6 @@ def cross_validate_model(data=None, data_file=None, config=None, **kwargs):
         Path to a pickled file containing sensor data
     config : ExperimentConfig, optional
         Centralized configuration object
-    **kwargs : dict
-        Additional parameters to pass to preprocess_data and train_model
-        n_splits : int
-            Number of validation splits to use
-        val_size_days : int
-            Size of validation window in days
     Returns:
     --------
     dict
@@ -533,8 +394,7 @@ def cross_validate_model(data=None, data_file=None, config=None, **kwargs):
         config = get_config()
 
     # Allow override of config parameters with kwargs
-    n_splits = kwargs.get("n_splits", config.data.n_splits)
-    val_size_days = kwargs.get("val_size_days", config.data.val_size_days)
+    n_splits = config.data.training.n_splits
 
     # Load sensor data if not provided
     if data is None:
@@ -553,7 +413,8 @@ def cross_validate_model(data=None, data_file=None, config=None, **kwargs):
     # Create rolling window splits
     print(f"Creating {n_splits} time-based cross-validation splits...")
     splits = processor.create_rolling_window_splits(
-        resampled_data, n_splits=n_splits, val_size_days=val_size_days
+        resampled_data,
+        config=config,
     )
 
     print(f"Generated {len(splits)} valid split(s)")
@@ -602,3 +463,38 @@ def save_model(model, file_path):
     """Save the trained model"""
     torch.save(model.state_dict(), file_path)
     print(f"Model saved to {file_path}")
+
+
+def train_model_with_cv(data_loaders, config=None):
+    """Train model with cross-validation support."""
+
+    if "train_loaders" in data_loaders:  # Cross-validation mode
+        cv_results = []
+
+        for i, (train_loader, val_loader) in enumerate(
+            zip(data_loaders["train_loaders"], data_loaders["val_loaders"])
+        ):
+
+            print(f"Training on split {i+1}/{len(data_loaders['train_loaders'])}")
+
+            # Create a new model for each split
+            model = create_stgnn_model(config=config)
+
+            # Train on this split
+            split_results = train_model(
+                {"train_loader": train_loader, "val_loader": val_loader}, config=config
+            )
+
+            cv_results.append(split_results)
+
+        # Aggregate results across splits
+        avg_val_loss = sum(r["best_val_loss"] for r in cv_results) / len(cv_results)
+
+        return {
+            "cv_results": cv_results,
+            "avg_val_loss": avg_val_loss,
+            "best_model_index": np.argmin([r["best_val_loss"] for r in cv_results]),
+        }
+
+    else:  # Standard single split mode
+        return train_model(data_loaders, config=config)

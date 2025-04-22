@@ -1,4 +1,4 @@
-# gnn_package/src/models/prediction.py
+# gnn_package/src/training/stgnn_prediction.py
 
 import torch
 import numpy as np
@@ -20,6 +20,12 @@ from gnn_package.src import training
 from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 from gnn_package.src.models.stgnn import create_stgnn_model
 from gnn_package.config import ExperimentConfig, get_config
+from gnn_package.src.utils.config_utils import (
+    load_model_for_prediction,
+    create_prediction_config,
+)
+from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
+from gnn_package.src.data.data_sources import APIDataSource
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +59,14 @@ def load_model(model_path, config):
     logger.info(f"  hidden_dim: {config.model.hidden_dim}")
     logger.info(f"  num_layers: {config.model.num_layers}")
     logger.info(f"  num_gc_layers: {getattr(config.model, 'num_gc_layers', 2)}")
-    logger.info(f"  horizon: {config.data.horizon}")
+    logger.info(f"  horizon: {config.data.general.horizon}")
 
     return model
 
 
 async def fetch_recent_data_for_validation(config):
     """
-    Fetch recent data for validation using the configuration.
+    Fetch recent data for validation using the prediction data processor.
 
     Parameters:
     -----------
@@ -72,117 +78,19 @@ async def fetch_recent_data_for_validation(config):
     dict
         Dictionary containing processed data for validation
     """
-    logger.info(f"Using configuration from {config.config_path}")
 
-    # Initialize API client
-    api_config = LSConfig()
-    auth = LSAuth(api_config)
-    client = LightsailWrapper(api_config, auth)
+    # Create an API data source for the real-time data
+    data_source = APIDataSource()
 
-    # Get sensor name to ID mapping
-    name_id_map = get_sensor_name_id_map(config=config)
-    id_to_name_map = {v: k for k, v in name_id_map.items()}
-
-    # Use all available node IDs by default
-    node_ids = list(name_id_map.values())
-    logger.info(f"Using all available {len(node_ids)} nodes")
-
-    # Get parameters from config
-    days_back = getattr(config.data, "days_back", 2)
-    window_size = config.data.window_size
-    horizon = config.data.horizon
-
-    logger.info(
-        f"Fetching data for {days_back} days with window_size={window_size}, horizon={horizon}"
-    )
-
-    # Determine date range for API request
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days_back)
-
-    # Create date range parameters
-    date_range_params = DateRangeParams(
-        start_date=start_date,
-        end_date=end_date,
-        max_date_range=timedelta(days=days_back + 1),
-    )
-
-    # Fetch data from API
-    logger.info(f"Querying API for data from {start_date} to {end_date}")
-    count_data = await client.get_traffic_data(date_range_params)
-    counts_df = convert_to_dataframe(count_data)
-
-    # Create time series dictionary
-    time_series_dict = {}
-    successful_nodes = 0
-
-    for node_id in node_ids:
-        # Look up location name for this node ID
-        location = id_to_name_map.get(node_id)
-        if not location:
-            logger.warning(f"No location found for node ID {node_id}")
-            continue
-
-        # Filter data for this location
-        df = counts_df[counts_df["location"] == location]
-
-        if df.empty:
-            logger.warning(f"No data found for node {node_id} (location: {location})")
-            continue
-
-        # Create time series
-        series = pd.Series(df["value"].values, index=df["dt"])
-
-        # Remove duplicates
-        series = series[~series.index.duplicated(keep="first")]
-
-        # Store in dictionary
-        time_series_dict[node_id] = series
-        successful_nodes += 1
-
-    logger.info(
-        f"Successfully fetched data for {successful_nodes}/{len(node_ids)} nodes"
-    )
-
-    # If no data was fetched, return early
-    if not time_series_dict:
-        logger.warning("No valid data fetched from API")
-        return {
-            "windows": {},
-            "masks": {},
-            "time_series": {},
-        }
-
-    # For each sensor, hold out the last 'horizon' points for validation
-    validation_dict = {}
-    input_dict = {}
-
-    for node_id, series in time_series_dict.items():
-        if len(series) > horizon:
-            # Keep full series for validation purposes
-            validation_dict[node_id] = series
-            # Use shortened series for prediction input
-            input_dict[node_id] = series[:-horizon]
-        else:
-            logger.warning(
-                f"Not enough data points for node {node_id}, needs at least {horizon+1} points"
-            )
-            # Still include it but with the same data, may not be able to validate effectively
-            validation_dict[node_id] = series
-            input_dict[node_id] = series
-
-    # Process data using the config
-    input_data_loaders = training.preprocess_data(
-        data=input_dict,
+    # Create processor explicitly for prediction mode
+    processor = DataProcessorFactory.create_processor(
+        mode=ProcessorMode.PREDICTION,
         config=config,
+        data_source=data_source,
     )
 
-    # Return a dict with the processed data
-    return {
-        "data_loaders": input_data_loaders,
-        "time_series": validation_dict,
-        "input_series": input_dict,
-    }
+    # Process data using prediction-specific logic
+    return await processor.process_data()
 
 
 def plot_predictions_with_validation(predictions_dict, data, node_ids, config):
@@ -205,7 +113,7 @@ def plot_predictions_with_validation(predictions_dict, data, node_ids, config):
     matplotlib figure
     """
     # Get validation window from config
-    validation_window = config.data.horizon
+    validation_window = config.data.general.horizon
 
     # Get name-to-id mapping
     name_id_map = get_sensor_name_id_map(config=config)
@@ -315,17 +223,18 @@ def plot_predictions_with_validation(predictions_dict, data, node_ids, config):
 
 
 async def predict_all_sensors_with_validation(
-    model_path, config, output_file=None, plot=True
+    model_path, config=None, output_file=None, plot=True
 ):
     """
-    Make predictions for all available sensors and validate against actual data
+    Make predictions for all available sensors and validate against actual data.
 
     Parameters:
     -----------
-    model_path : str
+    model_path : str or Path
         Path to the saved model file
-    config : ExperimentConfig
-        Configuration object
+    config : ExperimentConfig, optional
+        Configuration object. If None, attempts to find config in model directory
+        or falls back to global config.
     output_file : str, optional
         Path to save the prediction results
     plot : bool
@@ -336,10 +245,13 @@ async def predict_all_sensors_with_validation(
     dict
         Dictionary containing predictions, actual values, and evaluation metrics
     """
-    logger.info(f"Using configuration from {config.config_path}")
+    # Load model with appropriate configuration
+    prediction_config = create_prediction_config()
+    model, config = load_model_for_prediction(model_path, prediction_config)
 
-    # Load model with the config
+    logger.info(f"Using configuration from {config.config_path}")
     logger.info(f"Loading model from: {model_path}")
+    # Load model with the config
     model = load_model(model_path=model_path, config=config)
     logger.info(f"Model loaded successfully")
 
@@ -347,18 +259,16 @@ async def predict_all_sensors_with_validation(
     logger.info(f"Fetching and preprocessing recent data for validation")
     data = await fetch_recent_data_for_validation(config=config)
 
-    # Extract preprocessed data
-    data_loaders = data["data_loaders"]
-    time_series = data["time_series"]  # Full time series
-
-    # The adjacency matrix and node_ids are consistent with the training data
-    adj_matrix = data_loaders["adj_matrix"]
-    node_ids = data_loaders["node_ids"]
+    # Extract components from the standardized structure
+    val_loader = data["data_loaders"]["val_loader"]
+    adj_matrix = data["graph_data"]["adj_matrix"]
+    node_ids = data["graph_data"]["node_ids"]
+    time_series = data["time_series"]["validation"]
 
     logger.info(f"Preprocessed data for {len(node_ids)} nodes")
 
     # Make predictions using the validation dataloader
-    predictions = predict_with_model(model, data_loaders["val_loader"], config=config)
+    predictions = predict_with_model(model, val_loader, config=config)
 
     # Format results
     results_df = format_predictions_with_validation(
@@ -485,7 +395,7 @@ def format_predictions_with_validation(
     # Get prediction array and node indices
     predictions = predictions_dict["predictions"]
     node_indices = predictions_dict["node_indices"]
-    horizon = config.data.horizon
+    horizon = config.data.general.horizon
 
     # Get name-to-ID mapping for sensor names
     name_id_map = get_sensor_name_id_map(config=config)
