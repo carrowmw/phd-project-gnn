@@ -189,6 +189,31 @@ def plot_sensors_grid(
     # Format for dates
     date_formatter = DateFormatter("%H:%M")
 
+    # First pass: determine global min and max values for consistent y-axis scaling
+    global_min = float("inf")
+    global_max = float("-inf")
+
+    for sensor_id in unique_sensors:
+        # Get data for this sensor
+        sensor_data = predictions_df[predictions_df["node_id"] == sensor_id]
+
+        # Check if we have data
+        if len(sensor_data) > 0:
+            # Get min and max values for both predictions and actuals
+            predictions_min = sensor_data["prediction"].min()
+            predictions_max = sensor_data["prediction"].max()
+            actuals_min = sensor_data["actual"].min()
+            actuals_max = sensor_data["actual"].max()
+
+            # Update global min and max
+            global_min = min(global_min, predictions_min)
+            global_max = max(global_max, predictions_max)
+
+    # Add a small buffer to the limits (5% padding)
+    y_range = global_max - global_min
+    global_min = global_min - 0.05 * y_range if y_range > 0 else global_min - 1
+    global_max = global_max + 0.05 * y_range if y_range > 0 else global_max + 1
+
     # Loop through each sensor and create a plot
     for i, sensor_id in enumerate(unique_sensors):
         if i >= len(axes):  # Safety check
@@ -220,6 +245,9 @@ def plot_sensors_grid(
             ax.tick_params(axis="x", rotation=45, labelsize=8)
             ax.tick_params(axis="y", labelsize=8)
             ax.xaxis.set_major_formatter(date_formatter)
+
+            # Apply consistent y-axis limits to all plots
+            ax.set_ylim(global_min, global_max)
 
             # Only show legend for the first plot
             if i == 0:

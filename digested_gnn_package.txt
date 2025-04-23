@@ -21,11 +21,6 @@ Directory structure:
     │   ├── raw/
     │   │   └── timeseries/
     │   └── sensors/
-    ├── gnn_package/
-    │   └── results/
-    │       └── test_1mnth/
-    │           └── default_experiment_20250418_171039/
-    │               └── predictions/
     ├── models/
     │   └── Default_Traffic_Prediction_Experiment/
     │       └── config.yml
@@ -36,8 +31,14 @@ Directory structure:
     │   │       ├── config.yml
     │   │       └── predictions/
     │   │           └── summary_160137.txt
-    │   └── test_1wk/
-    │       └── default_experiment_20250422_160710/
+    │   ├── test_1wk/
+    │   │   └── default_experiment_20250423_085553/
+    │   │       ├── config.yml
+    │   │       └── predictions/
+    │   │           └── summary_092319.txt
+    │   └── test_1yr/
+    │       ├── default_experiment_20250423_093151/
+    │       └── default_experiment_20250423_093828/
     └── src/
         ├── data/
         │   ├── __init__.py
@@ -202,7 +203,7 @@ def main():
 
     # Preprocess data with centralized configuration
     print("Preprocessing data...")
-    data_loaders = training.preprocess_data(
+    data_package = training.preprocess_data(
         data_file=raw_file_name,
         config=config,
     )
@@ -210,13 +211,13 @@ def main():
     # Save preprocessed data
     preprocessed_file_path = os.path.join(output_dir, "preprocessed_data.pkl")
     with open(preprocessed_file_path, "wb") as f:
-        pickle.dump(data_loaders, f)
+        pickle.dump(data_package, f)
     print(f"Preprocessed data saved to: {preprocessed_file_path}")
 
     # Train model with centralized configuration
     print("Training model...")
     results = training.train_model(
-        data_loaders=data_loaders["data_loaders"],
+        data_package=data_package,
         config=config,
     )
 
@@ -727,29 +728,32 @@ async def main():
     print("\n===== Starting preprocessing =====")
 
     # In main function
-    data_loaders = await training.preprocess_data(
+    data_package = await training.preprocess_data(
         data_file=raw_file_path, config=config
     )
 
     # After preprocessing
     print("\n===== Preprocessing completed =====")
-    print(f"Return value: {data_loaders}")
+    print(f"Data package keys: {data_package.keys()}")
 
     preprocess_end = datetime.now()
     print(f"Preprocessing completed in {preprocess_end - preprocess_start}")
 
-    if data_loaders is None:
+    if data_package is None:
         raise ValueError(
             "preprocessing returned None - check the preprocessing pipeline"
         )
-    print(f"Data loaders type: {type(data_loaders)}")
-    if isinstance(data_loaders, dict):
-        print(f"Data loaders keys: {data_loaders.keys()}")
+    print(f"Data loaders type: {type(data_package)}")
+    if isinstance(data_package, dict):
+        print(f"Data loaders keys: {data_package.keys()}")
 
     # Extract standardization stats if available
     preprocessing_stats = {}
-    if isinstance(data_loaders, dict) and "preprocessing_stats" in data_loaders:
-        preprocessing_stats = data_loaders["preprocessing_stats"]
+    if (
+        isinstance(data_package, dict)
+        and "preprocessing_stats" in data_package["metadata"]
+    ):
+        preprocessing_stats = data_package["metadata"]["preprocessing_stats"]
 
     runtime_stats["preprocessing"] = {
         "start_time": preprocess_start.isoformat(),
@@ -760,22 +764,20 @@ async def main():
 
     # Extract standardization stats if available (from the processor's internal data)
     # This depends on how your DataProcessor exposes the stats
-    if hasattr(data_loaders, "preprocessing_stats"):
-        runtime_stats["standardization"] = data_loaders.preprocessing_stats.get(
-            "standardization", {}
+    if hasattr(data_package["metadata"], "preprocessing_stats"):
+        runtime_stats["standardization"] = (
+            data_package.metadata.preprocessing_stats.get("standardization", {})
         )
 
     # Save preprocessed data
     with open(preprocessed_path, "wb") as f:
-        pickle.dump(data_loaders, f)
+        pickle.dump(data_package, f)
     print(f"Preprocessed data saved to: {preprocessed_path}")
 
     # Train the model
     print("Training model...")
     training_start = datetime.now()
-    results = training.train_model(
-        data_loaders=data_loaders["data_loaders"], config=config
-    )
+    results = training.train_model(data_package=data_package, config=config)
     training_end = datetime.now()
 
     # Store training statistics
@@ -1819,12 +1821,11 @@ File: data/preprocessed/.DS_Store
 
 
 
-
 ================================================
 File: models/Default_Traffic_Prediction_Experiment/config.yml
 ================================================
 data:
-  general: !!python/object:gnn_package.config.config.GeneralDataConfig
+  general:
     batch_size: 32
     bbox_coords:
     - - -1.65327
@@ -1855,9 +1856,9 @@ data:
     stride: 1
     tolerance_decimal_places: 6
     window_size: 24
-  prediction: !!python/object:gnn_package.config.config.PredictionDataConfig
-    days_back: 14
-  training: !!python/object:gnn_package.config.config.TrainingDataConfig
+  prediction:
+    days_back: 1
+  training:
     cutoff_date: null
     cv_split_index: -1
     end_date: '2024-02-25 00:00:00'
@@ -2019,6 +2020,119 @@ horizon
 4         0.597107
 5         0.570874
 6        17.496560
+
+
+================================================
+File: results/test_1wk/default_experiment_20250423_085553/config.yml
+================================================
+data:
+  general:
+    batch_size: 32
+    bbox_coords:
+    - - -1.65327
+      - 54.93188
+    - - -1.54993
+      - 54.93188
+    - - -1.54993
+      - 55.02084
+    - - -1.65327
+      - 55.02084
+    bbox_crs: EPSG:4326
+    buffer_factor: 1.0
+    custom_filter: '["highway"~"footway|path|pedestrian|steps|corridor|track|service|living_street|residential|unclassified"]["area"!~"yes"]["access"!~"private"]'
+    epsilon: 0.5
+    gap_threshold_minutes: 15
+    graph_prefix: 25022025_test
+    horizon: 6
+    max_distance: 100.0
+    missing_value: -999.0
+    network_type: walk
+    normalization_factor: 10000
+    place_name: Newcastle upon Tyne, UK
+    resampling_frequency: 15min
+    road_network_crs: EPSG:27700
+    sensor_id_prefix: '1'
+    sigma_squared: 0.1
+    standardize: true
+    stride: 1
+    tolerance_decimal_places: 6
+    window_size: 24
+  prediction:
+    days_back: 1
+  training:
+    cutoff_date: null
+    cv_split_index: -1
+    end_date: '2024-02-25 00:00:00'
+    n_splits: 3
+    split_method: rolling_window
+    start_date: '2024-02-18 00:00:00'
+    train_ratio: 0.8
+    use_cross_validation: true
+experiment:
+  description: Traffic prediction using spatial-temporal GNN
+  name: Default Traffic Prediction Experiment
+  tags:
+  - traffic
+  - gnn
+  - prediction
+  version: 1.0.0
+model:
+  attention_heads: 1
+  decoder_layers: 2
+  dropout: 0.2
+  gcn_normalization: symmetric
+  hidden_dim: 64
+  input_dim: 1
+  layer_norm: false
+  num_gc_layers: 2
+  num_layers: 2
+  output_dim: 1
+  use_self_loops: true
+paths:
+  data_cache: data/cache
+  model_save_path: models
+  results_dir: results
+training:
+  device: null
+  learning_rate: 0.001
+  num_epochs: 50
+  patience: 10
+  weight_decay: 1.0e-05
+visualization:
+  dashboard_template: dashboard.html
+  default_sensors_to_plot: 6
+  max_sensors_in_heatmap: 50
+
+
+
+================================================
+File: results/test_1wk/default_experiment_20250423_085553/predictions/summary_092319.txt
+================================================
+Prediction Summary
+=================
+
+Date/Time: 2025-04-23 09:23:25.122018
+Model: results/test_1wk/default_experiment_20250423_085553/model.pth
+Execution time: 6.10 seconds
+
+Standardization mean: 18.89549475416581
+Standardization std: 44.869104722470134
+
+Predictions: 354
+Sensors: 59
+Overall MSE: 11272.0777
+Overall MAE: 12.2326
+
+Prediction summary by horizon:
+         abs_error
+horizon           
+1         0.973565
+2        17.911451
+3        17.910920
+4        17.871178
+5        17.841290
+6         0.887404
+
 
 
 
@@ -5298,32 +5412,23 @@ File: src/training/stgnn_prediction.py
 ================================================
 # gnn_package/src/training/stgnn_prediction.py
 
+
+import logging
 import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
-import logging
-from pathlib import Path
 
-from private_uoapi import (
-    LSConfig,
-    LSAuth,
-    LightsailWrapper,
-    DateRangeParams,
-    convert_to_dataframe,
-)
-
-from gnn_package.src import training
 from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 from gnn_package.src.models.stgnn import create_stgnn_model
-from gnn_package.config import ExperimentConfig, get_config
 from gnn_package.src.utils.config_utils import (
     load_model_for_prediction,
     create_prediction_config,
 )
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
 from gnn_package.src.data.data_sources import APIDataSource
+
+from gnn_package.src.utils.data_utils import validate_data_package
 
 logger = logging.getLogger(__name__)
 
@@ -5555,22 +5660,23 @@ async def predict_all_sensors_with_validation(
 
     # Fetch and preprocess recent data for validation
     logger.info(f"Fetching and preprocessing recent data for validation")
-    data = await fetch_recent_data_for_validation(config=config)
+    data_package = await fetch_recent_data_for_validation(config=config)
 
     # Extract components from the standardized structure
-    val_loader = data["data_loaders"]["val_loader"]
-    adj_matrix = data["graph_data"]["adj_matrix"]
-    node_ids = data["graph_data"]["node_ids"]
-    time_series = data["time_series"]["validation"]
+    node_ids = data_package["graph_data"]["node_ids"]
+    time_series = data_package["time_series"]["validation"]
 
     logger.info(f"Preprocessed data for {len(node_ids)} nodes")
 
     # Make predictions using the validation dataloader
-    predictions = predict_with_model(model, val_loader, config=config)
+    predictions_dict = predict_with_model(model, data_package, config=config)
 
     # Format results
     results_df = format_predictions_with_validation(
-        predictions, time_series, node_ids, config=config
+        predictions_dict=predictions_dict,
+        data_package=data_package,
+        node_ids=node_ids,
+        config=config,
     )
 
     # Save to file if requested
@@ -5583,7 +5689,7 @@ async def predict_all_sensors_with_validation(
         # Create a data structure compatible with plot_predictions
         plot_data = {"time_series": time_series}
         fig = plot_predictions_with_validation(
-            predictions, plot_data, node_ids, config=config
+            predictions_dict, plot_data, node_ids, config=config
         )
         plt.show()
 
@@ -5598,14 +5704,14 @@ async def predict_all_sensors_with_validation(
             logger.info(f"Plot saved to {plot_filename}")
 
     return {
-        "predictions": predictions,
+        "predictions": predictions_dict,
         "dataframe": results_df,
-        "data": data,
+        "data": data_package,
         "node_ids": node_ids,
     }
 
 
-def predict_with_model(model, dataloader, config):
+def predict_with_model(model, data_package, config):
     """
     Make predictions using a trained model and a dataloader.
 
@@ -5613,8 +5719,8 @@ def predict_with_model(model, dataloader, config):
     -----------
     model : STGNN
         The trained model
-    dataloader : DataLoader
-        DataLoader containing the data to predict on
+    data_package : dict
+        Complete data package containing data loaders, graph data, and metadata
     config : ExperimentConfig
         Configuration object
 
@@ -5623,6 +5729,13 @@ def predict_with_model(model, dataloader, config):
     dict
         Dictionary containing predictions and metadata
     """
+    # Validate data package
+    validate_data_package(
+        data_package, required_components=["val_loader"], mode="prediction"
+    )
+
+    # Extract components for use
+    val_loader = data_package["data_loaders"]["val_loader"]
     # Get device from config if specified, otherwise use best available
     device_name = getattr(config.training, "device", None)
     if device_name:
@@ -5640,7 +5753,7 @@ def predict_with_model(model, dataloader, config):
     model.eval()
 
     # Get a single batch from the dataloader
-    batch = next(iter(dataloader))
+    batch = next(iter(val_loader))
 
     # Move data to device
     x = batch["x"].to(device)
@@ -5669,7 +5782,7 @@ def predict_with_model(model, dataloader, config):
 
 
 def format_predictions_with_validation(
-    predictions_dict, time_series_dict, node_ids, config
+    predictions_dict, data_package, node_ids, config
 ):
     """
     Format model predictions into a pandas DataFrame and include actual values for comparison.
@@ -5678,8 +5791,9 @@ def format_predictions_with_validation(
     -----------
     predictions_dict : dict
         Dictionary returned by predict_with_model
-    time_series_dict : dict
-        Dictionary mapping node IDs to their original time series data
+    data_package : dict
+        Complete data package containing time series data
+
     node_ids : list
         List of node IDs in the order they appear in the predictions
     config : ExperimentConfig
@@ -5690,6 +5804,12 @@ def format_predictions_with_validation(
     pandas.DataFrame
         DataFrame containing formatted predictions and actual values
     """
+    # Validate data package
+    validate_data_package(data_package, required_components=["time_series"])
+
+    # Extract time series data
+    time_series_dict = data_package["time_series"]["validation"]
+
     # Get prediction array and node indices
     predictions = predictions_dict["predictions"]
     node_indices = predictions_dict["node_indices"]
@@ -5774,20 +5894,18 @@ File: src/training/stgnn_training.py
 ================================================
 # gnn_package/src/training/stgnn_training.py
 
-import sys
 import torch
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
 
 from gnn_package.src import preprocessing
-from gnn_package.src.dataloaders import create_dataloader
 from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
 from gnn_package.config import get_config
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
 from gnn_package.src.data.data_sources import FileDataSource
-
+from gnn_package.src.utils.data_utils import validate_data_package
+from gnn_package.src.utils.config_utils import save_model_with_config
 
 # gnn_package/src/training/stgnn_training.py
 
@@ -5962,7 +6080,7 @@ class TqdmSTGNNTrainer(STGNNTrainer):
 
 
 def train_model(
-    data_loaders,
+    data_package,
     config=None,
 ):
     """
@@ -5986,6 +6104,17 @@ def train_model(
     # Get configuration
     if config is None:
         config = get_config()
+
+        # Validate data package
+    validate_data_package(
+        data_package,
+        required_components=["train_loader", "val_loader"],
+        mode="training",
+    )
+
+    # Extract components for use
+    train_loader = data_package["data_loaders"]["train_loader"]
+    val_loader = data_package["data_loaders"]["val_loader"]
 
     num_epochs = config.training.num_epochs
     patience = config.training.patience
@@ -6019,11 +6148,11 @@ def train_model(
 
     for epoch in epochs_pbar:
         # Train
-        train_loss = trainer.train_epoch(data_loaders["train_loader"])
+        train_loss = trainer.train_epoch(train_loader)
         train_losses.append(train_loss)
 
         # Validate
-        val_loss = trainer.evaluate(data_loaders["val_loader"])
+        val_loss = trainer.evaluate(val_loader)
         val_losses.append(val_loss)
 
         # Update progress bar with current metrics
@@ -6064,7 +6193,6 @@ def train_model(
 
     # Save model and configuration together
     if hasattr(config.paths, "model_save_path") and config.paths.model_save_path:
-        from gnn_package.src.utils.config_utils import save_model_with_config
 
         model_dir = (
             config.paths.model_save_path / f"{config.experiment.name.replace(' ', '_')}"
@@ -6206,7 +6334,7 @@ def cross_validate_model(data=None, data_file=None, config=None):
 
         # Train on this split
         split_results = train_model(
-            data_loaders=split_data_loaders,
+            data_package=split_data_loaders,
             config=config,
         )
 
@@ -6255,7 +6383,13 @@ def train_model_with_cv(data_loaders, config=None):
 
             # Train on this split
             split_results = train_model(
-                {"train_loader": train_loader, "val_loader": val_loader}, config=config
+                {
+                    "data_loader": {
+                        "train_loader": train_loader,
+                        "val_loader": val_loader,
+                    }
+                },
+                config=config,
             )
 
             cv_results.append(split_results)
@@ -6730,15 +6864,15 @@ def create_objective_function(
 
         try:
             # Preprocess data with the current configuration
-            data_loaders = training.preprocess_data(
+            data_package = training.preprocess_data(
                 data_file=data_file,
                 config=trial_config,
             )
 
             # Extract standardization stats if available
             standardization_stats = {}
-            if hasattr(data_loaders, "preprocessing_stats"):
-                standardization_stats = data_loaders.preprocessing_stats.get(
+            if hasattr(data_package["metadata"], "preprocessing_stats"):
+                standardization_stats = data_package.preprocessing_stats.get(
                     "standardization", {}
                 )
 
@@ -6747,7 +6881,7 @@ def create_objective_function(
 
             # Train model with updated config
             results = training.train_model(
-                data_loaders=data_loaders,
+                data_package=data_package,
                 config=trial_config,
             )
 
@@ -6771,7 +6905,7 @@ def create_objective_function(
             trial.set_user_attr("metrics", metrics)
 
             # Free up memory
-            del data_loaders
+            del data_package
             del results
             torch.mps.empty_cache() if torch.backends.mps.is_available() else None
 
@@ -6827,15 +6961,15 @@ async def train_with_best_params(
     with mlflow.start_run(run_name="best_params_training"):
         mlflow.log_params(best_params)
 
-        data_loaders = training.preprocess_data(
+        data_package = training.preprocess_data(
             data_file=data_file,
             config=best_config,
         )
 
         # Extract standardization stats
         standardization_stats = {}
-        if hasattr(data_loaders, "preprocessing_stats"):
-            standardization_stats = data_loaders.preprocessing_stats.get(
+        if hasattr(data_package["metadata"], "preprocessing_stats"):
+            standardization_stats = data_package.metadata.preprocessing_stats.get(
                 "standardization", {}
             )
 
@@ -6848,7 +6982,7 @@ async def train_with_best_params(
 
         # Train model with best configuration
         results = training.train_model(
-            data_loaders=data_loaders,
+            data_package=data_package,
             config=best_config,
         )
 
@@ -7758,6 +7892,86 @@ def convert_numpy_types(obj):
         return obj
 
 
+def validate_data_package(data_package, required_components=None, mode=None):
+    """
+    Validate that a data package has the required structure and components.
+
+    Parameters:
+    -----------
+    data_package : dict
+        The data package to validate
+    required_components : list, optional
+        List of required components, can include:
+        - 'train_loader': Training data loader
+        - 'val_loader': Validation data loader
+        - 'adj_matrix': Adjacency matrix
+        - 'node_ids': Node IDs
+        - 'time_series': Time series data
+    mode : str, optional
+        Expected mode ('training' or 'prediction')
+
+    Returns:
+    --------
+    dict
+        The validated data package
+
+    Raises:
+    -------
+    ValueError
+        If the data package is invalid or missing required components
+    """
+    # Default required components if not specified
+    if required_components is None:
+        required_components = []
+
+    # Basic validation
+    if not isinstance(data_package, dict):
+        raise ValueError("data_package must be a dictionary")
+
+    # Check top-level keys
+    expected_keys = ["data_loaders", "graph_data", "time_series", "metadata"]
+    missing_keys = [key for key in expected_keys if key not in data_package]
+    if missing_keys:
+        raise ValueError(
+            f"data_package is missing required keys: {', '.join(missing_keys)}"
+        )
+
+    # Check data_loaders structure
+    data_loaders = data_package.get("data_loaders", {})
+    if not isinstance(data_loaders, dict):
+        raise ValueError("data_loaders must be a dictionary")
+
+    # Check required components
+    if "train_loader" in required_components and "train_loader" not in data_loaders:
+        raise ValueError("data_loaders must contain 'train_loader'")
+
+    if "val_loader" in required_components and "val_loader" not in data_loaders:
+        raise ValueError("data_loaders must contain 'val_loader'")
+
+    # Check graph_data structure
+    graph_data = data_package.get("graph_data", {})
+    if not isinstance(graph_data, dict):
+        raise ValueError("graph_data must be a dictionary")
+
+    if "adj_matrix" in required_components and "adj_matrix" not in graph_data:
+        raise ValueError("graph_data must contain 'adj_matrix'")
+
+    if "node_ids" in required_components and "node_ids" not in graph_data:
+        raise ValueError("graph_data must contain 'node_ids'")
+
+    # Check metadata
+    metadata = data_package.get("metadata", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("metadata must be a dictionary")
+
+    # Check mode if specified
+    if mode is not None and metadata.get("mode") != mode:
+        raise ValueError(f"Expected mode '{mode}' but found '{metadata.get('mode')}'")
+
+    # All validation passed
+    return data_package
+
+
 
 ================================================
 File: src/utils/sensor_utils.py
@@ -8104,6 +8318,7 @@ from matplotlib.dates import DateFormatter
 from typing import Optional, Dict, Any, List, Tuple, Union
 from pathlib import Path
 import os
+from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 
 
 def plot_predictions_with_validation(
@@ -8284,6 +8499,31 @@ def plot_sensors_grid(
     # Format for dates
     date_formatter = DateFormatter("%H:%M")
 
+    # First pass: determine global min and max values for consistent y-axis scaling
+    global_min = float("inf")
+    global_max = float("-inf")
+
+    for sensor_id in unique_sensors:
+        # Get data for this sensor
+        sensor_data = predictions_df[predictions_df["node_id"] == sensor_id]
+
+        # Check if we have data
+        if len(sensor_data) > 0:
+            # Get min and max values for both predictions and actuals
+            predictions_min = sensor_data["prediction"].min()
+            predictions_max = sensor_data["prediction"].max()
+            actuals_min = sensor_data["actual"].min()
+            actuals_max = sensor_data["actual"].max()
+
+            # Update global min and max
+            global_min = min(global_min, predictions_min)
+            global_max = max(global_max, predictions_max)
+
+    # Add a small buffer to the limits (5% padding)
+    y_range = global_max - global_min
+    global_min = global_min - 0.05 * y_range if y_range > 0 else global_min - 1
+    global_max = global_max + 0.05 * y_range if y_range > 0 else global_max + 1
+
     # Loop through each sensor and create a plot
     for i, sensor_id in enumerate(unique_sensors):
         if i >= len(axes):  # Safety check
@@ -8315,6 +8555,9 @@ def plot_sensors_grid(
             ax.tick_params(axis="x", rotation=45, labelsize=8)
             ax.tick_params(axis="y", labelsize=8)
             ax.xaxis.set_major_formatter(date_formatter)
+
+            # Apply consistent y-axis limits to all plots
+            ax.set_ylim(global_min, global_max)
 
             # Only show legend for the first plot
             if i == 0:
