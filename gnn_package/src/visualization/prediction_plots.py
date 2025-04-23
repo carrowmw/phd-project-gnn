@@ -8,6 +8,7 @@ from matplotlib.dates import DateFormatter
 from typing import Optional, Dict, Any, List, Tuple, Union
 from pathlib import Path
 import os
+from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 
 
 def plot_predictions_with_validation(

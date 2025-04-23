@@ -96,3 +96,17 @@ which can be installed using pip:
 2025-04-16 09:13:24,096 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 1.0
 2025-04-16 09:13:24,098 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1mnth_20250415_191756_stage_3' with ID: 979612080568969675
 2025-04-16 09:13:24,180 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 5 trials
+2025-04-17 10:55:14,304 - gnn_package.src.tuning.tuning_utils - INFO - Best trial: #2
+2025-04-17 10:55:14,304 - gnn_package.src.tuning.tuning_utils - INFO - Best validation loss: 0.6236542297734154
+2025-04-17 10:55:14,304 - gnn_package.src.tuning.tuning_utils - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 2, 'model.num_gc_layers': 2, 'model.dropout': 0.33194362931461485, 'training.learning_rate': 0.0028104055586429364, 'training.weight_decay': 8.886718209515503e-07}
+2025-04-17 10:55:14,354 - gnn_package.src.tuning.experiment_manager - INFO - Trial reports saved to results/tuning/tuning_test_data_1mnth_20250415_191756/stage_3
+2025-04-17 10:55:14,355 - gnn_package.src.tuning.experiment_manager - INFO - Best configuration saved to results/tuning/tuning_test_data_1mnth_20250415_191756/stage_3/best_config.yml
+2025-04-17 10:55:14,358 - gnn_package.src.tuning.tuning_utils - WARNING - Error creating visualization plots: 
+Image export using the "kaleido" engine requires the kaleido package,
+which can be installed using pip:
+    $ pip install -U kaleido
+
+2025-04-17 10:55:14,358 - gnn_package.src.tuning.tuning_utils - INFO - Retraining with best parameters...
+2025-04-17 13:03:39,131 - gnn_package.src.tuning.tuning_utils - INFO - Best model results saved to results/tuning/tuning_test_data_1mnth_20250415_191756/stage_3/best_model
+2025-04-17 13:03:39,209 - tuning - INFO - Multi-stage tuning completed. Results saved to results/tuning/tuning_test_data_1mnth_20250415_191756
+2025-04-17 13:03:39,209 - tuning - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 2, 'model.num_gc_layers': 2, 'model.dropout': 0.33194362931461485, 'training.learning_rate': 0.0028104055586429364, 'training.weight_decay': 8.886718209515503e-07}

@@ -322,24 +322,29 @@ class ExperimentConfig:
     def save(self, path: Optional[str] = None):
         """
         Save the current configuration to a YAML file.
-
-        Parameters:
-        -----------
-        path : str, optional
-            Path to save the configuration. If not provided, uses the path
-            from which the configuration was loaded.
         """
         save_path = Path(path) if path else self.config_path
 
         # Create nested dictionary from dataclasses
         config_dict = {
             "experiment": self._dataclass_to_dict(self.experiment),
-            "data": self._dataclass_to_dict(self.data),
             "model": self._dataclass_to_dict(self.model),
             "training": self._dataclass_to_dict(self.training),
             "paths": self._dataclass_to_dict(self.paths),
             "visualization": self._dataclass_to_dict(self.visualization),
         }
+
+        # Handle the nested data section specially
+        data_dict = {}
+        data = self.data
+        if hasattr(data, "general"):
+            data_dict["general"] = self._dataclass_to_dict(data.general)
+        if hasattr(data, "training"):
+            data_dict["training"] = self._dataclass_to_dict(data.training)
+        if hasattr(data, "prediction"):
+            data_dict["prediction"] = self._dataclass_to_dict(data.prediction)
+
+        config_dict["data"] = data_dict
 
         # Ensure the directory exists
         os.makedirs(save_path.parent, exist_ok=True)
@@ -349,13 +354,31 @@ class ExperimentConfig:
 
     @staticmethod
     def _dataclass_to_dict(obj):
-        """Convert a dataclass instance to a dictionary."""
+        """Convert a dataclass instance to a dictionary, including nested dataclasses."""
+        if obj is None:
+            return None
+
         result = {}
         for field_name in obj.__dataclass_fields__:
             value = getattr(obj, field_name)
+
             # Handle Path objects
             if isinstance(value, Path):
                 value = str(value)
+            # Handle nested dataclasses
+            elif hasattr(value, "__dataclass_fields__"):
+                value = ExperimentConfig._dataclass_to_dict(value)
+            # Handle lists that might contain dataclasses
+            elif isinstance(value, list):
+                value = [
+                    (
+                        ExperimentConfig._dataclass_to_dict(item)
+                        if hasattr(item, "__dataclass_fields__")
+                        else item
+                    )
+                    for item in value
+                ]
+
             result[field_name] = value
         return result
 

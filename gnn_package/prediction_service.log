@@ -930,3 +930,420 @@ ValueError: Adjacency matrix dimension (104) doesn't match number of nodes (59)
 2025-04-18 17:51:23,613 - prediction-service - INFO - Visualizations saved to: predictions/2025-04-18
 2025-04-18 17:51:23,613 - prediction-service - INFO -   - grid_plot: predictions/2025-04-18/sensors_grid_175114.png
 2025-04-18 17:51:23,613 - prediction-service - INFO -   - error_analysis: predictions/2025-04-18/error_analysis_175114.png
+2025-04-22 15:45:05,543 - prediction-service - INFO - Creating prediction configuration
+2025-04-22 15:45:05,543 - prediction-service - INFO - Creating default prediction configuration
+2025-04-22 15:45:05,547 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-22 15:45:05,547 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 15:45:05,547 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 15:45:05,547 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 15:45:05,547 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 15:45:05,547 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 15:45:05,547 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 15:45:05,547 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 15:45:05,549 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-22 15:45:05,549 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 15:45:05,549 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 15:45:05,549 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 15:45:05,549 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 15:45:05,549 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 15:45:05,549 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 15:45:05,549 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 15:45:05,549 - prediction-service - INFO - Running prediction using model: gnn_package/results/test_1mnth/default_experiment_20250418_171039/model.pth
+2025-04-22 15:45:05,549 - prediction-service - INFO - Output will be saved to: gnn_package/results/test_1mnth/default_experiment_20250418_171039/predictions/predictions_154505.csv
+2025-04-22 15:45:05,552 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-22 15:45:05,552 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 15:45:05,552 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 15:45:05,552 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 15:45:05,552 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 15:45:05,552 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 15:45:05,552 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 15:45:05,552 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 15:45:05,558 - gnn_package.config.config - INFO - Configuration loaded from: /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpwm31a4mx.yml
+2025-04-22 15:45:05,558 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 15:45:05,558 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 15:45:05,558 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 15:45:05,558 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 15:45:05,558 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 15:45:05,558 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 15:45:05,558 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpwm31a4mx.yml
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-22 15:45:05,558 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-22 15:45:05,560 - prediction-service - ERROR - Error in prediction service: [Errno 2] No such file or directory: 'gnn_package/results/test_1mnth/default_experiment_20250418_171039/model.pth'
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/prediction_service.py", line 88, in run_prediction_service
+    predictions = await training.predict_all_sensors_with_validation(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 250, in predict_all_sensors_with_validation
+    model, config = load_model_for_prediction(model_path, prediction_config)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/utils/config_utils.py", line 136, in load_model_for_prediction
+    model.load_state_dict(torch.load(model_path))
+                          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/torch/serialization.py", line 1425, in load
+    with _open_file_like(f, "rb") as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/torch/serialization.py", line 751, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/torch/serialization.py", line 732, in __init__
+    super().__init__(open(name, mode))
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'gnn_package/results/test_1mnth/default_experiment_20250418_171039/model.pth'
+2025-04-22 15:45:31,663 - prediction-service - INFO - Creating prediction configuration
+2025-04-22 15:45:31,663 - prediction-service - INFO - Loading configuration from model directory: results/test_1mnth/default_experiment_20250418_171039/config.yml
+2025-04-22 15:45:31,667 - prediction-service - ERROR - Error in prediction service: could not determine a constructor for the tag 'tag:yaml.org,2002:python/object:gnn_package.config.config.GeneralDataConfig'
+  in "results/test_1mnth/default_experiment_20250418_171039/config.yml", line 2, column 12
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/prediction_service.py", line 57, in run_prediction_service
+    prediction_config = ExperimentConfig(
+                        ^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/config/config.py", line 174, in __init__
+    self._load_config()
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/config/config.py", line 199, in _load_config
+    config_dict = yaml.safe_load(f)
+                  ^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/__init__.py", line 125, in safe_load
+    return load(stream, SafeLoader)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/__init__.py", line 81, in load
+    return loader.get_single_data()
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/constructor.py", line 51, in get_single_data
+    return self.construct_document(node)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/constructor.py", line 60, in construct_document
+    for dummy in generator:
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/constructor.py", line 413, in construct_yaml_map
+    value = self.construct_mapping(node)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/constructor.py", line 218, in construct_mapping
+    return super().construct_mapping(node, deep=deep)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/constructor.py", line 143, in construct_mapping
+    value = self.construct_object(value_node, deep=deep)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/constructor.py", line 100, in construct_object
+    data = constructor(self, node)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/yaml/constructor.py", line 427, in construct_undefined
+    raise ConstructorError(None, None,
+yaml.constructor.ConstructorError: could not determine a constructor for the tag 'tag:yaml.org,2002:python/object:gnn_package.config.config.GeneralDataConfig'
+  in "results/test_1mnth/default_experiment_20250418_171039/config.yml", line 2, column 12
+2025-04-22 16:01:37,000 - prediction-service - INFO - Creating prediction configuration
+2025-04-22 16:01:37,000 - prediction-service - INFO - Loading configuration from model directory: results/test_1mnth/default_experiment_20250418_171039/config.yml
+2025-04-22 16:01:37,004 - gnn_package.config.config - INFO - Configuration loaded from: results/test_1mnth/default_experiment_20250418_171039/config.yml
+2025-04-22 16:01:37,004 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 16:01:37,004 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 16:01:37,004 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 16:01:37,004 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 16:01:37,004 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 16:01:37,004 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 16:01:37,004 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 16:01:37,004 - prediction-service - INFO - Running prediction using model: results/test_1mnth/default_experiment_20250418_171039/model.pth
+2025-04-22 16:01:37,004 - prediction-service - INFO - Output will be saved to: results/test_1mnth/default_experiment_20250418_171039/predictions/predictions_160137.csv
+2025-04-22 16:01:37,006 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-22 16:01:37,006 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 16:01:37,006 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 16:01:37,006 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 16:01:37,006 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 16:01:37,006 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 16:01:37,006 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 16:01:37,006 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 16:01:37,008 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-22 16:01:37,008 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 16:01:37,008 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 16:01:37,008 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 16:01:37,008 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 16:01:37,008 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 16:01:37,008 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 16:01:37,008 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 16:01:37,012 - gnn_package.config.config - INFO - Configuration loaded from: /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpltg4gvct.yml
+2025-04-22 16:01:37,012 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 16:01:37,012 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 16:01:37,012 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 16:01:37,012 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 16:01:37,012 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 16:01:37,013 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 16:01:37,013 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpltg4gvct.yml
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-22 16:01:37,013 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-22 16:01:37,073 - gnn_package.src.training.stgnn_prediction - INFO - Using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpltg4gvct.yml
+2025-04-22 16:01:37,073 - gnn_package.src.training.stgnn_prediction - INFO - Loading model from: results/test_1mnth/default_experiment_20250418_171039/model.pth
+2025-04-22 16:01:37,073 - gnn_package.src.training.stgnn_prediction - INFO - Loading model using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpltg4gvct.yml
+2025-04-22 16:01:37,073 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpltg4gvct.yml
+2025-04-22 16:01:37,073 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-22 16:01:37,073 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-22 16:01:37,074 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-22 16:01:37,074 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-22 16:01:37,074 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-22 16:01:37,074 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-22 16:01:37,074 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-22 16:01:37,074 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-22 16:01:37,076 - gnn_package.src.training.stgnn_prediction - INFO - Loaded model with parameters:
+2025-04-22 16:01:37,076 - gnn_package.src.training.stgnn_prediction - INFO -   hidden_dim: 64
+2025-04-22 16:01:37,076 - gnn_package.src.training.stgnn_prediction - INFO -   num_layers: 2
+2025-04-22 16:01:37,076 - gnn_package.src.training.stgnn_prediction - INFO -   num_gc_layers: 2
+2025-04-22 16:01:37,076 - gnn_package.src.training.stgnn_prediction - INFO -   horizon: 6
+2025-04-22 16:01:37,076 - gnn_package.src.training.stgnn_prediction - INFO - Model loaded successfully
+2025-04-22 16:01:37,076 - gnn_package.src.training.stgnn_prediction - INFO - Fetching and preprocessing recent data for validation
+2025-04-22 16:01:38,374 - httpx - INFO - HTTP Request: PUT https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/refresh_token "HTTP/1.1 200 OK"
+2025-04-22 16:01:38,376 - root - INFO - Token refresh status: <Response [200 OK]>
+2025-04-22 16:01:39,238 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-22 16:01:40,239 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-22 16:01:41,513 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-22 16:01:42,027 - gnn_package.src.training.stgnn_prediction - INFO - Preprocessed data for 59 nodes
+2025-04-22 16:01:42,027 - gnn_package.src.training.stgnn_prediction - INFO - Using device: mps
+2025-04-22 16:01:42,071 - gnn_package.src.training.stgnn_prediction - INFO - Input shapes - x: torch.Size([32, 59, 18, 1]), x_mask: torch.Size([32, 59, 18, 1]), adj: torch.Size([59, 59])
+2025-04-22 16:01:42,834 - gnn_package.src.training.stgnn_prediction - INFO - Overall MSE: 5638.6511, MAE: 6.2388
+2025-04-22 16:01:42,839 - gnn_package.src.training.stgnn_prediction - INFO - Predictions saved to results/test_1mnth/default_experiment_20250418_171039/predictions/predictions_160137.csv
+2025-04-22 16:01:42,839 - prediction-service - INFO - Generated 354 predictions for 59 sensors
+2025-04-22 16:01:42,839 - prediction-service - INFO - Overall MSE: 5638.6511, MAE: 6.2388
+2025-04-22 16:01:42,844 - prediction-service - INFO - Summary saved to results/test_1mnth/default_experiment_20250418_171039/predictions/summary_160137.txt
+2025-04-22 16:01:42,844 - prediction-service - INFO - Generating visualizations...
+2025-04-22 16:01:46,156 - prediction-service - INFO - Visualizations saved to: results/test_1mnth/default_experiment_20250418_171039/predictions
+2025-04-22 16:01:46,156 - prediction-service - INFO -   - grid_plot: results/test_1mnth/default_experiment_20250418_171039/predictions/sensors_grid_160137.png
+2025-04-22 16:01:46,156 - prediction-service - INFO -   - error_analysis: results/test_1mnth/default_experiment_20250418_171039/predictions/error_analysis_160137.png
+2025-04-22 16:03:04,310 - prediction-service - INFO - Creating prediction configuration
+2025-04-22 16:03:04,310 - prediction-service - INFO - Creating default prediction configuration
+2025-04-22 16:03:04,312 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-22 16:03:04,312 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 16:03:04,313 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 16:03:04,313 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 16:03:04,313 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 16:03:04,313 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 16:03:04,313 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 16:03:04,313 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 16:03:04,315 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-22 16:03:04,315 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 16:03:04,315 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 16:03:04,315 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 16:03:04,315 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 16:03:04,315 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 16:03:04,315 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 16:03:04,315 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 16:03:04,315 - prediction-service - INFO - Running prediction using model: results/test_1wk/default_experiment_20250418_171039/model.pth
+2025-04-22 16:03:04,315 - prediction-service - INFO - Output will be saved to: results/test_1wk/default_experiment_20250418_171039/predictions/predictions_160304.csv
+2025-04-22 16:03:04,317 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-22 16:03:04,317 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 16:03:04,317 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 16:03:04,317 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 16:03:04,317 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 16:03:04,317 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 16:03:04,317 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 16:03:04,317 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 16:03:04,323 - gnn_package.config.config - INFO - Configuration loaded from: /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmppiec_0ay.yml
+2025-04-22 16:03:04,323 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-22 16:03:04,323 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-22 16:03:04,323 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-22 16:03:04,323 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-22 16:03:04,323 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-22 16:03:04,323 - gnn_package.config.config - INFO - Model save path: models
+2025-04-22 16:03:04,323 - gnn_package.config.config - INFO - Results directory: results
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmppiec_0ay.yml
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-22 16:03:04,323 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-22 16:03:04,324 - prediction-service - ERROR - Error in prediction service: [Errno 2] No such file or directory: 'results/test_1wk/default_experiment_20250418_171039/model.pth'
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/prediction_service.py", line 88, in run_prediction_service
+    predictions = await training.predict_all_sensors_with_validation(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 250, in predict_all_sensors_with_validation
+    model, config = load_model_for_prediction(model_path, prediction_config)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/utils/config_utils.py", line 136, in load_model_for_prediction
+    model.load_state_dict(torch.load(model_path))
+                          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/torch/serialization.py", line 1425, in load
+    with _open_file_like(f, "rb") as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/torch/serialization.py", line 751, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/torch/serialization.py", line 732, in __init__
+    super().__init__(open(name, mode))
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'results/test_1wk/default_experiment_20250418_171039/model.pth'
+2025-04-23 09:20:10,943 - prediction-service - INFO - Creating prediction configuration
+2025-04-23 09:20:10,943 - prediction-service - INFO - Loading configuration from model directory: results/test_1wk/default_experiment_20250423_085553/config.yml
+2025-04-23 09:20:10,946 - gnn_package.config.config - INFO - Configuration loaded from: results/test_1wk/default_experiment_20250423_085553/config.yml
+2025-04-23 09:20:10,947 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 09:20:10,947 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 09:20:10,947 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 09:20:10,947 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 09:20:10,947 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 09:20:10,947 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 09:20:10,947 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 09:20:10,947 - prediction-service - INFO - Running prediction using model: results/test_1wk/default_experiment_20250423_085553/model.pth
+2025-04-23 09:20:10,947 - prediction-service - INFO - Output will be saved to: results/test_1wk/default_experiment_20250423_085553/predictions/predictions_092010.csv
+2025-04-23 09:20:10,949 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 09:20:10,949 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 09:20:10,949 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 09:20:10,949 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 09:20:10,949 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 09:20:10,949 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 09:20:10,949 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 09:20:10,949 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 09:20:10,952 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 09:20:10,952 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 09:20:10,952 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 09:20:10,952 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 09:20:10,952 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 09:20:10,952 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 09:20:10,952 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 09:20:10,952 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 09:20:10,957 - gnn_package.config.config - INFO - Configuration loaded from: /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpzvni_uhc.yml
+2025-04-23 09:20:10,957 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 09:20:10,957 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 09:20:10,957 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 09:20:10,957 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 09:20:10,957 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 09:20:10,957 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 09:20:10,957 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpzvni_uhc.yml
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 09:20:10,957 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-23 09:20:10,987 - gnn_package.src.training.stgnn_prediction - INFO - Using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpzvni_uhc.yml
+2025-04-23 09:20:10,987 - gnn_package.src.training.stgnn_prediction - INFO - Loading model from: results/test_1wk/default_experiment_20250423_085553/model.pth
+2025-04-23 09:20:10,987 - gnn_package.src.training.stgnn_prediction - INFO - Loading model using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpzvni_uhc.yml
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpzvni_uhc.yml
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 09:20:10,987 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-23 09:20:10,989 - gnn_package.src.training.stgnn_prediction - INFO - Loaded model with parameters:
+2025-04-23 09:20:10,989 - gnn_package.src.training.stgnn_prediction - INFO -   hidden_dim: 64
+2025-04-23 09:20:10,989 - gnn_package.src.training.stgnn_prediction - INFO -   num_layers: 2
+2025-04-23 09:20:10,989 - gnn_package.src.training.stgnn_prediction - INFO -   num_gc_layers: 2
+2025-04-23 09:20:10,989 - gnn_package.src.training.stgnn_prediction - INFO -   horizon: 6
+2025-04-23 09:20:10,989 - gnn_package.src.training.stgnn_prediction - INFO - Model loaded successfully
+2025-04-23 09:20:10,989 - gnn_package.src.training.stgnn_prediction - INFO - Fetching and preprocessing recent data for validation
+2025-04-23 09:20:12,277 - httpx - INFO - HTTP Request: PUT https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/refresh_token "HTTP/1.1 200 OK"
+2025-04-23 09:20:12,278 - root - INFO - Token refresh status: <Response [200 OK]>
+2025-04-23 09:20:13,755 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-23 09:20:14,964 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-23 09:20:15,887 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-23 09:20:16,503 - gnn_package.src.training.stgnn_prediction - INFO - Preprocessed data for 59 nodes
+2025-04-23 09:20:16,503 - prediction-service - ERROR - Error in prediction service: data_package must be a dictionary
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/prediction_service.py", line 88, in run_prediction_service
+    predictions = await training.predict_all_sensors_with_validation(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 262, in predict_all_sensors_with_validation
+    predictions_dict = predict_with_model(model, val_loader, config=config)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 323, in predict_with_model
+    validate_data_package(
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/utils/data_utils.py", line 83, in validate_data_package
+    raise ValueError("data_package must be a dictionary")
+ValueError: data_package must be a dictionary
+2025-04-23 09:23:19,021 - prediction-service - INFO - Creating prediction configuration
+2025-04-23 09:23:19,021 - prediction-service - INFO - Loading configuration from model directory: results/test_1wk/default_experiment_20250423_085553/config.yml
+2025-04-23 09:23:19,023 - gnn_package.config.config - INFO - Configuration loaded from: results/test_1wk/default_experiment_20250423_085553/config.yml
+2025-04-23 09:23:19,023 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 09:23:19,023 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 09:23:19,023 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 09:23:19,023 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 09:23:19,023 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 09:23:19,023 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 09:23:19,023 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 09:23:19,023 - prediction-service - INFO - Running prediction using model: results/test_1wk/default_experiment_20250423_085553/model.pth
+2025-04-23 09:23:19,023 - prediction-service - INFO - Output will be saved to: results/test_1wk/default_experiment_20250423_085553/predictions/predictions_092319.csv
+2025-04-23 09:23:19,025 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 09:23:19,025 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 09:23:19,025 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 09:23:19,025 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 09:23:19,026 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 09:23:19,026 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 09:23:19,026 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 09:23:19,026 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 09:23:19,028 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 09:23:19,028 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 09:23:19,028 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 09:23:19,028 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 09:23:19,028 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 09:23:19,028 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 09:23:19,028 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 09:23:19,028 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 09:23:19,035 - gnn_package.config.config - INFO - Configuration loaded from: /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmp4dse1pgk.yml
+2025-04-23 09:23:19,035 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 09:23:19,035 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 09:23:19,035 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 09:23:19,035 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 09:23:19,035 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 09:23:19,035 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 09:23:19,035 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmp4dse1pgk.yml
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 09:23:19,036 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-23 09:23:19,069 - gnn_package.src.training.stgnn_prediction - INFO - Using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmp4dse1pgk.yml
+2025-04-23 09:23:19,069 - gnn_package.src.training.stgnn_prediction - INFO - Loading model from: results/test_1wk/default_experiment_20250423_085553/model.pth
+2025-04-23 09:23:19,069 - gnn_package.src.training.stgnn_prediction - INFO - Loading model using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmp4dse1pgk.yml
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmp4dse1pgk.yml
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 09:23:19,069 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-23 09:23:19,071 - gnn_package.src.training.stgnn_prediction - INFO - Loaded model with parameters:
+2025-04-23 09:23:19,071 - gnn_package.src.training.stgnn_prediction - INFO -   hidden_dim: 64
+2025-04-23 09:23:19,071 - gnn_package.src.training.stgnn_prediction - INFO -   num_layers: 2
+2025-04-23 09:23:19,071 - gnn_package.src.training.stgnn_prediction - INFO -   num_gc_layers: 2
+2025-04-23 09:23:19,071 - gnn_package.src.training.stgnn_prediction - INFO -   horizon: 6
+2025-04-23 09:23:19,071 - gnn_package.src.training.stgnn_prediction - INFO - Model loaded successfully
+2025-04-23 09:23:19,071 - gnn_package.src.training.stgnn_prediction - INFO - Fetching and preprocessing recent data for validation
+2025-04-23 09:23:20,315 - httpx - INFO - HTTP Request: PUT https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/refresh_token "HTTP/1.1 200 OK"
+2025-04-23 09:23:20,316 - root - INFO - Token refresh status: <Response [200 OK]>
+2025-04-23 09:23:21,780 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-23 09:23:22,840 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-23 09:23:23,828 - httpx - INFO - HTTP Request: GET https://flask-customer-api.ki8kabg62o4fg.eu-west-2.cs.amazonlightsail.com/traffic/counts "HTTP/1.1 200 OK"
+2025-04-23 09:23:24,396 - gnn_package.src.training.stgnn_prediction - INFO - Preprocessed data for 59 nodes
+2025-04-23 09:23:24,396 - gnn_package.src.training.stgnn_prediction - INFO - Using device: mps
+2025-04-23 09:23:24,426 - gnn_package.src.training.stgnn_prediction - INFO - Input shapes - x: torch.Size([32, 59, 18, 1]), x_mask: torch.Size([32, 59, 18, 1]), adj: torch.Size([59, 59])
+2025-04-23 09:23:25,116 - gnn_package.src.training.stgnn_prediction - INFO - Overall MSE: 11272.0777, MAE: 12.2326
+2025-04-23 09:23:25,121 - gnn_package.src.training.stgnn_prediction - INFO - Predictions saved to results/test_1wk/default_experiment_20250423_085553/predictions/predictions_092319.csv
+2025-04-23 09:23:25,121 - prediction-service - INFO - Generated 354 predictions for 59 sensors
+2025-04-23 09:23:25,121 - prediction-service - INFO - Overall MSE: 11272.0777, MAE: 12.2326
+2025-04-23 09:23:25,126 - prediction-service - INFO - Summary saved to results/test_1wk/default_experiment_20250423_085553/predictions/summary_092319.txt
+2025-04-23 09:23:25,127 - prediction-service - INFO - Generating visualizations...
+2025-04-23 09:23:28,228 - prediction-service - INFO - Visualizations saved to: results/test_1wk/default_experiment_20250423_085553/predictions
+2025-04-23 09:23:28,228 - prediction-service - INFO -   - grid_plot: results/test_1wk/default_experiment_20250423_085553/predictions/sensors_grid_092319.png
+2025-04-23 09:23:28,228 - prediction-service - INFO -   - error_analysis: results/test_1wk/default_experiment_20250423_085553/predictions/error_analysis_092319.png

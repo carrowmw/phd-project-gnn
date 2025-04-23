@@ -1,31 +1,22 @@
 # gnn_package/src/training/stgnn_prediction.py
 
+
+import logging
 import torch
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
-import logging
-from pathlib import Path
 
-from private_uoapi import (
-    LSConfig,
-    LSAuth,
-    LightsailWrapper,
-    DateRangeParams,
-    convert_to_dataframe,
-)
-
-from gnn_package.src import training
 from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 from gnn_package.src.models.stgnn import create_stgnn_model
-from gnn_package.config import ExperimentConfig, get_config
 from gnn_package.src.utils.config_utils import (
     load_model_for_prediction,
     create_prediction_config,
 )
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
 from gnn_package.src.data.data_sources import APIDataSource
+
+from gnn_package.src.utils.data_utils import validate_data_package
 
 logger = logging.getLogger(__name__)
 
@@ -257,22 +248,23 @@ async def predict_all_sensors_with_validation(
 
     # Fetch and preprocess recent data for validation
     logger.info(f"Fetching and preprocessing recent data for validation")
-    data = await fetch_recent_data_for_validation(config=config)
+    data_package = await fetch_recent_data_for_validation(config=config)
 
     # Extract components from the standardized structure
-    val_loader = data["data_loaders"]["val_loader"]
-    adj_matrix = data["graph_data"]["adj_matrix"]
-    node_ids = data["graph_data"]["node_ids"]
-    time_series = data["time_series"]["validation"]
+    node_ids = data_package["graph_data"]["node_ids"]
+    time_series = data_package["time_series"]["validation"]
 
     logger.info(f"Preprocessed data for {len(node_ids)} nodes")
 
     # Make predictions using the validation dataloader
-    predictions = predict_with_model(model, val_loader, config=config)
+    predictions_dict = predict_with_model(model, data_package, config=config)
 
     # Format results
     results_df = format_predictions_with_validation(
-        predictions, time_series, node_ids, config=config
+        predictions_dict=predictions_dict,
+        data_package=data_package,
+        node_ids=node_ids,
+        config=config,
     )
 
     # Save to file if requested
@@ -285,7 +277,7 @@ async def predict_all_sensors_with_validation(
         # Create a data structure compatible with plot_predictions
         plot_data = {"time_series": time_series}
         fig = plot_predictions_with_validation(
-            predictions, plot_data, node_ids, config=config
+            predictions_dict, plot_data, node_ids, config=config
         )
         plt.show()
 
@@ -300,14 +292,14 @@ async def predict_all_sensors_with_validation(
             logger.info(f"Plot saved to {plot_filename}")
 
     return {
-        "predictions": predictions,
+        "predictions": predictions_dict,
         "dataframe": results_df,
-        "data": data,
+        "data": data_package,
         "node_ids": node_ids,
     }
 
 
-def predict_with_model(model, dataloader, config):
+def predict_with_model(model, data_package, config):
     """
     Make predictions using a trained model and a dataloader.
 
@@ -315,8 +307,8 @@ def predict_with_model(model, dataloader, config):
     -----------
     model : STGNN
         The trained model
-    dataloader : DataLoader
-        DataLoader containing the data to predict on
+    data_package : dict
+        Complete data package containing data loaders, graph data, and metadata
     config : ExperimentConfig
         Configuration object
 
@@ -325,6 +317,13 @@ def predict_with_model(model, dataloader, config):
     dict
         Dictionary containing predictions and metadata
     """
+    # Validate data package
+    validate_data_package(
+        data_package, required_components=["val_loader"], mode="prediction"
+    )
+
+    # Extract components for use
+    val_loader = data_package["data_loaders"]["val_loader"]
     # Get device from config if specified, otherwise use best available
     device_name = getattr(config.training, "device", None)
     if device_name:
@@ -342,7 +341,7 @@ def predict_with_model(model, dataloader, config):
     model.eval()
 
     # Get a single batch from the dataloader
-    batch = next(iter(dataloader))
+    batch = next(iter(val_loader))
 
     # Move data to device
     x = batch["x"].to(device)
@@ -371,7 +370,7 @@ def predict_with_model(model, dataloader, config):
 
 
 def format_predictions_with_validation(
-    predictions_dict, time_series_dict, node_ids, config
+    predictions_dict, data_package, node_ids, config
 ):
     """
     Format model predictions into a pandas DataFrame and include actual values for comparison.
@@ -380,8 +379,9 @@ def format_predictions_with_validation(
     -----------
     predictions_dict : dict
         Dictionary returned by predict_with_model
-    time_series_dict : dict
-        Dictionary mapping node IDs to their original time series data
+    data_package : dict
+        Complete data package containing time series data
+
     node_ids : list
         List of node IDs in the order they appear in the predictions
     config : ExperimentConfig
@@ -392,6 +392,12 @@ def format_predictions_with_validation(
     pandas.DataFrame
         DataFrame containing formatted predictions and actual values
     """
+    # Validate data package
+    validate_data_package(data_package, required_components=["time_series"])
+
+    # Extract time series data
+    time_series_dict = data_package["time_series"]["validation"]
+
     # Get prediction array and node indices
     predictions = predictions_dict["predictions"]
     node_indices = predictions_dict["node_indices"]

@@ -1,19 +1,17 @@
 # gnn_package/src/training/stgnn_training.py
 
-import sys
 import torch
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm, trange
 
 from gnn_package.src import preprocessing
-from gnn_package.src.dataloaders import create_dataloader
 from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
 from gnn_package.config import get_config
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
 from gnn_package.src.data.data_sources import FileDataSource
-
+from gnn_package.src.utils.data_utils import validate_data_package
+from gnn_package.src.utils.config_utils import save_model_with_config
 
 # gnn_package/src/training/stgnn_training.py
 
@@ -188,7 +186,7 @@ class TqdmSTGNNTrainer(STGNNTrainer):
 
 
 def train_model(
-    data_loaders,
+    data_package,
     config=None,
 ):
     """
@@ -212,6 +210,17 @@ def train_model(
     # Get configuration
     if config is None:
         config = get_config()
+
+        # Validate data package
+    validate_data_package(
+        data_package,
+        required_components=["train_loader", "val_loader"],
+        mode="training",
+    )
+
+    # Extract components for use
+    train_loader = data_package["data_loaders"]["train_loader"]
+    val_loader = data_package["data_loaders"]["val_loader"]
 
     num_epochs = config.training.num_epochs
     patience = config.training.patience
@@ -245,11 +254,11 @@ def train_model(
 
     for epoch in epochs_pbar:
         # Train
-        train_loss = trainer.train_epoch(data_loaders["train_loader"])
+        train_loss = trainer.train_epoch(train_loader)
         train_losses.append(train_loss)
 
         # Validate
-        val_loss = trainer.evaluate(data_loaders["val_loader"])
+        val_loss = trainer.evaluate(val_loader)
         val_losses.append(val_loss)
 
         # Update progress bar with current metrics
@@ -290,7 +299,6 @@ def train_model(
 
     # Save model and configuration together
     if hasattr(config.paths, "model_save_path") and config.paths.model_save_path:
-        from gnn_package.src.utils.config_utils import save_model_with_config
 
         model_dir = (
             config.paths.model_save_path / f"{config.experiment.name.replace(' ', '_')}"
@@ -428,13 +436,12 @@ def cross_validate_model(data=None, data_file=None, config=None):
         split_data_loaders = preprocess_data(
             data=split,  # Pass the split directly
             config=config,
-            use_time_split=False,  # Already split by time
-            **kwargs,
         )
 
         # Train on this split
         split_results = train_model(
-            data_loaders=split_data_loaders, config=config, **kwargs
+            data_package=split_data_loaders,
+            config=config,
         )
 
         # Save results for this split
@@ -482,7 +489,13 @@ def train_model_with_cv(data_loaders, config=None):
 
             # Train on this split
             split_results = train_model(
-                {"train_loader": train_loader, "val_loader": val_loader}, config=config
+                {
+                    "data_loader": {
+                        "train_loader": train_loader,
+                        "val_loader": val_loader,
+                    }
+                },
+                config=config,
             )
 
             cv_results.append(split_results)

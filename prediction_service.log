@@ -1,0 +1,420 @@
+2025-04-17 20:03:36,276 - prediction-service - INFO - Creating prediction configuration
+2025-04-17 20:03:36,281 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/config.yml
+2025-04-17 20:03:36,281 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:03:36,281 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:03:36,281 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:03:36,281 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:03:36,281 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:03:36,281 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:03:36,282 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:03:36,284 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/config.yml
+2025-04-17 20:03:36,284 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:03:36,284 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:03:36,284 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:03:36,284 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:03:36,284 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:03:36,284 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:03:36,284 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:03:36,284 - prediction-service - INFO - Running prediction using model: notebooks/models/1wk_test/model.pth
+2025-04-17 20:03:36,284 - prediction-service - INFO - Output will be saved to: predictions/2025-04-17/predictions_200336.csv
+2025-04-17 20:03:36,286 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/config.yml
+2025-04-17 20:03:36,286 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:03:36,286 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:03:36,286 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:03:36,286 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:03:36,286 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:03:36,286 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:03:36,286 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:03:36,291 - gnn_package.config.config - INFO - Configuration loaded from: /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpqg1dgtno.yml
+2025-04-17 20:03:36,292 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:03:36,292 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:03:36,292 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:03:36,292 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:03:36,292 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:03:36,292 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:03:36,292 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpqg1dgtno.yml
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-17 20:03:36,292 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-17 20:03:36,348 - gnn_package.src.training.stgnn_prediction - INFO - Using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpqg1dgtno.yml
+2025-04-17 20:03:36,348 - gnn_package.src.training.stgnn_prediction - INFO - Loading model from: notebooks/models/1wk_test/model.pth
+2025-04-17 20:03:36,348 - gnn_package.src.training.stgnn_prediction - INFO - Loading model using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpqg1dgtno.yml
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpqg1dgtno.yml
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-17 20:03:36,348 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-17 20:03:36,350 - gnn_package.src.training.stgnn_prediction - INFO - Loaded model with parameters:
+2025-04-17 20:03:36,350 - gnn_package.src.training.stgnn_prediction - INFO -   hidden_dim: 64
+2025-04-17 20:03:36,350 - gnn_package.src.training.stgnn_prediction - INFO -   num_layers: 2
+2025-04-17 20:03:36,350 - gnn_package.src.training.stgnn_prediction - INFO -   num_gc_layers: 2
+2025-04-17 20:03:36,350 - gnn_package.src.training.stgnn_prediction - INFO -   horizon: 6
+2025-04-17 20:03:36,350 - gnn_package.src.training.stgnn_prediction - INFO - Model loaded successfully
+2025-04-17 20:03:36,350 - gnn_package.src.training.stgnn_prediction - INFO - Fetching and preprocessing recent data for validation
+2025-04-17 20:03:36,350 - prediction-service - ERROR - Error in prediction service: Data source not provided
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/prediction_service.py", line 60, in run_prediction_service
+    predictions = await training.predict_all_sensors_with_validation(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 255, in predict_all_sensors_with_validation
+    data = await fetch_recent_data_for_validation(config=config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 88, in fetch_recent_data_for_validation
+    return await processor.process_data()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/data/processors.py", line 191, in process_data
+    raw_data = await self.get_data()
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/data/processors.py", line 66, in get_data
+    raise ValueError("Data source not provided")
+ValueError: Data source not provided
+2025-04-17 20:17:19,025 - prediction-service - INFO - Creating prediction configuration
+2025-04-17 20:17:19,025 - prediction-service - INFO - Loading configuration from model directory: notebooks/models/1wk_test/config.yml
+2025-04-17 20:17:19,029 - gnn_package.config.config - INFO - Configuration loaded from: notebooks/models/1wk_test/config.yml
+2025-04-17 20:17:19,029 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:17:19,029 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:17:19,029 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:17:19,029 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:17:19,029 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:17:19,029 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:17:19,029 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:17:19,029 - prediction-service - INFO - Running prediction using model: notebooks/models/1wk_test/model.pth
+2025-04-17 20:17:19,029 - prediction-service - INFO - Output will be saved to: predictions/2025-04-17/predictions_201719.csv
+2025-04-17 20:17:19,031 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/config.yml
+2025-04-17 20:17:19,032 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:17:19,032 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:17:19,032 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:17:19,032 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:17:19,032 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:17:19,032 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:17:19,032 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:17:19,034 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/config.yml
+2025-04-17 20:17:19,034 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:17:19,034 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:17:19,034 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:17:19,034 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:17:19,034 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:17:19,034 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:17:19,034 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:17:19,039 - gnn_package.config.config - INFO - Configuration loaded from: /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmppmls_mme.yml
+2025-04-17 20:17:19,039 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:17:19,039 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:17:19,039 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:17:19,039 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:17:19,039 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:17:19,040 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:17:19,040 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmppmls_mme.yml
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-17 20:17:19,040 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-17 20:17:19,067 - gnn_package.src.training.stgnn_prediction - INFO - Using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmppmls_mme.yml
+2025-04-17 20:17:19,067 - gnn_package.src.training.stgnn_prediction - INFO - Loading model from: notebooks/models/1wk_test/model.pth
+2025-04-17 20:17:19,067 - gnn_package.src.training.stgnn_prediction - INFO - Loading model using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmppmls_mme.yml
+2025-04-17 20:17:19,067 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmppmls_mme.yml
+2025-04-17 20:17:19,068 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-17 20:17:19,068 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-17 20:17:19,068 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-17 20:17:19,068 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-17 20:17:19,068 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-17 20:17:19,068 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-17 20:17:19,068 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-17 20:17:19,068 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-17 20:17:19,070 - gnn_package.src.training.stgnn_prediction - INFO - Loaded model with parameters:
+2025-04-17 20:17:19,070 - gnn_package.src.training.stgnn_prediction - INFO -   hidden_dim: 64
+2025-04-17 20:17:19,070 - gnn_package.src.training.stgnn_prediction - INFO -   num_layers: 2
+2025-04-17 20:17:19,070 - gnn_package.src.training.stgnn_prediction - INFO -   num_gc_layers: 2
+2025-04-17 20:17:19,070 - gnn_package.src.training.stgnn_prediction - INFO -   horizon: 6
+2025-04-17 20:17:19,070 - gnn_package.src.training.stgnn_prediction - INFO - Model loaded successfully
+2025-04-17 20:17:19,070 - gnn_package.src.training.stgnn_prediction - INFO - Fetching and preprocessing recent data for validation
+2025-04-17 20:17:20,341 - private_uoapi.src.lightsail_wrapper - ERROR - Failed to refresh token: 503: Error communicating with Lightsail API: 
+2025-04-17 20:17:22,434 - private_uoapi.src.lightsail_wrapper - ERROR - Failed to refresh token: 503: Error communicating with Lightsail API: 
+2025-04-17 20:17:24,442 - private_uoapi.src.lightsail_wrapper - ERROR - Failed to refresh token: 503: Error communicating with Lightsail API: 
+2025-04-17 20:17:24,443 - prediction-service - ERROR - Error in prediction service: 503: Request failed after 3 attempts: 503: Error communicating with Lightsail API: 
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection.py", line 101, in handle_async_request
+    raise exc
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_backends/anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+  File "/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectTimeout
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 95, in refresh_token
+    response = await client.put(
+               ^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1896, in put
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+  File "/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectTimeout
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 191, in _make_count_request
+    token = await self.token_manager.get_valid_token()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 145, in get_valid_token
+    self.token = await self.auth.refresh_token()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 108, in refresh_token
+    raise HTTPException(
+fastapi.exceptions.HTTPException: 503: Error communicating with Lightsail API: 
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/prediction_service.py", line 82, in run_prediction_service
+    predictions = await training.predict_all_sensors_with_validation(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 260, in predict_all_sensors_with_validation
+    data = await fetch_recent_data_for_validation(config=config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 93, in fetch_recent_data_for_validation
+    return await processor.process_data()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/data/processors.py", line 191, in process_data
+    raw_data = await self.get_data()
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/data/processors.py", line 67, in get_data
+    return await self.data_source.get_data(self.config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/data/data_sources.py", line 69, in get_data
+    count_data = await client.get_traffic_data(date_range_params)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 267, in get_traffic_data
+    window_data = await self._make_count_request(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 245, in _make_count_request
+    raise HTTPException(
+fastapi.exceptions.HTTPException: 503: Request failed after 3 attempts: 503: Error communicating with Lightsail API: 
+2025-04-17 20:17:43,784 - prediction-service - INFO - Creating prediction configuration
+2025-04-17 20:17:43,785 - prediction-service - INFO - Loading configuration from model directory: notebooks/models/1wk_test/config.yml
+2025-04-17 20:17:43,787 - gnn_package.config.config - INFO - Configuration loaded from: notebooks/models/1wk_test/config.yml
+2025-04-17 20:17:43,788 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:17:43,788 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:17:43,788 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:17:43,788 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:17:43,788 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:17:43,788 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:17:43,788 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:17:43,788 - prediction-service - INFO - Running prediction using model: notebooks/models/1wk_test/model.pth
+2025-04-17 20:17:43,788 - prediction-service - INFO - Output will be saved to: predictions/2025-04-17/predictions_201743.csv
+2025-04-17 20:17:43,790 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/config.yml
+2025-04-17 20:17:43,790 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:17:43,790 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:17:43,790 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:17:43,790 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:17:43,790 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:17:43,790 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:17:43,790 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:17:43,792 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/config.yml
+2025-04-17 20:17:43,792 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:17:43,792 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:17:43,792 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:17:43,792 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:17:43,792 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:17:43,792 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:17:43,792 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:17:43,798 - gnn_package.config.config - INFO - Configuration loaded from: /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpfazd7xpw.yml
+2025-04-17 20:17:43,798 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-17 20:17:43,798 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-17 20:17:43,798 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-17 20:17:43,798 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-17 20:17:43,798 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-17 20:17:43,798 - gnn_package.config.config - INFO - Model save path: models
+2025-04-17 20:17:43,798 - gnn_package.config.config - INFO - Results directory: results
+2025-04-17 20:17:43,798 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpfazd7xpw.yml
+2025-04-17 20:17:43,798 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-17 20:17:43,798 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-17 20:17:43,798 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-17 20:17:43,798 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-17 20:17:43,798 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-17 20:17:43,798 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-17 20:17:43,798 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-17 20:17:43,799 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-17 20:17:43,826 - gnn_package.src.training.stgnn_prediction - INFO - Using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpfazd7xpw.yml
+2025-04-17 20:17:43,827 - gnn_package.src.training.stgnn_prediction - INFO - Loading model from: notebooks/models/1wk_test/model.pth
+2025-04-17 20:17:43,827 - gnn_package.src.training.stgnn_prediction - INFO - Loading model using configuration from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpfazd7xpw.yml
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /var/folders/f3/myxz09w53js5d76yl90pnhk00000gq/T/tmpfazd7xpw.yml
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-17 20:17:43,827 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2
+2025-04-17 20:17:43,829 - gnn_package.src.training.stgnn_prediction - INFO - Loaded model with parameters:
+2025-04-17 20:17:43,829 - gnn_package.src.training.stgnn_prediction - INFO -   hidden_dim: 64
+2025-04-17 20:17:43,829 - gnn_package.src.training.stgnn_prediction - INFO -   num_layers: 2
+2025-04-17 20:17:43,829 - gnn_package.src.training.stgnn_prediction - INFO -   num_gc_layers: 2
+2025-04-17 20:17:43,829 - gnn_package.src.training.stgnn_prediction - INFO -   horizon: 6
+2025-04-17 20:17:43,829 - gnn_package.src.training.stgnn_prediction - INFO - Model loaded successfully
+2025-04-17 20:17:43,829 - gnn_package.src.training.stgnn_prediction - INFO - Fetching and preprocessing recent data for validation
+2025-04-17 20:17:44,854 - private_uoapi.src.lightsail_wrapper - ERROR - Failed to refresh token: 503: Error communicating with Lightsail API: 
+2025-04-17 20:17:48,975 - private_uoapi.src.lightsail_wrapper - ERROR - Failed to refresh token: 503: Error communicating with Lightsail API: 
+2025-04-17 20:17:50,984 - private_uoapi.src.lightsail_wrapper - ERROR - Failed to refresh token: 503: Error communicating with Lightsail API: 
+2025-04-17 20:17:50,984 - prediction-service - ERROR - Error in prediction service: 503: Request failed after 3 attempts: 503: Error communicating with Lightsail API: 
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection.py", line 101, in handle_async_request
+    raise exc
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_async/connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_backends/auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_backends/anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+  File "/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectTimeout
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 95, in refresh_token
+    response = await client.put(
+               ^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1896, in put
+    return await self.request(
+           ^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1540, in request
+    return await self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+  File "/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/Users/administrator/Code/python/phd-project-gnn/.venv/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectTimeout
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 191, in _make_count_request
+    token = await self.token_manager.get_valid_token()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 145, in get_valid_token
+    self.token = await self.auth.refresh_token()
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 108, in refresh_token
+    raise HTTPException(
+fastapi.exceptions.HTTPException: 503: Error communicating with Lightsail API: 
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/prediction_service.py", line 82, in run_prediction_service
+    predictions = await training.predict_all_sensors_with_validation(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 260, in predict_all_sensors_with_validation
+    data = await fetch_recent_data_for_validation(config=config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py", line 93, in fetch_recent_data_for_validation
+    return await processor.process_data()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/data/processors.py", line 191, in process_data
+    raw_data = await self.get_data()
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/data/processors.py", line 67, in get_data
+    return await self.data_source.get_data(self.config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/data/data_sources.py", line 69, in get_data
+    count_data = await client.get_traffic_data(date_range_params)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 267, in get_traffic_data
+    window_data = await self._make_count_request(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/administrator/Code/python/private-uo-api/private_uoapi/src/lightsail_wrapper.py", line 245, in _make_count_request
+    raise HTTPException(
+fastapi.exceptions.HTTPException: 503: Request failed after 3 attempts: 503: Error communicating with Lightsail API: 

@@ -1,0 +1,24 @@
+Prediction Summary
+=================
+
+Date/Time: 2025-04-22 16:01:42.840017
+Model: results/test_1mnth/default_experiment_20250418_171039/model.pth
+Execution time: 5.84 seconds
+
+Standardization mean: 15.628493950771798
+Standardization std: 39.84288958634343
+
+Predictions: 354
+Sensors: 59
+Overall MSE: 5638.6511
+Overall MAE: 6.2388
+
+Prediction summary by horizon:
+         abs_error
+horizon           
+1        17.514480
+2         0.677238
+3         0.576530
+4         0.597107
+5         0.570874
+6        17.496560

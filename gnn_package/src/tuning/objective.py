@@ -128,15 +128,15 @@ def create_objective_function(
 
         try:
             # Preprocess data with the current configuration
-            data_loaders = training.preprocess_data(
+            data_package = training.preprocess_data(
                 data_file=data_file,
                 config=trial_config,
             )
 
             # Extract standardization stats if available
             standardization_stats = {}
-            if hasattr(data_loaders, "preprocessing_stats"):
-                standardization_stats = data_loaders.preprocessing_stats.get(
+            if hasattr(data_package["metadata"], "preprocessing_stats"):
+                standardization_stats = data_package.preprocessing_stats.get(
                     "standardization", {}
                 )
 
@@ -145,7 +145,7 @@ def create_objective_function(
 
             # Train model with updated config
             results = training.train_model(
-                data_loaders=data_loaders,
+                data_package=data_package,
                 config=trial_config,
             )
 
@@ -169,7 +169,7 @@ def create_objective_function(
             trial.set_user_attr("metrics", metrics)
 
             # Free up memory
-            del data_loaders
+            del data_package
             del results
             torch.mps.empty_cache() if torch.backends.mps.is_available() else None
 
@@ -225,15 +225,15 @@ async def train_with_best_params(
     with mlflow.start_run(run_name="best_params_training"):
         mlflow.log_params(best_params)
 
-        data_loaders = training.preprocess_data(
+        data_package = training.preprocess_data(
             data_file=data_file,
             config=best_config,
         )
 
         # Extract standardization stats
         standardization_stats = {}
-        if hasattr(data_loaders, "preprocessing_stats"):
-            standardization_stats = data_loaders.preprocessing_stats.get(
+        if hasattr(data_package["metadata"], "preprocessing_stats"):
+            standardization_stats = data_package.metadata.preprocessing_stats.get(
                 "standardization", {}
             )
 
@@ -246,7 +246,7 @@ async def train_with_best_params(
 
         # Train model with best configuration
         results = training.train_model(
-            data_loaders=data_loaders,
+            data_package=data_package,
             config=best_config,
         )
 

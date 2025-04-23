@@ -96,7 +96,7 @@ def main():
 
     # Preprocess data with centralized configuration
     print("Preprocessing data...")
-    data_loaders = training.preprocess_data(
+    data_package = training.preprocess_data(
         data_file=raw_file_name,
         config=config,
     )
@@ -104,13 +104,13 @@ def main():
     # Save preprocessed data
     preprocessed_file_path = os.path.join(output_dir, "preprocessed_data.pkl")
     with open(preprocessed_file_path, "wb") as f:
-        pickle.dump(data_loaders, f)
+        pickle.dump(data_package, f)
     print(f"Preprocessed data saved to: {preprocessed_file_path}")
 
     # Train model with centralized configuration
     print("Training model...")
     results = training.train_model(
-        data_loaders=data_loaders,
+        data_package=data_package,
         config=config,
     )
 

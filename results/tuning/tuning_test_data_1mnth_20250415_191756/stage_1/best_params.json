@@ -1,8 +1,0 @@
-{
-  "model.hidden_dim": 128,
-  "model.num_layers": 3,
-  "model.num_gc_layers": 1,
-  "model.dropout": 0.49475477464020695,
-  "training.learning_rate": 0.0035033984911586884,
-  "training.weight_decay": 3.945908811099999e-06
-}

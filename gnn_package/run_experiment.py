@@ -94,29 +94,32 @@ async def main():
     print("\n===== Starting preprocessing =====")
 
     # In main function
-    data_loaders = await training.preprocess_data(
+    data_package = await training.preprocess_data(
         data_file=raw_file_path, config=config
     )
 
     # After preprocessing
     print("\n===== Preprocessing completed =====")
-    print(f"Return value: {data_loaders}")
+    print(f"Data package keys: {data_package.keys()}")
 
     preprocess_end = datetime.now()
     print(f"Preprocessing completed in {preprocess_end - preprocess_start}")
 
-    if data_loaders is None:
+    if data_package is None:
         raise ValueError(
             "preprocessing returned None - check the preprocessing pipeline"
         )
-    print(f"Data loaders type: {type(data_loaders)}")
-    if isinstance(data_loaders, dict):
-        print(f"Data loaders keys: {data_loaders.keys()}")
+    print(f"Data loaders type: {type(data_package)}")
+    if isinstance(data_package, dict):
+        print(f"Data loaders keys: {data_package.keys()}")
 
     # Extract standardization stats if available
     preprocessing_stats = {}
-    if isinstance(data_loaders, dict) and "preprocessing_stats" in data_loaders:
-        preprocessing_stats = data_loaders["preprocessing_stats"]
+    if (
+        isinstance(data_package, dict)
+        and "preprocessing_stats" in data_package["metadata"]
+    ):
+        preprocessing_stats = data_package["metadata"]["preprocessing_stats"]
 
     runtime_stats["preprocessing"] = {
         "start_time": preprocess_start.isoformat(),
@@ -127,20 +130,20 @@ async def main():
 
     # Extract standardization stats if available (from the processor's internal data)
     # This depends on how your DataProcessor exposes the stats
-    if hasattr(data_loaders, "preprocessing_stats"):
-        runtime_stats["standardization"] = data_loaders.preprocessing_stats.get(
-            "standardization", {}
+    if hasattr(data_package["metadata"], "preprocessing_stats"):
+        runtime_stats["standardization"] = (
+            data_package.metadata.preprocessing_stats.get("standardization", {})
         )
 
     # Save preprocessed data
     with open(preprocessed_path, "wb") as f:
-        pickle.dump(data_loaders, f)
+        pickle.dump(data_package, f)
     print(f"Preprocessed data saved to: {preprocessed_path}")
 
     # Train the model
     print("Training model...")
     training_start = datetime.now()
-    results = training.train_model(data_loaders=data_loaders, config=config)
+    results = training.train_model(data_package=data_package, config=config)
     training_end = datetime.now()
 
     # Store training statistics

@@ -49,18 +49,23 @@ experiment:
   - prediction
   version: 1.0.0
 model:
+  attention_heads: 1
   decoder_layers: 2
   dropout: 0.2
+  gcn_normalization: symmetric
   hidden_dim: 64
   input_dim: 1
+  layer_norm: false
   num_gc_layers: 2
   num_layers: 2
   output_dim: 1
+  use_self_loops: true
 paths:
   data_cache: data/cache
   model_save_path: models
   results_dir: results
 training:
+  device: null
   learning_rate: 0.001
   num_epochs: 50
   patience: 10
