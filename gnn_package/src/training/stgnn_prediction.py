@@ -11,8 +11,8 @@ from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 from gnn_package.src.models.stgnn import create_stgnn_model
 from gnn_package.src.utils.config_utils import (
     load_model_for_prediction,
-    create_prediction_config,
 )
+from gnn_package.config import create_prediction_config
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
 from gnn_package.src.data.data_sources import APIDataSource
 
