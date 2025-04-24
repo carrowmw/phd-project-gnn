@@ -4,6 +4,7 @@ import os
 import json
 import logging
 import pickle
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional, Union, List, Tuple
 
@@ -134,11 +135,25 @@ def tune_hyperparameters(
             objective, n_trials=n_trials, timeout=None, show_progress_bar=True
         )
 
-    # Get best parameters
-    best_params = study.best_params
-    best_value = study.best_value
+    # Check if we have completed trials before trying to access best_params
+    completed_trials = [
+        t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+    ]
 
-    logger.info(f"Best trial: #{study.best_trial.number}")
+    if not completed_trials:
+        logger.error("No trials were completed successfully")
+        return {
+            "error": "No completed trials",
+            "study": study,
+            "output_dir": str(output_dir),
+        }
+
+    # Get best parameters from the most successful trial
+    best_trial = sorted(completed_trials, key=lambda t: t.value)[0]
+    best_params = best_trial.params
+    best_value = best_trial.value
+
+    logger.info(f"Best trial: #{best_trial.number}")
     logger.info(f"Best validation loss: {best_value}")
     logger.info(f"Best parameters: {best_params}")
 
@@ -165,8 +180,8 @@ def tune_hyperparameters(
         fig.write_image(str(output_dir / "parallel_coordinate.png"))
 
         # Slice plot for selected parameters
-        for param in study.best_params.keys():
-            if len(study.trials) > 10:  # Only if we have enough trials
+        for param in best_params.keys():
+            if len(completed_trials) > 10:  # Only if we have enough trials
                 fig = optuna.visualization.plot_slice(study, params=[param])
                 fig.write_image(str(output_dir / f"slice_{param}.png"))
 
@@ -180,11 +195,14 @@ def tune_hyperparameters(
         best_model_dir = output_dir / "best_model"
         os.makedirs(best_model_dir, exist_ok=True)
 
-        best_config, best_results = train_with_best_params(
-            data_file=data_file,
-            best_params=best_params,
-            output_dir=best_model_dir,
-            config=config,
+        # Use asyncio.run to handle the async function
+        best_config, best_results = asyncio.run(
+            train_with_best_params(
+                data_file=data_file,
+                best_params=best_params,
+                output_dir=best_model_dir,
+                config=config,
+            )
         )
 
         # Plot loss curves
@@ -329,10 +347,25 @@ def load_tuning_results(
             best_model_results = best_model_results or {}
             best_model_results["model_path"] = str(best_model_path)
 
+    # Check if we have completed trials before accessing best_params
+    completed_trials = [
+        t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE
+    ]
+
+    if not completed_trials:
+        logger.warning("No completed trials found in study")
+        best_params = {}
+        best_value = None
+    else:
+        # Get best parameters from the most successful trial
+        best_trial = sorted(completed_trials, key=lambda t: t.value)[0]
+        best_params = best_trial.params
+        best_value = best_trial.value
+
     return {
         "study": study,
-        "best_params": study.best_params,
-        "best_value": study.best_value,
+        "best_params": best_params,
+        "best_value": best_value,
         "trials_df": trials_df,
         "best_model_results": best_model_results,
         "output_dir": str(output_dir),
@@ -423,6 +456,19 @@ def run_multi_stage_tuning(
             study_name=stage_name,
         )
 
+        # Check if we have valid results before proceeding
+        if "error" in results:
+            logger.warning(f"Stage {i+1} failed: {results['error']}")
+            # Store what we have, even if it failed
+            stage_results.append(
+                {
+                    "stage": i + 1,
+                    "experiment_name": stage_experiment_name,
+                    "error": results["error"],
+                }
+            )
+            continue
+
         # Store results for this stage
         stage_results.append(
             {
@@ -442,21 +488,25 @@ def run_multi_stage_tuning(
     with open(stages_summary_path, "w") as f:
         json.dump(stage_results, f, indent=2)
 
-    # Create comparison plot of stages
-    plt.figure(figsize=(10, 6))
-    stages = [f"Stage {i+1}" for i in range(n_stages)]
-    best_values = [stage["best_value"] for stage in stage_results]
+    # Create comparison plot of stages if we have valid results
+    successful_stages = [s for s in stage_results if "error" not in s]
+    if successful_stages:
+        plt.figure(figsize=(10, 6))
+        stages = [f"Stage {s['stage']}" for s in successful_stages]
+        best_values = [s["best_value"] for s in successful_stages]
 
-    plt.bar(stages, best_values, color="skyblue")
-    plt.title("Best Validation Loss by Tuning Stage")
-    plt.xlabel("Stage")
-    plt.ylabel("Validation Loss")
-    plt.xticks(rotation=0)
+        plt.bar(stages, best_values, color="skyblue")
+        plt.title("Best Validation Loss by Tuning Stage")
+        plt.xlabel("Stage")
+        plt.ylabel("Validation Loss")
+        plt.xticks(rotation=0)
 
-    for i, value in enumerate(best_values):
-        plt.text(i, value, f"{value:.4f}", ha="center", va="bottom")
+        for i, value in enumerate(best_values):
+            plt.text(i, value, f"{value:.4f}", ha="center", va="bottom")
 
-    plt.savefig(str(output_dir / "stages_comparison.png"), dpi=300, bbox_inches="tight")
+        plt.savefig(
+            str(output_dir / "stages_comparison.png"), dpi=300, bbox_inches="tight"
+        )
 
     return {
         "stage_results": stage_results,

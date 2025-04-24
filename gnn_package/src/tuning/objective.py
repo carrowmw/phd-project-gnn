@@ -4,6 +4,7 @@ import os
 import copy
 import pickle
 import logging
+import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional, Union, Tuple
 
@@ -127,18 +128,24 @@ def create_objective_function(
         )
 
         try:
-            # Preprocess data with the current configuration
-            data_package = training.preprocess_data(
-                data_file=data_file,
-                config=trial_config,
+            # Preprocess data with the current configuration - THIS IS THE KEY CHANGE
+            # We need to run the async function in the event loop
+            data_package = asyncio.run(
+                training.preprocess_data(
+                    data_file=data_file,
+                    config=trial_config,
+                )
             )
 
             # Extract standardization stats if available
             standardization_stats = {}
-            if hasattr(data_package["metadata"], "preprocessing_stats"):
-                standardization_stats = data_package.preprocessing_stats.get(
-                    "standardization", {}
-                )
+            if (
+                "metadata" in data_package
+                and "preprocessing_stats" in data_package["metadata"]
+            ):
+                standardization_stats = data_package["metadata"][
+                    "preprocessing_stats"
+                ].get("standardization", {})
 
             # Add to trial attributes for later analysis
             trial.set_user_attr("standardization_stats", standardization_stats)
@@ -163,7 +170,7 @@ def create_objective_function(
             }
 
             # Log metrics to MLflow
-            log_trial_metrics(metrics)
+            log_trial_metrics(metrics, standardization_stats)
 
             # Report to the trial
             trial.set_user_attr("metrics", metrics)
@@ -171,6 +178,7 @@ def create_objective_function(
             # Free up memory
             del data_package
             del results
+            torch.cuda.empty_cache() if torch.cuda.is_available() else None
             torch.mps.empty_cache() if torch.backends.mps.is_available() else None
 
             return best_val_loss
@@ -225,15 +233,18 @@ async def train_with_best_params(
     with mlflow.start_run(run_name="best_params_training"):
         mlflow.log_params(best_params)
 
-        data_package = training.preprocess_data(
+        data_package = await training.preprocess_data(
             data_file=data_file,
             config=best_config,
         )
 
         # Extract standardization stats
         standardization_stats = {}
-        if hasattr(data_package["metadata"], "preprocessing_stats"):
-            standardization_stats = data_package.metadata.preprocessing_stats.get(
+        if (
+            "metadata" in data_package
+            and "preprocessing_stats" in data_package["metadata"]
+        ):
+            standardization_stats = data_package["metadata"]["preprocessing_stats"].get(
                 "standardization", {}
             )
 

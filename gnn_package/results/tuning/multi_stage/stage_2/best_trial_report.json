@@ -1,0 +1,26 @@
+{
+  "trial_number": 9,
+  "value": 0.8842341552178065,
+  "params": {
+    "model.hidden_dim": 128,
+    "model.num_layers": 3,
+    "model.num_gc_layers": 3,
+    "model.dropout": 0.29062357079507495,
+    "training.learning_rate": 0.0014497013503334496,
+    "training.weight_decay": 3.3357723515383763e-06
+  },
+  "datetime_start": "2025-04-24T02:53:44.753329",
+  "datetime_complete": "2025-04-24T08:48:27.080143",
+  "duration_seconds": 21282.326814,
+  "metrics": {
+    "best_val_loss": 0.8842341552178065,
+    "final_train_loss": 0.6614955427015529,
+    "final_val_loss": 0.8882598678270975,
+    "num_epochs_trained": 20,
+    "stopped_early": false
+  },
+  "standardization_stats": {
+    "mean": 18.592608326253185,
+    "std": 50.44364303547578
+  }
+}

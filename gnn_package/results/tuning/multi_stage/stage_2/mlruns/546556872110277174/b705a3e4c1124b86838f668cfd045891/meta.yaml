@@ -1,0 +1,15 @@
+artifact_uri: file:///Users/administrator/Code/python/phd-project-gnn/gnn_package/results/tuning/multi_stage/stage_2/mlruns/546556872110277174/b705a3e4c1124b86838f668cfd045891/artifacts
+end_time: 1745480907088
+entry_point_name: ''
+experiment_id: '546556872110277174'
+lifecycle_stage: active
+run_id: b705a3e4c1124b86838f668cfd045891
+run_name: stage_2_optimization
+run_uuid: b705a3e4c1124b86838f668cfd045891
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1745434834539
+status: 3
+tags: []
+user_id: administrator

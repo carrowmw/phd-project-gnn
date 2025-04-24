@@ -1,0 +1,884 @@
+2025-04-23 18:14:10,296 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 18:14:10,296 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 18:14:10,296 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 18:14:10,296 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 18:14:10,296 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 18:14:10,296 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 18:14:10,296 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 18:14:10,296 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 18:14:10,296 - tuning - INFO - Using default config
+2025-04-23 18:14:10,296 - tuning - INFO - Running multi-stage tuning with experiment name: tuning_test_data_1wk_20250423_181410
+2025-04-23 18:14:10,296 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 1/3
+2025-04-23 18:14:10,296 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 15
+2025-04-23 18:14:10,297 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: 10
+2025-04-23 18:14:10,297 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 0.25
+2025-04-23 18:14:10,301 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1wk_20250423_181410_stage_1' with ID: 299898457052046525
+2025-04-23 18:14:26,597 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 15 trials
+2025-04-23 18:14:28,715 - gnn_package.src.tuning.objective - ERROR - Trial 0 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:28,745 - gnn_package.src.tuning.objective - ERROR - Trial 1 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:28,832 - gnn_package.src.tuning.objective - ERROR - Trial 2 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:28,882 - gnn_package.src.tuning.objective - ERROR - Trial 3 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:28,929 - gnn_package.src.tuning.objective - ERROR - Trial 4 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:28,971 - gnn_package.src.tuning.objective - ERROR - Trial 5 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,011 - gnn_package.src.tuning.objective - ERROR - Trial 6 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,041 - gnn_package.src.tuning.objective - ERROR - Trial 7 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,074 - gnn_package.src.tuning.objective - ERROR - Trial 8 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,108 - gnn_package.src.tuning.objective - ERROR - Trial 9 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,149 - gnn_package.src.tuning.objective - ERROR - Trial 10 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,193 - gnn_package.src.tuning.objective - ERROR - Trial 11 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,233 - gnn_package.src.tuning.objective - ERROR - Trial 12 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,274 - gnn_package.src.tuning.objective - ERROR - Trial 13 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:14:29,314 - gnn_package.src.tuning.objective - ERROR - Trial 14 failed: 'coroutine' object is not subscriptable
+2025-04-23 18:40:21,417 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 18:40:21,417 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 18:40:21,417 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 18:40:21,417 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 18:40:21,417 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 18:40:21,417 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 18:40:21,417 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 18:40:21,417 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 18:40:21,417 - tuning - INFO - Using default config
+2025-04-23 18:40:21,417 - tuning - INFO - Running multi-stage tuning with experiment name: tuning_test_data_1wk_20250423_184021
+2025-04-23 18:40:21,417 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 1/3
+2025-04-23 18:40:21,417 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 15
+2025-04-23 18:40:21,417 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: 10
+2025-04-23 18:40:21,417 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 0.25
+2025-04-23 18:40:21,422 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1wk_20250423_184021_stage_1' with ID: 127371215720728086
+2025-04-23 18:40:23,704 - gnn_package.src.tuning.tuning_utils - INFO - Loaded existing study with 15 trials
+2025-04-23 18:48:43,028 - gnn_package.config.config - INFO - Configuration loaded from: /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 18:48:43,028 - gnn_package.config.config - INFO - Experiment: Default Traffic Prediction Experiment (v1.0.0)
+2025-04-23 18:48:43,028 - gnn_package.config.config - INFO - Description: Traffic prediction using spatial-temporal GNN
+2025-04-23 18:48:43,028 - gnn_package.config.config - INFO - Data config: window_size=24, horizon=6
+2025-04-23 18:48:43,028 - gnn_package.config.config - INFO - Model config: hidden_dim=64, layers=2
+2025-04-23 18:48:43,028 - gnn_package.config.config - INFO - Training config: epochs=50, lr=0.001
+2025-04-23 18:48:43,028 - gnn_package.config.config - INFO - Model save path: models
+2025-04-23 18:48:43,028 - gnn_package.config.config - INFO - Results directory: results
+2025-04-23 18:48:43,028 - tuning - INFO - Using default config
+2025-04-23 18:48:43,028 - tuning - INFO - Running multi-stage tuning with experiment name: tuning_test_data_1wk_20250423_184843
+2025-04-23 18:48:43,028 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 1/3
+2025-04-23 18:48:43,028 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 15
+2025-04-23 18:48:43,028 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: 10
+2025-04-23 18:48:43,028 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 0.25
+2025-04-23 18:48:43,033 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1wk_20250423_184843_stage_1' with ID: 261822539761892545
+2025-04-23 18:48:43,610 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 15 trials
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 18:48:44,386 - gnn_package.src.models.stgnn - INFO -   dropout: 0.12323344486727979
+2025-04-23 18:48:44,387 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 18:48:46,746 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 33928 parameters
+2025-04-23 18:48:46,746 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.005399484409787433
+    maximize: False
+    weight_decay: 6.358358856676247e-05
+)
+2025-04-23 18:48:46,747 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 18:51:23,703 - gnn_package.src.models.stgnn - INFO -   dropout: 0.17336180394137354
+2025-04-23 18:51:23,704 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 18:51:23,706 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 133384 parameters
+2025-04-23 18:51:23,706 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0004059611610484307
+    maximize: False
+    weight_decay: 3.752055855124284e-05
+)
+2025-04-23 18:51:23,706 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 18:54:20,565 - gnn_package.src.models.stgnn - INFO -   dropout: 0.28242799368681437
+2025-04-23 18:54:20,566 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 18:54:20,570 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 149896 parameters
+2025-04-23 18:54:20,570 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0037183641805732083
+    maximize: False
+    weight_decay: 3.972110727381911e-06
+)
+2025-04-23 18:54:20,570 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 256
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 18:57:39,065 - gnn_package.src.models.stgnn - INFO -   dropout: 0.4795542149013333
+2025-04-23 18:57:39,067 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 18:57:39,070 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 528904 parameters
+2025-04-23 18:57:39,070 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.00853618986286683
+    maximize: False
+    weight_decay: 0.0002661901888489054
+)
+2025-04-23 18:57:39,070 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:00:06,727 - gnn_package.src.models.stgnn - INFO -   dropout: 0.11375540844608736
+2025-04-23 19:00:06,728 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:00:06,733 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 149896 parameters
+2025-04-23 19:00:06,733 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.006586289317583112
+    maximize: False
+    weight_decay: 5.975027999960295e-06
+)
+2025-04-23 19:00:06,733 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:03:27,605 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:03:27,605 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:03:27,605 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 32
+2025-04-23 19:03:27,606 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:03:27,606 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:03:27,606 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 19:03:27,606 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 3
+2025-04-23 19:03:27,606 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:03:27,606 - gnn_package.src.models.stgnn - INFO -   dropout: 0.4100531293444458
+2025-04-23 19:03:27,606 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:03:27,609 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 10888 parameters
+2025-04-23 19:03:27,609 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.007568292060167618
+    maximize: False
+    weight_decay: 0.00048359527764659497
+)
+2025-04-23 19:03:27,609 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:06:44,125 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:06:44,125 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:06:44,125 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-23 19:06:44,125 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:06:44,126 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:06:44,126 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 19:06:44,126 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 19:06:44,126 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:06:44,126 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2554709158757928
+2025-04-23 19:06:44,126 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:06:44,130 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 33928 parameters
+2025-04-23 19:06:44,130 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.00034889766548903674
+    maximize: False
+    weight_decay: 0.0003063462210622083
+)
+2025-04-23 19:06:44,130 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:09:37,503 - gnn_package.src.models.stgnn - INFO -   dropout: 0.49475477464020695
+2025-04-23 19:09:37,504 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:09:37,509 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 331528 parameters
+2025-04-23 19:09:37,509 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0035033984911586884
+    maximize: False
+    weight_decay: 3.945908811099999e-06
+)
+2025-04-23 19:09:37,509 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 64
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:17:48,814 - gnn_package.src.models.stgnn - INFO -   dropout: 0.24338629141770907
+2025-04-23 19:17:48,815 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:17:48,819 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 83848 parameters
+2025-04-23 19:17:48,819 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0001705053926026929
+    maximize: False
+    weight_decay: 0.00038842777547031416
+)
+2025-04-23 19:17:48,819 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 32
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 3
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO -   dropout: 0.35502298854208525
+2025-04-23 19:25:49,167 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:25:49,171 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 10888 parameters
+2025-04-23 19:25:49,171 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0059487468132197715
+    maximize: False
+    weight_decay: 2.6100256506134754e-05
+)
+2025-04-23 19:25:49,171 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 256
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:29:10,181 - gnn_package.src.models.stgnn - INFO -   dropout: 0.10718475024592788
+2025-04-23 19:29:10,184 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:29:10,187 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 989448 parameters
+2025-04-23 19:29:10,187 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0013527769084615443
+    maximize: False
+    weight_decay: 1.3066991237906983e-06
+)
+2025-04-23 19:29:10,187 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:35:25,541 - gnn_package.src.models.stgnn - INFO -   dropout: 0.1926007488613412
+2025-04-23 19:35:25,542 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:35:25,546 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 248968 parameters
+2025-04-23 19:35:25,546 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0020534371516700406
+    maximize: False
+    weight_decay: 6.634504937444539e-06
+)
+2025-04-23 19:35:25,546 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:41:38,185 - gnn_package.src.models.stgnn - INFO -   dropout: 0.3167265665612355
+2025-04-23 19:41:38,186 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:41:38,190 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 248968 parameters
+2025-04-23 19:41:38,190 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0023976227274240727
+    maximize: False
+    weight_decay: 6.94707991907909e-06
+)
+2025-04-23 19:41:38,190 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:47:44,634 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO -   dropout: 0.3758146404482569
+2025-04-23 19:47:44,635 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:47:44,640 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 248968 parameters
+2025-04-23 19:47:44,640 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0019785023106242356
+    maximize: False
+    weight_decay: 1.1486518462839192e-05
+)
+2025-04-23 19:47:44,640 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 19:53:50,297 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 19:53:50,301 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 19:53:50,301 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 19:53:50,301 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 19:53:50,301 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 19:53:50,301 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 19:53:50,301 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 3
+2025-04-23 19:53:50,301 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 19:53:50,301 - gnn_package.src.models.stgnn - INFO -   dropout: 0.3847911208853647
+2025-04-23 19:53:50,302 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 19:53:50,306 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 265480 parameters
+2025-04-23 19:53:50,306 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0007860892988004737
+    maximize: False
+    weight_decay: 1.8945332476413838e-05
+)
+2025-04-23 19:53:50,306 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 20:00:17,211 - gnn_package.src.tuning.tuning_utils - INFO - Best trial: #13
+2025-04-23 20:00:17,211 - gnn_package.src.tuning.tuning_utils - INFO - Best validation loss: 1.0240411758422852
+2025-04-23 20:00:17,211 - gnn_package.src.tuning.tuning_utils - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 2, 'model.num_gc_layers': 2, 'model.dropout': 0.3758146404482569, 'training.learning_rate': 0.0019785023106242356, 'training.weight_decay': 1.1486518462839192e-05}
+2025-04-23 20:00:34,198 - gnn_package.src.tuning.experiment_manager - INFO - Trial reports saved to results/tuning/multi_stage/stage_1
+2025-04-23 20:00:34,199 - gnn_package.src.tuning.experiment_manager - INFO - Best configuration saved to results/tuning/multi_stage/stage_1/best_config.yml
+2025-04-23 20:00:34,477 - gnn_package.src.tuning.tuning_utils - WARNING - Error creating visualization plots: 
+Image export using the "kaleido" engine requires the kaleido package,
+which can be installed using pip:
+    $ pip install -U kaleido
+
+2025-04-23 20:00:34,477 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 2/3
+2025-04-23 20:00:34,477 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 10
+2025-04-23 20:00:34,477 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: 20
+2025-04-23 20:00:34,477 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 0.5
+2025-04-23 20:00:34,479 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1wk_20250423_184843_stage_2' with ID: 546556872110277174
+2025-04-23 20:00:34,550 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 10 trials
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 20:00:35,315 - gnn_package.src.models.stgnn - INFO -   dropout: 0.3070135445154974
+2025-04-23 20:00:35,316 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 20:00:35,324 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 232456 parameters
+2025-04-23 20:00:35,324 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0007492748560490418
+    maximize: False
+    weight_decay: 3.733195205360305e-05
+)
+2025-04-23 20:00:35,324 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 3
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 20:11:59,015 - gnn_package.src.models.stgnn - INFO -   dropout: 0.31828246258391213
+2025-04-23 20:11:59,016 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 20:11:59,021 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 364552 parameters
+2025-04-23 20:11:59,021 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.000983377845984552
+    maximize: False
+    weight_decay: 4.145786306534808e-06
+)
+2025-04-23 20:11:59,021 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO -   dropout: 0.30371341257866524
+2025-04-23 20:30:08,407 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 20:30:08,411 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 149896 parameters
+2025-04-23 20:30:08,411 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0012531185231490368
+    maximize: False
+    weight_decay: 7.4708546845194585e-06
+)
+2025-04-23 20:30:08,411 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 20:36:59,670 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2851047229922564
+2025-04-23 20:36:59,671 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 20:36:59,675 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 248968 parameters
+2025-04-23 20:36:59,675 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.002505880930237049
+    maximize: False
+    weight_decay: 3.977414984749317e-06
+)
+2025-04-23 20:36:59,675 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 256
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 20:49:11,855 - gnn_package.src.models.stgnn - INFO -   dropout: 0.29534906324953364
+2025-04-23 20:49:11,859 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 20:49:11,863 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 1318408 parameters
+2025-04-23 20:49:11,863 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0029657842011070247
+    maximize: False
+    weight_decay: 9.473821364849172e-06
+)
+2025-04-23 20:49:11,863 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 20:58:41,981 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 20:58:41,982 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 20:58:41,982 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 20:58:41,982 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 20:58:41,982 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 20:58:41,982 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-23 20:58:41,982 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 20:58:41,982 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 20:58:41,982 - gnn_package.src.models.stgnn - INFO -   dropout: 0.4083190973190533
+2025-04-23 20:58:41,983 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 20:58:41,987 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 331528 parameters
+2025-04-23 20:58:41,987 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0013081672324962118
+    maximize: False
+    weight_decay: 1.2252996365207566e-05
+)
+2025-04-23 20:58:41,987 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 256
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 3
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 21:13:41,076 - gnn_package.src.models.stgnn - INFO -   dropout: 0.4547801105337867
+2025-04-23 21:13:41,079 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 21:13:41,084 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 1449992 parameters
+2025-04-23 21:13:41,084 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0024533351615606673
+    maximize: False
+    weight_decay: 4.4662526484920066e-05
+)
+2025-04-23 21:13:41,084 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO -   num_layers: 1
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 21:32:28,632 - gnn_package.src.models.stgnn - INFO -   dropout: 0.33008444680303606
+2025-04-23 21:32:28,633 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 21:32:28,636 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 149896 parameters
+2025-04-23 21:32:28,636 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.004074101714813703
+    maximize: False
+    weight_decay: 7.243328123936664e-06
+)
+2025-04-23 21:32:28,636 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 1
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-23 22:07:45,414 - gnn_package.src.models.stgnn - INFO -   dropout: 0.4731920277683604
+2025-04-23 22:07:45,415 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-23 22:07:45,419 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 331528 parameters
+2025-04-23 22:07:45,419 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.003598521432346467
+    maximize: False
+    weight_decay: 4.355229169064537e-06
+)
+2025-04-23 22:07:45,419 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-24 03:11:28,927 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-24 03:11:28,928 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-24 03:11:28,928 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-24 03:11:28,928 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-24 03:11:28,928 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-24 03:11:28,928 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-24 03:11:28,928 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 3
+2025-04-24 03:11:28,928 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-24 03:11:28,928 - gnn_package.src.models.stgnn - INFO -   dropout: 0.29062357079507495
+2025-04-24 03:11:28,929 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-24 03:11:28,939 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 364552 parameters
+2025-04-24 03:11:28,939 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0014497013503334496
+    maximize: False
+    weight_decay: 3.3357723515383763e-06
+)
+2025-04-24 03:11:28,939 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-24 08:48:27,091 - gnn_package.src.tuning.tuning_utils - INFO - Best trial: #9
+2025-04-24 08:48:27,091 - gnn_package.src.tuning.tuning_utils - INFO - Best validation loss: 0.8842341552178065
+2025-04-24 08:48:27,091 - gnn_package.src.tuning.tuning_utils - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 3, 'model.num_gc_layers': 3, 'model.dropout': 0.29062357079507495, 'training.learning_rate': 0.0014497013503334496, 'training.weight_decay': 3.3357723515383763e-06}
+2025-04-24 08:48:27,157 - gnn_package.src.tuning.experiment_manager - INFO - Trial reports saved to results/tuning/multi_stage/stage_2
+2025-04-24 08:48:27,158 - gnn_package.src.tuning.experiment_manager - INFO - Best configuration saved to results/tuning/multi_stage/stage_2/best_config.yml
+2025-04-24 08:48:27,163 - gnn_package.src.tuning.tuning_utils - WARNING - Error creating visualization plots: 
+Image export using the "kaleido" engine requires the kaleido package,
+which can be installed using pip:
+    $ pip install -U kaleido
+
+2025-04-24 08:48:27,164 - gnn_package.src.tuning.tuning_utils - INFO - Starting tuning stage 3/3
+2025-04-24 08:48:27,164 - gnn_package.src.tuning.tuning_utils - INFO -   Trials: 5
+2025-04-24 08:48:27,164 - gnn_package.src.tuning.tuning_utils - INFO -   Epochs: None
+2025-04-24 08:48:27,164 - gnn_package.src.tuning.tuning_utils - INFO -   Data fraction: 1.0
+2025-04-24 08:48:27,166 - gnn_package.src.tuning.experiment_manager - INFO - Created new experiment 'tuning_test_data_1wk_20250423_184843_stage_3' with ID: 549118243013032191
+2025-04-24 08:48:27,289 - gnn_package.src.tuning.tuning_utils - INFO - Starting hyperparameter optimization with 5 trials
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-24 08:48:27,969 - gnn_package.src.models.stgnn - INFO -   dropout: 0.22182247486231546
+2025-04-24 08:48:27,970 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-24 08:48:27,975 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 348040 parameters
+2025-04-24 08:48:27,975 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0005490136477235062
+    maximize: False
+    weight_decay: 1.0841482899474184e-05
+)
+2025-04-24 08:48:27,975 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-24 09:32:10,837 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-24 09:32:10,838 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-24 09:32:10,838 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-24 09:32:10,838 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-24 09:32:10,838 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-24 09:32:10,838 - gnn_package.src.models.stgnn - INFO -   num_layers: 4
+2025-04-24 09:32:10,838 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 4
+2025-04-24 09:32:10,838 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-24 09:32:10,838 - gnn_package.src.models.stgnn - INFO -   dropout: 0.23309139293073017
+2025-04-24 09:32:10,839 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-24 09:32:10,845 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 480136 parameters
+2025-04-24 09:32:10,845 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0007205471449573455
+    maximize: False
+    weight_decay: 1.2039678847394566e-06
+)
+2025-04-24 09:32:10,845 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO -   num_layers: 2
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 3
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-24 10:33:16,593 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2185223429254833
+2025-04-24 10:33:16,594 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-24 10:33:16,598 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 265480 parameters
+2025-04-24 10:33:16,598 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0009181933250125181
+    maximize: False
+    weight_decay: 2.1695930389704066e-06
+)
+2025-04-24 10:33:16,598 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO -   num_layers: 3
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 3
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-24 11:05:27,585 - gnn_package.src.models.stgnn - INFO -   dropout: 0.1999136533390745
+2025-04-24 11:05:27,586 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-24 11:05:27,591 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 364552 parameters
+2025-04-24 11:05:27,591 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0018361257143001848
+    maximize: False
+    weight_decay: 1.155071571916645e-06
+)
+2025-04-24 11:05:27,592 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-24 11:36:04,036 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-24 11:36:04,037 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-24 11:36:04,037 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 256
+2025-04-24 11:36:04,037 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-24 11:36:04,037 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-24 11:36:04,037 - gnn_package.src.models.stgnn - INFO -   num_layers: 4
+2025-04-24 11:36:04,037 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 2
+2025-04-24 11:36:04,037 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-24 11:36:04,037 - gnn_package.src.models.stgnn - INFO -   dropout: 0.2101579935963517
+2025-04-24 11:36:04,041 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-24 11:36:04,065 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 1778952 parameters
+2025-04-24 11:36:04,065 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.002173109092698473
+    maximize: False
+    weight_decay: 2.7512698015953954e-06
+)
+2025-04-24 11:36:04,065 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-24 11:56:02,826 - gnn_package.src.tuning.tuning_utils - INFO - Best trial: #1
+2025-04-24 11:56:02,826 - gnn_package.src.tuning.tuning_utils - INFO - Best validation loss: 0.8340801944335302
+2025-04-24 11:56:02,826 - gnn_package.src.tuning.tuning_utils - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 4, 'model.num_gc_layers': 4, 'model.dropout': 0.23309139293073017, 'training.learning_rate': 0.0007205471449573455, 'training.weight_decay': 1.2039678847394566e-06}
+2025-04-24 11:56:02,878 - gnn_package.src.tuning.experiment_manager - INFO - Trial reports saved to results/tuning/multi_stage/stage_3
+2025-04-24 11:56:02,880 - gnn_package.src.tuning.experiment_manager - INFO - Best configuration saved to results/tuning/multi_stage/stage_3/best_config.yml
+2025-04-24 11:56:02,886 - gnn_package.src.tuning.tuning_utils - WARNING - Error creating visualization plots: 
+Image export using the "kaleido" engine requires the kaleido package,
+which can be installed using pip:
+    $ pip install -U kaleido
+
+2025-04-24 11:56:02,887 - gnn_package.src.tuning.tuning_utils - INFO - Retraining with best parameters...
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO - Creating STGNN model with config from /Users/administrator/Code/python/phd-project-gnn/gnn_package/config.yml
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO -   input_dim: 1
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO -   hidden_dim: 128
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO -   output_dim: 1
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO -   horizon: 6
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO -   num_layers: 4
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO -   num_gc_layers: 4
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO -   decoder_layers: 2
+2025-04-24 11:56:03,483 - gnn_package.src.models.stgnn - INFO -   dropout: 0.23309139293073017
+2025-04-24 11:56:03,485 - gnn_package.src.models.stgnn - INFO - Using device: mps
+2025-04-24 11:56:03,491 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Model inistialized with 480136 parameters
+2025-04-24 11:56:03,491 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Optimizer: Adam (
+Parameter Group 0
+    amsgrad: False
+    betas: (0.9, 0.999)
+    capturable: False
+    differentiable: False
+    eps: 1e-08
+    foreach: None
+    fused: None
+    lr: 0.0007205471449573455
+    maximize: False
+    weight_decay: 1.2039678847394566e-06
+)
+2025-04-24 11:56:03,491 - gnn_package.src.models.stgnn - INFO - STGNNTrainer.__init__(): Loss function: MSELoss()
+2025-04-24 12:53:54,054 - gnn_package.src.tuning.tuning_utils - INFO - Best model results saved to results/tuning/multi_stage/stage_3/best_model
+2025-04-24 12:53:54,134 - tuning - INFO - Multi-stage tuning completed. Results saved to results/tuning/multi_stage
+2025-04-24 12:53:54,134 - tuning - INFO - Best parameters: {'model.hidden_dim': 128, 'model.num_layers': 4, 'model.num_gc_layers': 4, 'model.dropout': 0.23309139293073017, 'training.learning_rate': 0.0007205471449573455, 'training.weight_decay': 1.2039678847394566e-06}

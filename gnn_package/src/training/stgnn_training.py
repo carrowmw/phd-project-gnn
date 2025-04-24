@@ -410,13 +410,11 @@ def cross_validate_model(data=None, data_file=None, config=None):
             raise ValueError("Either data or data_file must be provided")
         data = preprocessing.load_sensor_data(data_file)
 
-    # Resample data to consistent frequency
-    resampled_data = preprocessing.resample_sensor_data(
-        data,
-    )
-
     # Create processor with appropriate settings
     processor = preprocessing.TimeSeriesPreprocessor()
+
+    # Resample data to consistent frequency
+    resampled_data = processor.resample_sensor_data(data, config)
 
     # Create rolling window splits
     print(f"Creating {n_splits} time-based cross-validation splits...")

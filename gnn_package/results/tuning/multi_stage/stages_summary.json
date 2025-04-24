@@ -1,0 +1,41 @@
+[
+  {
+    "stage": 1,
+    "experiment_name": "tuning_test_data_1wk_20250423_184843_stage_1",
+    "best_params": {
+      "model.hidden_dim": 128,
+      "model.num_layers": 2,
+      "model.num_gc_layers": 2,
+      "model.dropout": 0.3758146404482569,
+      "training.learning_rate": 0.0019785023106242356,
+      "training.weight_decay": 1.1486518462839192e-05
+    },
+    "best_value": 1.0240411758422852
+  },
+  {
+    "stage": 2,
+    "experiment_name": "tuning_test_data_1wk_20250423_184843_stage_2",
+    "best_params": {
+      "model.hidden_dim": 128,
+      "model.num_layers": 3,
+      "model.num_gc_layers": 3,
+      "model.dropout": 0.29062357079507495,
+      "training.learning_rate": 0.0014497013503334496,
+      "training.weight_decay": 3.3357723515383763e-06
+    },
+    "best_value": 0.8842341552178065
+  },
+  {
+    "stage": 3,
+    "experiment_name": "tuning_test_data_1wk_20250423_184843_stage_3",
+    "best_params": {
+      "model.hidden_dim": 128,
+      "model.num_layers": 4,
+      "model.num_gc_layers": 4,
+      "model.dropout": 0.23309139293073017,
+      "training.learning_rate": 0.0007205471449573455,
+      "training.weight_decay": 1.2039678847394566e-06
+    },
+    "best_value": 0.8340801944335302
+  }
+]

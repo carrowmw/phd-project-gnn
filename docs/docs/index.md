@@ -408,21 +408,25 @@ classDiagram
 The package provides several entry points for different use cases:
 
 1. **run_experiment.py**: Main script for running training experiments
+
    ```bash
    python run_experiment.py --config config.yml --data data/raw/timeseries/test_data_1wk.pkl
    ```
 
 2. **prediction_service.py**: Service for making predictions
+
    ```bash
    python prediction_service.py results/test_1wk/model.pth predictions/
    ```
 
 3. **tune_model.py**: Script for hyperparameter tuning
+
    ```bash
    python tune_model.py --data data/raw/timeseries/test_data_1wk.pkl --trials 20
    ```
 
 4. **__main__.py**: Module entry point for default training
+
    ```bash
    python -m gnn_package --config config.yml --data data/raw/timeseries/test_data_1mnth.pkl
    ```
@@ -432,6 +436,7 @@ The package provides several entry points for different use cases:
 To use the GNN package:
 
 1. **Setup Configuration**:
+
    ```python
    from gnn_package.config import get_config, create_default_config
 
@@ -443,6 +448,7 @@ To use the GNN package:
    ```
 
 2. **Process Data**:
+
    ```python
    from gnn_package import training
 
@@ -453,7 +459,8 @@ To use the GNN package:
    )
    ```
 
-3. **Train Model**:
+3. **Train Model**
+
    ```python
    # Train model
    results = training.train_model(
@@ -466,6 +473,7 @@ To use the GNN package:
    ```
 
 4. **Make Predictions**:
+
    ```python
    from gnn_package.training import predict_all_sensors_with_validation
 

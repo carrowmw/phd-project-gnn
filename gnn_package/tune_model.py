@@ -4,6 +4,7 @@
 import os
 import argparse
 import logging
+import asyncio
 from pathlib import Path
 from datetime import datetime
 
@@ -134,7 +135,8 @@ def main():
         logger.info(
             f"Multi-stage tuning completed. Results saved to {results['output_dir']}"
         )
-        logger.info(f"Best parameters: {results['best_params']}")
+        if "best_params" in results and results["best_params"]:
+            logger.info(f"Best parameters: {results['best_params']}")
     else:
         logger.info(
             f"Running hyperparameter tuning with experiment name: {experiment_name}"
@@ -151,8 +153,10 @@ def main():
         )
 
         logger.info(f"Tuning completed. Results saved to {results['output_dir']}")
-        logger.info(f"Best parameters: {results['best_params']}")
-        logger.info(f"Best validation loss: {results['best_value']}")
+        if "best_params" in results and results["best_params"]:
+            logger.info(f"Best parameters: {results['best_params']}")
+            if "best_value" in results:
+                logger.info(f"Best validation loss: {results['best_value']}")
 
 
 if __name__ == "__main__":

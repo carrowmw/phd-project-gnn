@@ -308,164 +308,176 @@ class TimeSeriesPreprocessor:
 
         return [{"train": train_dict, "val": val_dict}]
 
+    def resample_sensor_data(self, time_series_dict, config=None):
+        """
+        Resample all sensor time series to a consistent frequency and fill gaps.
 
-def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=None):
-    """
-    Resample all sensor time series to a consistent frequency and fill gaps.
+        Parameters:
+        -----------
+        time_series_dict : dict
+            Dictionary mapping sensor IDs to their time series data
+        freq : str, optional
+            Pandas frequency string (e.g., '15min', '1H'), overrides config if provided
+        fill_value : float, optional
+            Value to use for filling gaps, overrides config if provided
+        config : ExperimentConfig, optional
+            Centralized configuration object. If not provided, will use global config.
 
-    Parameters:
-    -----------
-    time_series_dict : dict
-        Dictionary mapping sensor IDs to their time series data
-    freq : str, optional
-        Pandas frequency string (e.g., '15min', '1H'), overrides config if provided
-    fill_value : float, optional
-        Value to use for filling gaps, overrides config if provided
-    config : ExperimentConfig, optional
-        Centralized configuration object. If not provided, will use global config.
+        Returns:
+        --------
+        dict
+            Dictionary with resampled time series
+        """
+        # Get configuration
+        if config is None:
+            config = get_config()
 
-    Returns:
-    --------
-    dict
-        Dictionary with resampled time series
-    """
-    # Get configuration
-    if config is None:
-        print("resample_sensor_data: No config provided, using global config")
-        config = get_config()
-
-    # Use parameters or config values
-    if freq is None:
+        # Use parameters or config values
         freq = config.data.general.resampling_frequency
-    if fill_value is None:
         fill_value = config.data.general.missing_value
 
-    # Find global min and max dates
-    all_dates = []
-    for series in time_series_dict.values():
-        if len(series) > 0:
-            all_dates.extend(series.index)
+        # Find global min and max dates
+        all_dates = []
+        for series in time_series_dict.values():
+            if len(series) > 0:
+                all_dates.extend(series.index)
 
-    global_min = min(all_dates)
-    global_max = max(all_dates)
+        global_min = min(all_dates)
+        global_max = max(all_dates)
 
-    # Create common date range
-    date_range = pd.date_range(start=global_min, end=global_max, freq=freq)
+        # Create common date range
+        date_range = pd.date_range(start=global_min, end=global_max, freq=freq)
 
-    # Resample each sensor's data
-    resampled_dict = {}
+        # Resample each sensor's data
+        resampled_dict = {}
 
-    for sensor_id, series in time_series_dict.items():
-        # Skip empty series
-        if series is None or len(series) == 0:
-            continue
+        for sensor_id, series in time_series_dict.items():
+            # Skip empty series
+            if series is None or len(series) == 0:
+                continue
 
-        # Create a Series with the full date range
-        resampled = pd.Series(index=date_range, dtype=float)
+            # Create a Series with the full date range
+            resampled = pd.Series(index=date_range, dtype=float)
 
-        # Use original values where available (handle duplicates by taking the mean)
-        grouper = series.groupby(series.index)
-        non_duplicate_series = grouper.mean()
+            # Use original values where available (handle duplicates by taking the mean)
+            grouper = series.groupby(series.index)
+            non_duplicate_series = grouper.mean()
 
-        # Align with the resampled index
-        resampled[non_duplicate_series.index] = non_duplicate_series
+            # Align with the resampled index
+            resampled[non_duplicate_series.index] = non_duplicate_series
 
-        # Fill gaps with fill_value
-        resampled = resampled.fillna(fill_value)
+            # Fill gaps with fill_value
+            resampled = resampled.fillna(fill_value)
 
-        resampled_dict[sensor_id] = resampled
+            resampled_dict[sensor_id] = resampled
 
-    print(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
-    print(f"Each sensor now has {len(date_range)} data points")
+        print(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
+        print(f"Each sensor now has {len(date_range)} data points")
 
-    # Create a new dictionary to return
-    result_dict = resampled_dict.copy()
+        # Create a new dictionary to return
+        result_dict = resampled_dict.copy()
 
-    # Apply standardization if enabled in config
-    if config.data.general.standardize:
-        print("Applying global standardization to sensor data")
-        resampled_dict, stats = standardize_sensor_data(resampled_dict, config)
+        # Apply standardization if enabled in config
+        if config.data.general.standardize:
+            print("Applying global standardization to sensor data")
+            resampled_dict, stats = self.standardize_sensor_data(resampled_dict, config)
 
-        print(
-            f"Standardization complete: mean={stats['mean']:.2f}, std={stats['std']:.2f}"
-        )
+            print(
+                f"Standardization complete: mean={stats['mean']:.2f}, std={stats['std']:.2f}"
+            )
 
-        # Store stats in a special key that won't interfere with sensor data
-        result_dict = resampled_dict.copy()  # Update with standardized data
-        result_dict["__stats__"] = (
-            stats  # Use a special key unlikely to conflict with sensor IDs
-        )
+            # Store stats in a special key that won't interfere with sensor data
+            result_dict = resampled_dict.copy()  # Update with standardized data
+            result_dict["__stats__"] = (
+                stats  # Use a special key unlikely to conflict with sensor IDs
+            )
 
-    return result_dict
+        return result_dict
+
+    def standardize_sensor_data(self, time_series_dict, config=None):
+        """
+        Standardize sensor data globally across all sensors while preserving missing values.
+
+        Parameters:
+        -----------
+        time_series_dict : Dict[str, pd.Series]
+            Dictionary mapping sensor IDs to their time series data
+        config : ExperimentConfig, optional
+            Configuration object. If not provided, will use global config.
+
+        Returns:
+        --------
+        Tuple[Dict[str, pd.Series], Dict[str, float]]
+            Tuple containing:
+            - Dictionary with standardized time series
+            - Dictionary with statistics (mean, std) for inverse transformation
+        """
+        # Get configuration
+        if config is None:
+            config = get_config()
+
+        # Get missing value from config
+        missing_value = config.data.general.missing_value
+
+        # Step 1: Collect all valid values across all sensors
+        all_valid_values = []
+        for series in time_series_dict.values():
+            # Skip completely empty series
+            if len(series) == 0:
+                continue
+
+            valid_mask = series.values != missing_value
+            all_valid_values.append(series.values[valid_mask])
+
+        # If we have no valid values, return the original data
+        if not all_valid_values:
+            print("Warning: No valid values found for standardization")
+            return time_series_dict, {"mean": 0.0, "std": 1.0}
+
+        all_valid_values = np.concatenate(all_valid_values)
+
+        # Step 2: Calculate global statistics from all valid values
+        global_mean = np.mean(all_valid_values)
+        global_std = np.std(all_valid_values)
+
+        # Add a small epsilon to avoid division by zero
+        if global_std < 1e-8:
+            print(
+                "Warning: Very small standard deviation detected, using default value"
+            )
+            global_std = 1.0
+
+        # Store these for later inverse transformation
+        stats = {"mean": global_mean, "std": global_std}
+
+        print(f"Global standardization: mean={global_mean:.2f}, std={global_std:.2f}")
+
+        # Step 3: Apply standardization while preserving missing values
+        standardized_dict = {}
+        for sensor_id, series in time_series_dict.items():
+            standardized_series = series.copy()
+            valid_mask = series.values != missing_value
+
+            # Only standardize valid values
+            standardized_series.values[valid_mask] = (
+                series.values[valid_mask] - global_mean
+            ) / global_std
+
+            standardized_dict[sensor_id] = standardized_series
+
+        return standardized_dict, stats
+
+
+# For backward compatibility
+def resample_sensor_data(time_series_dict, freq=None, fill_value=None, config=None):
+    """Wrapper for backward compatibility"""
+    print("USING LEGACY RESAMPLING FUNCTION")
+    preprocessor = TimeSeriesPreprocessor(config=config)
+    return preprocessor.resample_sensor_data(time_series_dict, config)
 
 
 def standardize_sensor_data(time_series_dict, config=None):
-    """
-    Standardize sensor data globally across all sensors while preserving missing values.
-
-    Parameters:
-    -----------
-    time_series_dict : Dict[str, pd.Series]
-        Dictionary mapping sensor IDs to their time series data
-    config : ExperimentConfig, optional
-        Configuration object. If not provided, will use global config.
-
-    Returns:
-    --------
-    Tuple[Dict[str, pd.Series], Dict[str, float]]
-        Tuple containing:
-        - Dictionary with standardized time series
-        - Dictionary with statistics (mean, std) for inverse transformation
-    """
-    # Get configuration
-    if config is None:
-        config = get_config()
-
-    # Get missing value from config
-    missing_value = config.data.general.missing_value
-
-    # Step 1: Collect all valid values across all sensors
-    all_valid_values = []
-    for series in time_series_dict.values():
-        # Skip completely empty series
-        if len(series) == 0:
-            continue
-
-        valid_mask = series.values != missing_value
-        all_valid_values.append(series.values[valid_mask])
-
-    # If we have no valid values, return the original data
-    if not all_valid_values:
-        print("Warning: No valid values found for standardization")
-        return time_series_dict, {"mean": 0.0, "std": 1.0}
-
-    all_valid_values = np.concatenate(all_valid_values)
-
-    # Step 2: Calculate global statistics from all valid values
-    global_mean = np.mean(all_valid_values)
-    global_std = np.std(all_valid_values)
-
-    # Add a small epsilon to avoid division by zero
-    if global_std < 1e-8:
-        print("Warning: Very small standard deviation detected, using default value")
-        global_std = 1.0
-
-    # Store these for later inverse transformation
-    stats = {"mean": global_mean, "std": global_std}
-
-    print(f"Global standardization: mean={global_mean:.2f}, std={global_std:.2f}")
-
-    # Step 3: Apply standardization while preserving missing values
-    standardized_dict = {}
-    for sensor_id, series in time_series_dict.items():
-        standardized_series = series.copy()
-        valid_mask = series.values != missing_value
-
-        # Only standardize valid values
-        standardized_series.values[valid_mask] = (
-            series.values[valid_mask] - global_mean
-        ) / global_std
-
-        standardized_dict[sensor_id] = standardized_series
-
-    return standardized_dict, stats
+    """Wrapper for backward compatibility"""
+    print("USING LEGACY STANDARDIZATION FUNCTION")
+    preprocessor = TimeSeriesPreprocessor(config=config)
+    return preprocessor.standardize_sensor_data(time_series_dict, config)

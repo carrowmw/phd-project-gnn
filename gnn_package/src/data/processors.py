@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union, TypedDict, Any
 import pandas as pd
 from pathlib import Path
 
-from gnn_package.src.preprocessing import TimeSeriesPreprocessor, resample_sensor_data
+from gnn_package.src.preprocessing import TimeSeriesPreprocessor
 from gnn_package.src.dataloaders import create_dataloader
 
 from gnn_package.config import ExperimentConfig
@@ -182,9 +182,15 @@ class TrainingDataProcessor(BaseDataProcessor):
                 print("WARNING: Raw data is empty or None!")
                 return None
 
+            # Process data with appropriate splitting
+            print("Creating TimeSeriesPreprocessor...")
+            processor = TimeSeriesPreprocessor(config=self.config)
+
             # Resample data
             print("Resampling data...")
-            resampled_data = resample_sensor_data(raw_data, config=self.config)
+            resampled_data = processor.resample_sensor_data(
+                raw_data, config=self.config
+            )
             print(f"Resampled data: {type(resampled_data)}")
 
             # Extract stats if they exist, and store them for later access
@@ -196,10 +202,6 @@ class TrainingDataProcessor(BaseDataProcessor):
                 # Remove the stats from the main dictionary so it doesn't interfere with later processing
                 stats = resampled_data.pop("__stats__")
                 print(f"Extracted standardization stats: {stats}")
-
-            # Process data with appropriate splitting
-            print("Creating TimeSeriesPreprocessor...")
-            processor = TimeSeriesPreprocessor(config=self.config)
 
             # Use the appropriate split method based on config
             split_method = self.config.data.training.split_method
@@ -363,8 +365,11 @@ class PredictionDataProcessor(BaseDataProcessor):
         # Get raw data
         raw_data = await self.get_data()
 
+        # Process the input data to create windows
+        processor = TimeSeriesPreprocessor(config=self.config)
+
         # Resample data
-        resampled_data = resample_sensor_data(raw_data, config=self.config)
+        resampled_data = processor.resample_sensor_data(raw_data, config=self.config)
 
         # Extract stats if they exist, and store them for later access
         self.preprocessing_stats = {"standardization": {}}
@@ -391,8 +396,6 @@ class PredictionDataProcessor(BaseDataProcessor):
                 validation_dict[node_id] = series
                 input_dict[node_id] = series
 
-        # Process the input data to create windows
-        processor = TimeSeriesPreprocessor(config=self.config)
         X_input, masks_input, _ = processor.create_windows_from_grid(
             input_dict, config=self.config
         )

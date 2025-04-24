@@ -77,6 +77,10 @@ gitingest "$SCRIPT_DIR" \
     --exclude-pattern="*.svg" \
     --exclude-pattern="*.ico" \
     --exclude-pattern="*.pdf" \
+    --exclude-pattern=results/ \
+    --exclude-pattern=logs/ \
+    --exclude-pattern=*.log \
+    --exclude-pattern=reports/ \
     --output="$OUTPUT_FILE"
 
 echo "Nom nom, digestion complete! Output saved to $OUTPUT_FILE"
