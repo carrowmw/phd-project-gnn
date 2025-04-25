@@ -1,5 +1,4 @@
-# gnn_package/src/training/stgnn_training.py
-
+# src/training/stgnn_training.py
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,18 +8,73 @@ from gnn_package.src import preprocessing
 from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
 from gnn_package.config import get_config
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
-from gnn_package.src.data.data_sources import FileDataSource
+from gnn_package.src.data.data_sources import FileDataSource, DataSourceConnectionError
 from gnn_package.src.utils.data_utils import validate_data_package
 from gnn_package.src.utils.config_utils import save_model_with_config
 
-# gnn_package/src/training/stgnn_training.py
+from gnn_package.src.utils.device_utils import get_device_from_config
+from gnn_package.src.utils.exceptions import TrainingException, DataProcessingError
+from gnn_package.src.utils.logging_utils import get_logger
+from gnn_package.src.utils.retry_utils import retry
+
+# Replace the existing logger setup with this
+logger = get_logger(__name__)
 
 
+# Update the STGNNTrainer.__init__ method to use the device utility
+def __init__(self, model, config):
+    """
+    Initialize the trainer with the model and config.
+
+    Parameters:
+    -----------
+    model : STGNN
+        The model to train
+    config : ExperimentConfig
+        Configuration object
+    """
+    # Get device using our utility
+    device = get_device_from_config(config)
+    logger.info(f"Using device: {device}")
+
+    # Create optimizer based on config
+    learning_rate = config.training.learning_rate
+    weight_decay = config.training.weight_decay
+
+    optimizer = torch.optim.Adam(
+        model.parameters(), lr=learning_rate, weight_decay=weight_decay
+    )
+
+    # Use MSE loss
+    criterion = torch.nn.MSELoss(reduction="none")
+
+    self.model = model.to(device)
+    self.optimizer = optimizer
+    self.criterion = criterion
+    self.device = device
+    self.config = config
+
+    logger.info(
+        f"STGNNTrainer.__init__(): Model initialized with {sum(p.numel() for p in model.parameters())} parameters"
+    )
+    logger.info(f"STGNNTrainer.__init__(): Optimizer: {optimizer}")
+    logger.info(f"STGNNTrainer.__init__(): Loss function: {criterion}")
+
+
+# Update preprocess_data to use retry for data fetching
+@retry(
+    max_retries=3,
+    retry_delay=1.0,
+    exceptions=(DataSourceConnectionError, DataProcessingError),
+    on_retry=lambda attempts, e: logger.warning(
+        f"Data processing attempt {attempts} failed: {str(e)}"
+    ),
+)
 async def preprocess_data(
     data=None, data_file=None, config=None, mode=None, verbose=True
 ):
     """Load and preprocess graph and sensor data for training."""
-    print("Training.preprocess_data: Starting preprocessing")
+    logger.info("Training.preprocess_data: Starting preprocessing")
 
     # Get configuration
     if config is None:
