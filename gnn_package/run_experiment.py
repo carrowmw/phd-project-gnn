@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 
-from gnn_package import training, preprocessing
+from gnn_package import training
 from gnn_package import paths
 from gnn_package.config import get_config, ExperimentConfig
 from gnn_package.src.utils.data_utils import convert_numpy_types

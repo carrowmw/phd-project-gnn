@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-04-25T14:59:57.917221",
+  "unittest_results": {
+    "run": 26,
+    "failures": 0,
+    "errors": 1,
+    "skipped": 6
+  },
+  "pytest_results": {
+    "status": 1,
+    "message": "Some tests failed"
+  },
+  "overall_status": "FAIL",
+  "unittest_details": {
+    "failures": [],
+    "errors": [
+      {
+        "test": "test_model_save_load (test_model_baseline.ModelBaselineTests.test_model_save_load)",
+        "message": "Traceback (most recent call last):\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/tests/test_model_baseline.py\", line 151, in test_model_save_load\n    for p1, p2 in zip(model.parameters(), loaded_model.parameters()):\n                                          ^^^^^^^^^^^^^^^^^^^^^^^\nAttributeError: 'tuple' object has no attribute 'parameters'\n"
+      }
+    ]
+  }
+}

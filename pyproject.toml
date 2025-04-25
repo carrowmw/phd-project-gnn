@@ -23,7 +23,7 @@ httpx = "^0.28.1"
 fastapi = "^0.115.8"
 tqdm = "^4.67.1"
 seaborn = "^0.13.2"
-private-uoapi = {path = "/Users/administrator/Code/python/private-uo-api", develop = true}
+private-uoapi = { path = "/Users/administrator/Code/python/private-uo-api", develop = true }
 dash = "^3.0.0"
 dash-bootstrap-components = "^2.0.0"
 optuna = "^4.3.0"
@@ -40,7 +40,28 @@ gitingest = "^0.1.4"
 mkdocs = "^1.6.1"
 mkdocs-material = "^9.6.12"
 pymdown-extensions = "^10.14.3"
+pylint = "^3.3.6"
+vulture = "^2.14"
+pydeps = "^3.0.1"
+importlab = "^0.8.1"
+coverage = "^7.8.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.coverage.run]
+source = ["gnn_package"]
+omit = ["*/tests/*", "*/__pycache__/*", "*/.venv/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

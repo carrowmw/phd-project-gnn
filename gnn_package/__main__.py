@@ -11,7 +11,6 @@ from datetime import datetime
 # Import gnn_package modules
 from gnn_package.config import get_config, create_default_config, ExperimentConfig
 from gnn_package import training
-from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 
 
 def main():

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from gnn_package.config import get_config
+from gnn_package.src.utils.logging_utils import get_logger
 
 
 @dataclass
@@ -35,20 +36,22 @@ class TimeSeriesPreprocessor:
         config : ExperimentConfig, optional
             Centralized configuration object. If not provided, will use global config.
         """
-        # Get configuration
+
+    def __init__(self, config=None):
+        # Initialize with config or get global config
         if config is None:
-            print("TimeSeriesPreprocessor: No config provided, using global config")
+            from gnn_package.config import get_config
+
             config = get_config()
 
+        self.config = config
         self.window_size = config.data.general.window_size
         self.stride = config.data.general.stride
         self.gap_threshold = pd.Timedelta(
             minutes=config.data.general.gap_threshold_minutes
         )
         self.missing_value = config.data.general.missing_value
-
-        # Store full config for other methods
-        self.config = config
+        self.logger = get_logger(__name__)
 
     def create_windows_from_grid(
         self,
@@ -316,31 +319,27 @@ class TimeSeriesPreprocessor:
         -----------
         time_series_dict : dict
             Dictionary mapping sensor IDs to their time series data
-        freq : str, optional
-            Pandas frequency string (e.g., '15min', '1H'), overrides config if provided
-        fill_value : float, optional
-            Value to use for filling gaps, overrides config if provided
         config : ExperimentConfig, optional
-            Centralized configuration object. If not provided, will use global config.
+            Configuration object (defaults to self.config)
 
         Returns:
         --------
         dict
             Dictionary with resampled time series
         """
-        # Get configuration
-        if config is None:
-            config = get_config()
-
-        # Use parameters or config values
+        config = config or self.config
         freq = config.data.general.resampling_frequency
         fill_value = config.data.general.missing_value
 
         # Find global min and max dates
         all_dates = []
         for series in time_series_dict.values():
-            if len(series) > 0:
+            if series is not None and len(series) > 0:
                 all_dates.extend(series.index)
+
+        if not all_dates:
+            self.logger.warning("No valid dates found in time series data")
+            return {}
 
         global_min = min(all_dates)
         global_max = max(all_dates)
@@ -359,9 +358,12 @@ class TimeSeriesPreprocessor:
             # Create a Series with the full date range
             resampled = pd.Series(index=date_range, dtype=float)
 
-            # Use original values where available (handle duplicates by taking the mean)
-            grouper = series.groupby(series.index)
-            non_duplicate_series = grouper.mean()
+            # Handle potential duplicates in the index
+            non_duplicate_series = (
+                series.groupby(series.index).mean()
+                if hasattr(series, "groupby")
+                else pd.Series(series).groupby(level=0).mean()
+            )
 
             # Align with the resampled index
             resampled[non_duplicate_series.index] = non_duplicate_series
@@ -371,28 +373,18 @@ class TimeSeriesPreprocessor:
 
             resampled_dict[sensor_id] = resampled
 
-        print(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
-        print(f"Each sensor now has {len(date_range)} data points")
+        self.logger.info(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
 
-        # Create a new dictionary to return
-        result_dict = resampled_dict.copy()
-
-        # Apply standardization if enabled in config
+        # Extract standardization stats if enabled in config
         if config.data.general.standardize:
-            print("Applying global standardization to sensor data")
             resampled_dict, stats = self.standardize_sensor_data(resampled_dict, config)
 
-            print(
-                f"Standardization complete: mean={stats['mean']:.2f}, std={stats['std']:.2f}"
-            )
+            # Create result dict with stats
+            result_dict = resampled_dict.copy()
+            result_dict["__stats__"] = stats
+            return result_dict
 
-            # Store stats in a special key that won't interfere with sensor data
-            result_dict = resampled_dict.copy()  # Update with standardized data
-            result_dict["__stats__"] = (
-                stats  # Use a special key unlikely to conflict with sensor IDs
-            )
-
-        return result_dict
+        return resampled_dict
 
     def standardize_sensor_data(self, time_series_dict, config=None):
         """

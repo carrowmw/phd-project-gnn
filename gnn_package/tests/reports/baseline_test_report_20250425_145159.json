@@ -1,0 +1,23 @@
+{
+  "timestamp": "2025-04-25T14:51:59.770461",
+  "unittest_results": {
+    "run": 26,
+    "failures": 0,
+    "errors": 1,
+    "skipped": 6
+  },
+  "pytest_results": {
+    "status": 1,
+    "message": "Some tests failed"
+  },
+  "overall_status": "FAIL",
+  "unittest_details": {
+    "failures": [],
+    "errors": [
+      {
+        "test": "test_model_save_load (test_model_baseline.ModelBaselineTests.test_model_save_load)",
+        "message": "Traceback (most recent call last):\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/utils/model_io.py\", line 105, in load_model\n    model = ModelRegistry.create_model(model_type, config=config)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/models/registry.py\", line 88, in create_model\n    raise ValueError(\nValueError: Unknown model architecture: ExperimentConfig(\n  experiment: Default Traffic Prediction Experiment (v1.0.0)\n  data: window_size=24, horizon=6\n  model: hidden_dim=16, layers=1\n  training: epochs=50, lr=0.001\n). Available models: ['stgnn']\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/tests/test_model_baseline.py\", line 144, in test_model_save_load\n    loaded_model = load_model(model_path, self.config)\n                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/utils/model_io.py\", line 113, in load_model\n    raise ModelCreationError(f\"Failed to create model: {str(e)}\") from e\ngnn_package.src.utils.exceptions.ModelCreationError: Failed to create model: Unknown model architecture: ExperimentConfig(\n  experiment: Default Traffic Prediction Experiment (v1.0.0)\n  data: window_size=24, horizon=6\n  model: hidden_dim=16, layers=1\n  training: epochs=50, lr=0.001\n). Available models: ['stgnn']\n"
+      }
+    ]
+  }
+}

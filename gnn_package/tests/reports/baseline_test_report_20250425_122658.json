@@ -1,0 +1,31 @@
+{
+  "timestamp": "2025-04-25T12:26:58.758205",
+  "unittest_results": {
+    "run": 22,
+    "failures": 0,
+    "errors": 3,
+    "skipped": 6
+  },
+  "pytest_results": {
+    "status": 1,
+    "message": "Some tests failed"
+  },
+  "overall_status": "FAIL",
+  "unittest_details": {
+    "failures": [],
+    "errors": [
+      {
+        "test": "test_config_baseline (unittest.loader._FailedTest.test_config_baseline)",
+        "message": "ImportError: Failed to import test module: test_config_baseline\nTraceback (most recent call last):\n  File \"/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/unittest/loader.py\", line 419, in _find_test_path\n    module = self._get_module_from_name(name)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/unittest/loader.py\", line 362, in _get_module_from_name\n    __import__(name)\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/tests/test_config_baseline.py\", line 13, in <module>\n    from gnn_package.config import get_config, reset_config, create_default_config\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/__init__.py\", line 12, in <module>\n    from .src import training\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/__init__.py\", line 2, in <module>\n    from .stgnn_prediction import (\nImportError: cannot import name 'load_model' from 'gnn_package.src.training.stgnn_prediction' (/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py)\n\n"
+      },
+      {
+        "test": "test_model_prediction (test_model_baseline.ModelBaselineTests.test_model_prediction)",
+        "message": "Traceback (most recent call last):\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/tests/test_model_baseline.py\", line 190, in test_model_prediction\n    with patch(\"gnn_package.src.utils.data_utils.validate_data_package\"):\n  File \"/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/unittest/mock.py\", line 1430, in __enter__\n    self.target = self.getter()\n                  ^^^^^^^^^^^^^\n  File \"/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/pkgutil.py\", line 700, in resolve_name\n    mod = importlib.import_module(modname)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/administrator/.pyenv/versions/3.11.9/lib/python3.11/importlib/__init__.py\", line 126, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen importlib._bootstrap>\", line 1204, in _gcd_import\n  File \"<frozen importlib._bootstrap>\", line 1176, in _find_and_load\n  File \"<frozen importlib._bootstrap>\", line 1147, in _find_and_load_unlocked\n  File \"<frozen importlib._bootstrap>\", line 690, in _load_unlocked\n  File \"<frozen importlib._bootstrap_external>\", line 940, in exec_module\n  File \"<frozen importlib._bootstrap>\", line 241, in _call_with_frames_removed\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/__init__.py\", line 12, in <module>\n    from .src import training\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/__init__.py\", line 2, in <module>\n    from .stgnn_prediction import (\nImportError: cannot import name 'load_model' from 'gnn_package.src.training.stgnn_prediction' (/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/training/stgnn_prediction.py)\n"
+      },
+      {
+        "test": "test_model_save_load (test_model_baseline.ModelBaselineTests.test_model_save_load)",
+        "message": "Traceback (most recent call last):\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/tests/test_model_baseline.py\", line 144, in test_model_save_load\n    loaded_model, metadata = load_model(model_path, config=self.config)\n                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/administrator/Code/python/phd-project-gnn/gnn_package/src/utils/model_io.py\", line 57, in load_model\n    from gnn_package.src.utils.exception_utils import safe_execute\nModuleNotFoundError: No module named 'gnn_package.src.utils.exception_utils'\n"
+      }
+    ]
+  }
+}

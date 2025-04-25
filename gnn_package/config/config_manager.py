@@ -9,7 +9,7 @@ import os
 import logging
 import tempfile
 from pathlib import Path
-from typing import Optional, Dict, Any, Union, Tuple
+from typing import Optional, Dict, Any, Union
 
 import yaml
 

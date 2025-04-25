@@ -1,10 +1,23 @@
-# src/utils/logging_utils.py
+# src/utils/logging_utils.py (Enhanced version)
+
 import os
 import sys
 import logging
+import time
+import asyncio
+import contextlib
 from pathlib import Path
 from typing import Optional, Union, Dict, Any
 from datetime import datetime
+
+# Standard log message patterns
+LOG_PATTERNS = {
+    "start_operation": "Starting {operation_name}",
+    "end_operation": "Completed {operation_name} in {duration:.2f}s",
+    "config_loaded": "Configuration loaded from {config_path}",
+    "data_loaded": "Loaded {num_records} records from {source}",
+    "error_occurred": "Error in {context}: {error}",
+}
 
 
 def configure_logging(
@@ -101,3 +114,104 @@ def get_logger(name: str, level: Optional[int] = None) -> logging.Logger:
     if level is not None:
         logger.setLevel(level)
     return logger
+
+
+@contextlib.contextmanager
+def log_operation(logger, operation_name, level=logging.INFO):
+    """
+    Context manager for logging operations with timing.
+
+    Parameters:
+    -----------
+    logger : logging.Logger
+        Logger to use
+    operation_name : str
+        Name of the operation being performed
+    level : int
+        Logging level
+
+    Yields:
+    -------
+    None
+    """
+    start_time = time.time()
+    logger.log(
+        level, LOG_PATTERNS["start_operation"].format(operation_name=operation_name)
+    )
+    try:
+        yield
+    except Exception as e:
+        logger.log(
+            logging.ERROR,
+            LOG_PATTERNS["error_occurred"].format(context=operation_name, error=str(e)),
+        )
+        raise
+    finally:
+        duration = time.time() - start_time
+        logger.log(
+            level,
+            LOG_PATTERNS["end_operation"].format(
+                operation_name=operation_name, duration=duration
+            ),
+        )
+
+
+def log_function(level=logging.INFO, show_args=False):
+    """
+    Decorator to log function calls with timing.
+
+    Parameters:
+    -----------
+    level : int
+        Logging level
+    show_args : bool
+        Whether to include function arguments in log
+
+    Returns:
+    --------
+    Callable
+        Decorated function
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            logger = get_logger(func.__module__)
+            func_name = func.__name__
+
+            if show_args:
+                args_str = ", ".join([f"{arg}" for arg in args[1:]])  # Skip self
+                kwargs_str = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
+                params = (
+                    f"{args_str}{', ' if args_str and kwargs_str else ''}{kwargs_str}"
+                )
+                operation_name = f"{func_name}({params})"
+            else:
+                operation_name = func_name
+
+            with log_operation(logger, operation_name, level=level):
+                return func(*args, **kwargs)
+
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            logger = get_logger(func.__module__)
+            func_name = func.__name__
+
+            if show_args:
+                args_str = ", ".join([f"{arg}" for arg in args[1:]])  # Skip self
+                kwargs_str = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
+                params = (
+                    f"{args_str}{', ' if args_str and kwargs_str else ''}{kwargs_str}"
+                )
+                operation_name = f"{func_name}({params})"
+            else:
+                operation_name = func_name
+
+            with log_operation(logger, operation_name, level=level):
+                return await func(*args, **kwargs)
+
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        return wrapper
+
+    return decorator

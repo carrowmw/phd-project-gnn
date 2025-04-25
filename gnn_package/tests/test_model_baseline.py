@@ -16,7 +16,8 @@ import numpy as np
 from gnn_package.config import get_config, create_default_config
 from gnn_package.src.models.stgnn import create_stgnn_model
 from gnn_package.src.training.stgnn_training import STGNNTrainer
-from gnn_package.src.training.stgnn_prediction import load_model, predict_with_model
+from gnn_package.src.training.stgnn_prediction import predict_with_model
+from gnn_package.src.utils.model_io import load_model
 
 
 class ModelBaselineTests(unittest.TestCase):
@@ -140,7 +141,11 @@ class ModelBaselineTests(unittest.TestCase):
         self.config.save(config_path)
 
         # Load the model back
-        loaded_model = load_model(model_path, self.config)
+        loaded_model, metadata = load_model(
+            model_path=model_path,
+            model_type="stgnn",
+            config=self.config,
+        )
 
         # Verify model was loaded correctly by checking parameters
         for p1, p2 in zip(model.parameters(), loaded_model.parameters()):

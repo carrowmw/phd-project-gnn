@@ -1,7 +1,6 @@
 # gnn_package/src/utils/__init__.py
 
 from .config_utils import (
-    load_model_for_prediction,
     create_prediction_config_from_training,
     save_model_with_config,
     get_device_from_config,
@@ -20,7 +19,6 @@ from .sensor_utils import (
 
 __all__ = [
     # Configuration utilities
-    "load_model_for_prediction",
     "create_prediction_config_from_training",
     "save_model_with_config",
     "get_device_from_config",

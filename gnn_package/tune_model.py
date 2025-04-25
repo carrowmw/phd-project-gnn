@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 # tune_model.py - Script for hyperparameter tuning using the tuning module
 
-import os
 import argparse
 import logging
-import asyncio
 from pathlib import Path
 from datetime import datetime
+
+# Import tuning module
+from gnn_package.src.tuning import (
+    tune_hyperparameters,
+    run_multi_stage_tuning,
+)
+from gnn_package.config import get_config, ExperimentConfig
 
 # Configure logging
 logging.basicConfig(
@@ -18,14 +23,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger("tuning")
-
-# Import tuning module
-from gnn_package.src.tuning import (
-    tune_hyperparameters,
-    run_multi_stage_tuning,
-    get_default_param_space,
-)
-from gnn_package.config import get_config, ExperimentConfig
 
 
 def main():

@@ -18,63 +18,6 @@ from gnn_package.config import ExperimentConfig, get_config, ConfigurationManage
 from gnn_package.src.models.stgnn import create_stgnn_model
 
 
-def load_model_for_prediction(
-    model_path: Union[str, Path],
-    config: Optional[ExperimentConfig] = None,
-    override_params: Optional[Dict[str, Any]] = None,
-    model_creator_func: Optional[Callable] = None,
-) -> Tuple[torch.nn.Module, ExperimentConfig]:
-    """
-    Load a model with the appropriate configuration for prediction.
-
-    This function handles all the configuration setup needed for loading a model
-    for prediction, including finding and loading the right configuration file.
-
-    Parameters:
-    -----------
-    model_path : str or Path
-        Path to the saved model file
-    config : ExperimentConfig, optional
-        Configuration to use. If None, attempts to find config in model directory
-        or falls back to global config.
-    override_params : Dict[str, Any], optional
-        Parameters to override in the loaded configuration
-    model_creator_func : Callable, optional
-        Function to create model from config. If not provided, uses default creator
-
-    Returns:
-    --------
-    tuple(torch.nn.Module, ExperimentConfig)
-        The loaded model and its configuration
-    """
-    model_path = Path(model_path)
-
-    # Configuration handling
-    if config is None:
-        # Try to find config in the model directory
-        potential_config_path = model_path.parent / "config.yml"
-        if potential_config_path.exists():
-            config = ExperimentConfig(str(potential_config_path))
-        else:
-            # Fall back to global config
-            config = get_config()
-
-    # Convert to prediction config
-    prediction_config = create_prediction_config_from_training(config, override_params)
-
-    # Create model with correct architecture
-    if model_creator_func is None:
-        model_creator_func = create_stgnn_model
-
-    model = model_creator_func(prediction_config)
-
-    # Load saved weights
-    model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
-    model.eval()  # Set model to evaluation mode
-
-    return model, prediction_config
-
-
 def create_prediction_config_from_training(
     training_config: ExperimentConfig, override_params: Optional[Dict[str, Any]] = None
 ) -> ExperimentConfig:

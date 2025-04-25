@@ -68,13 +68,13 @@ Directory structure:
     │   │   ├── device_utils.py
     │   │   ├── exceptions.py
     │   │   ├── logging_utils.py
+    │   │   ├── metrics.py
     │   │   ├── model_io.py
     │   │   ├── retry_utils.py
     │   │   ├── sensor_utils.py
     │   │   └── __pycache__/
     │   └── visualization/
-    │       ├── dashboard.py
-    │       ├── prediction_plots.py
+    │       ├── visualization_utils.py
     │       └── __pycache__/
     └── tests/
         ├── README.md
@@ -90,11 +90,13 @@ Directory structure:
 ================================================
 File: __init__.py
 ================================================
-# gnn_package/__init__.py (UPDATED)
+# gnn_package/__init__.py
 from .config import paths
 from .src.utils import data_utils, sensor_utils
 from .src.utils.exceptions import GNNException
 from .src.utils.logging_utils import configure_logging, get_logger
+from .src.utils.model_io import load_model, save_model
+from .src.utils.metrics import calculate_error_metrics, format_prediction_results
 from .config.paths import *
 from .src import preprocessing
 from .src import dataloaders
@@ -117,6 +119,10 @@ __all__ = [
     "GNNException",
     "configure_logging",
     "get_logger",
+    "load_model",
+    "save_model",
+    "calculate_error_metrics",
+    "format_prediction_results",
 ]
 
 
@@ -462,15 +468,21 @@ import logging
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
+import json
+import torch
 
 from gnn_package import training
-from gnn_package.config import ExperimentConfig
-from gnn_package.src.utils.config_utils import create_prediction_config
-from gnn_package.src.visualization.prediction_plots import (
-    plot_sensors_grid,
-    plot_error_distribution,
-    save_visualization_pack,
+from gnn_package.config import ExperimentConfig, create_prediction_config
+from gnn_package.src.visualization.visualization_utils import VisualizationManager
+from gnn_package.src.utils.model_io import load_model
+from gnn_package.src.utils.metrics import (
+    calculate_error_metrics,
+    calculate_metrics_by_horizon,
+    calculate_metrics_by_sensor,
 )
+from gnn_package.src.utils.device_utils import get_device
+from gnn_package.src.utils.retry_utils import retry
+from gnn_package.src.utils.exceptions import ModelLoadError, APIConnectionError
 
 # Set up logging
 logging.basicConfig(
@@ -484,171 +496,415 @@ logging.basicConfig(
 logger = logging.getLogger("prediction-service")
 
 
-async def run_prediction_service(model_path, output_dir=None, visualize=True):
+@retry(max_retries=3, retry_delay=1.0, exceptions=(APIConnectionError,))
+async def run_prediction_service(
+    model_path,
+    output_dir=None,
+    visualize=True,
+    cache_results=True,
+    detailed_metrics=True,
+    device=None,
+):
     """
-    Run the prediction service.
+    Run the prediction service with enhanced features.
 
     Parameters:
     -----------
-    model_path : str
-        Path to the trained model
-    output_dir : str, optional
+    model_path : str or Path
+        Path to the trained model or directory containing models
+    output_dir : str or Path, optional
         Directory to save predictions (defaults to 'predictions/YYYY-MM-DD')
     visualize : bool
         Whether to generate plots and visualizations
+    cache_results : bool
+        Whether to cache prediction results for future reuse
+    detailed_metrics : bool
+        Whether to calculate and save detailed metrics by sensor and horizon
+    device : str, optional
+        Device to run predictions on (auto-detected if None)
+
+    Returns:
+    --------
+    dict
+        Dictionary containing prediction results and metadata
     """
     try:
+        start_time = datetime.now()
+
         # Create prediction configuration
-        logger.info("Creating prediction configuration")
-
-        # Try to load config from model directory first
-        model_dir = Path(model_path).parent
-        config_path = model_dir / "config.yml"
-
-        if config_path.exists():
-            logger.info(f"Loading configuration from model directory: {config_path}")
-            # Load as prediction config
-            prediction_config = ExperimentConfig(
-                str(config_path), is_prediction_mode=True
-            )
-        else:
-            logger.info("Creating default prediction configuration")
-            prediction_config = create_prediction_config()
-
-        # Make sure days_back is set to a reasonable value for prediction
-        if (
-            not hasattr(prediction_config.data.prediction, "days_back")
-            or prediction_config.data.prediction.days_back < 1
-        ):
-            logger.info("Setting days_back to default (7)")
-            prediction_config.data.prediction.days_back = 7
+        logger.info("Setting up prediction configuration")
+        prediction_config = _setup_prediction_config(model_path)
 
         # Set up output directory
         if output_dir is None:
             today = datetime.now().strftime("%Y-%m-%d")
             output_dir = f"predictions/{today}"
 
-        # Create timestamps for consistent file naming
-        timestamp = datetime.now().strftime("%H%M%S")
-
+        output_dir = Path(output_dir)
         os.makedirs(output_dir, exist_ok=True)
-        output_file = f"{output_dir}/predictions_{timestamp}.csv"
+
+        # Create timestamps for consistent file naming
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = output_dir / f"predictions_{timestamp}.csv"
+
+        # Set up device
+        if device is None:
+            device = get_device(prediction_config.training.device)
+        logger.info(f"Using device: {device}")
 
         # Run prediction
         logger.info(f"Running prediction using model: {model_path}")
         logger.info(f"Output will be saved to: {output_file}")
 
-        start_time = datetime.now()
         predictions = await training.predict_all_sensors_with_validation(
             model_path=model_path,
             config=prediction_config,
             output_file=output_file,
-            plot=False,  # Disable internal plotting
+            plot=False,  # Disable internal plotting, we'll handle it separately
+            device=device,
         )
-        end_time = datetime.now()
 
-        # Log results
-        if predictions and "dataframe" in predictions:
-            df = predictions["dataframe"]
-            logger.info(
-                f"Generated {len(df)} predictions for {df['node_id'].nunique()} sensors"
-            )
-
-            # Calculate error metrics
-            mse = (df["error"] ** 2).mean()
-            mae = df["abs_error"].mean()
-            logger.info(f"Overall MSE: {mse:.4f}, MAE: {mae:.4f}")
-
-            # Save summary statistics
-            summary_file = f"{output_dir}/summary_{timestamp}.txt"
-
-            with open(summary_file, "w") as f:
-                f.write(f"Prediction Summary\n")
-                f.write(f"=================\n\n")
-                f.write(f"Date/Time: {datetime.now()}\n")
-                f.write(f"Model: {model_path}\n")
-                f.write(
-                    f"Execution time: {(end_time - start_time).total_seconds():.2f} seconds\n\n"
-                )
-
-                # Extract standardization stats if available
-                standardization_stats = {}
-                if "data" in predictions and "metadata" in predictions["data"]:
-                    metadata = predictions["data"]["metadata"]
-                    standardization_stats = metadata.get("preprocessing_stats", {}).get(
-                        "standardization", {}
-                    )
-
-                f.write(
-                    f"Standardization mean: {standardization_stats.get('mean', 'N/A')}\n"
-                )
-                f.write(
-                    f"Standardization std: {standardization_stats.get('std', 'N/A')}\n\n"
-                )
-                f.write(f"Predictions: {len(df)}\n")
-                f.write(f"Sensors: {df['node_id'].nunique()}\n")
-                f.write(f"Overall MSE: {mse:.4f}\n")
-                f.write(f"Overall MAE: {mae:.4f}\n\n")
-                f.write("Prediction summary by horizon:\n")
-                f.write(df.groupby("horizon")[["abs_error"]].mean().to_string())
-
-            logger.info(f"Summary saved to {summary_file}")
-
-            # Generate visualizations if requested
-            if visualize:
-                logger.info("Generating visualizations...")
-                try:
-                    # Save comprehensive visualization pack
-                    viz_paths = save_visualization_pack(
-                        predictions_df=df,
-                        results_dict=predictions,
-                        output_dir=output_dir,
-                        timestamp=timestamp,
-                    )
-
-                    logger.info(f"Visualizations saved to: {output_dir}")
-                    for viz_type, path in viz_paths.items():
-                        logger.info(f"  - {viz_type}: {path}")
-
-                except Exception as e:
-                    logger.error(f"Error generating visualizations: {e}")
-
-            return {
-                "success": True,
-                "predictions_file": output_file,
-                "summary_file": summary_file,
-                "metrics": {"mse": mse, "mae": mae},
-                "visualizations": viz_paths if visualize else None,
-            }
-        else:
+        # Check for valid predictions
+        if not predictions or "dataframe" not in predictions:
             logger.error("Prediction failed or returned no results")
             return {"success": False, "error": "No predictions generated"}
 
+        # Process prediction results
+        predictions_df = predictions["dataframe"]
+        logger.info(
+            f"Generated {len(predictions_df)} predictions for {predictions_df['node_id'].nunique()} sensors"
+        )
+
+        # Calculate standard metrics
+        metrics = _calculate_prediction_metrics(predictions_df)
+
+        # Calculate detailed metrics if requested
+        if detailed_metrics:
+            metrics.update(_calculate_detailed_metrics(predictions_df))
+
+        # Create and save summary report
+        summary_file = output_dir / f"summary_{timestamp}.txt"
+        _save_summary_report(predictions, metrics, summary_file, start_time)
+
+        # Generate visualizations if requested
+        viz_paths = {}
+        if visualize:
+            viz_paths = _generate_visualizations(
+                predictions_df, predictions, output_dir, timestamp
+            )
+
+        # Cache results if requested
+        if cache_results:
+            cache_file = output_dir / f"cache_{timestamp}.pkl"
+            _cache_prediction_results(predictions, cache_file)
+
+        # Return combined results
+        return {
+            "success": True,
+            "predictions_file": str(output_file),
+            "summary_file": str(summary_file),
+            "metrics": metrics,
+            "visualizations": viz_paths if visualize else None,
+            "execution_time": (datetime.now() - start_time).total_seconds(),
+        }
+
+    except ModelLoadError as e:
+        logger.exception(f"Error loading model: {str(e)}")
+        return {"success": False, "error": f"Model loading error: {str(e)}"}
+    except APIConnectionError as e:
+        logger.exception(f"Error connecting to data API: {str(e)}")
+        return {"success": False, "error": f"API connection error: {str(e)}"}
     except Exception as e:
         logger.exception(f"Error in prediction service: {str(e)}")
         return {"success": False, "error": str(e)}
 
 
-if __name__ == "__main__":
-    # Get model path from command line or use default
-    if len(sys.argv) > 1:
-        model_path = sys.argv[1]
+def _setup_prediction_config(model_path):
+    """Set up prediction configuration from model path."""
+    model_path = Path(model_path)
+
+    # Try to load config from model directory first
+    config_path = model_path.parent / "config.yml"
+
+    if config_path.exists():
+        logger.info(f"Loading configuration from model directory: {config_path}")
+        prediction_config = ExperimentConfig(str(config_path), is_prediction_mode=True)
     else:
-        model_path = "results/test_1wk/model.pth"
+        logger.info("Creating default prediction configuration")
+        prediction_config = create_prediction_config()
 
-    # Get output directory if provided
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    # Make sure days_back is set to a reasonable value for prediction
+    if (
+        not hasattr(prediction_config.data.prediction, "days_back")
+        or prediction_config.data.prediction.days_back < 1
+    ):
+        logger.info("Setting days_back to default (7)")
+        prediction_config.data.prediction.days_back = 7
 
-    # Get visualization flag if provided
-    visualize = True
-    if len(sys.argv) > 3:
-        visualize = sys.argv[3].lower() in ("yes", "true", "t", "1")
+    return prediction_config
 
-    # Run the prediction service
-    result = asyncio.run(run_prediction_service(model_path, output_dir, visualize))
+
+def _calculate_prediction_metrics(predictions_df):
+    """Calculate standard prediction metrics."""
+    metrics = {}
+
+    if "error" in predictions_df.columns:
+        # Basic metrics
+        metrics["mse"] = (predictions_df["error"] ** 2).mean()
+        metrics["mae"] = predictions_df["abs_error"].mean()
+        metrics["rmse"] = metrics["mse"] ** 0.5
+
+        # Additional statistics
+        metrics["max_error"] = predictions_df["abs_error"].max()
+        metrics["min_error"] = predictions_df["abs_error"].min()
+        metrics["median_error"] = predictions_df["abs_error"].median()
+
+    return metrics
+
+
+def _calculate_detailed_metrics(predictions_df):
+    """Calculate detailed metrics by horizon and sensor."""
+    detailed_metrics = {}
+
+    # Calculate metrics by horizon
+    horizon_metrics = calculate_metrics_by_horizon(predictions_df)
+    detailed_metrics["horizon_metrics"] = horizon_metrics.to_dict()
+
+    # Calculate metrics by sensor (top 10 worst performing)
+    sensor_metrics = calculate_metrics_by_sensor(predictions_df, top_n=10)
+    detailed_metrics["sensor_metrics"] = sensor_metrics.to_dict()
+
+    return detailed_metrics
+
+
+def _save_summary_report(predictions, metrics, summary_file, start_time):
+    """Create and save a detailed summary report."""
+    with open(summary_file, "w") as f:
+        f.write(f"Prediction Summary\n")
+        f.write(f"=================\n\n")
+        f.write(f"Date/Time: {datetime.now()}\n")
+        f.write(
+            f"Execution time: {(datetime.now() - start_time).total_seconds():.2f} seconds\n\n"
+        )
+
+        # Extract standardization stats if available
+        standardization_stats = {}
+        if "data" in predictions and "metadata" in predictions["data"]:
+            metadata = predictions["data"]["metadata"]
+            standardization_stats = metadata.get("preprocessing_stats", {}).get(
+                "standardization", {}
+            )
+
+        # Write standardization information
+        f.write(f"Standardization mean: {standardization_stats.get('mean', 'N/A')}\n")
+        f.write(f"Standardization std: {standardization_stats.get('std', 'N/A')}\n\n")
+
+        # Write prediction statistics
+        df = predictions["dataframe"]
+        f.write(f"Total predictions: {len(df)}\n")
+        f.write(f"Total sensors: {df['node_id'].nunique()}\n\n")
+
+        # Write error metrics
+        f.write(f"Overall metrics:\n")
+        f.write(f"  MSE: {metrics['mse']:.4f}\n")
+        f.write(f"  MAE: {metrics['mae']:.4f}\n")
+        f.write(f"  RMSE: {metrics['rmse']:.4f}\n\n")
+
+        # Write horizon-specific metrics if available
+        if "horizon_metrics" in metrics:
+            f.write("Metrics by prediction horizon:\n")
+            horizon_df = pd.DataFrame(metrics["horizon_metrics"])
+            f.write(horizon_df.to_string() + "\n\n")
+
+        # Write sensor-specific metrics if available
+        if "sensor_metrics" in metrics:
+            f.write("Top 10 sensors by error:\n")
+            sensor_df = pd.DataFrame(metrics["sensor_metrics"])
+            f.write(sensor_df.to_string() + "\n")
+
+
+def _generate_visualizations(predictions_df, results_dict, output_dir, timestamp):
+    """Generate and save visualizations for prediction results."""
+    try:
+        logger.info("Generating visualizations...")
+        viz_manager = VisualizationManager()
+        viz_paths = viz_manager.save_visualization_pack(
+            predictions_df=predictions_df,
+            output_dir=output_dir,
+            timestamp=timestamp,
+        )
+
+        logger.info(f"Visualizations saved to: {output_dir}")
+        for viz_type, path in viz_paths.items():
+            logger.info(f"  - {viz_type}: {path}")
+
+        return viz_paths
+    except Exception as e:
+        logger.error(f"Error generating visualizations: {e}")
+        return {}
+
+
+def _cache_prediction_results(predictions, cache_file):
+    """Cache prediction results for future reuse."""
+    try:
+        # Extract and save essential components only
+        cache_data = {
+            "dataframe": predictions["dataframe"],
+            "metadata": predictions.get("metadata", {}),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        with open(cache_file, "wb") as f:
+            import pickle
+
+            pickle.dump(cache_data, f)
+
+        logger.info(f"Prediction results cached to: {cache_file}")
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to cache prediction results: {e}")
+        return False
+
+
+async def batch_predict(model_paths, output_base_dir=None, visualize=True):
+    """
+    Run predictions on multiple models in batch mode.
+
+    Parameters:
+    -----------
+    model_paths : list
+        List of paths to trained models
+    output_base_dir : str, optional
+        Base directory for outputs
+    visualize : bool
+        Whether to generate visualizations
+
+    Returns:
+    --------
+    dict
+        Dictionary with results for each model
+    """
+    if output_base_dir is None:
+        output_base_dir = f"predictions/batch_{datetime.now().strftime('%Y%m%d')}"
+
+    os.makedirs(output_base_dir, exist_ok=True)
+
+    results = {}
+    for i, model_path in enumerate(model_paths):
+        model_name = Path(model_path).stem
+        logger.info(f"Processing model {i+1}/{len(model_paths)}: {model_name}")
+
+        output_dir = Path(output_base_dir) / model_name
+        result = await run_prediction_service(
+            model_path=model_path, output_dir=output_dir, visualize=visualize
+        )
+
+        results[model_name] = result
+
+    # Create a summary of all model results
+    summary_path = Path(output_base_dir) / "batch_summary.json"
+    with open(summary_path, "w") as f:
+        summary = {
+            "timestamp": datetime.now().isoformat(),
+            "models_processed": len(model_paths),
+            "successful_predictions": sum(
+                1 for r in results.values() if r.get("success", False)
+            ),
+            "failed_predictions": sum(
+                1 for r in results.values() if not r.get("success", False)
+            ),
+            "results": {
+                model: {
+                    "success": result.get("success", False),
+                    "metrics": result.get("metrics", {}),
+                    "error": result.get("error", None),
+                }
+                for model, result in results.items()
+            },
+        }
+        json.dump(summary, f, indent=2)
+
+    logger.info(f"Batch prediction complete. Summary saved to {summary_path}")
+    return {"success": True, "results": results, "summary_path": str(summary_path)}
+
+
+if __name__ == "__main__":
+    # Process command line arguments
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run prediction service")
+    parser.add_argument("model_path", type=str, help="Path to the model file")
+    parser.add_argument("output_dir", nargs="?", type=str, help="Output directory")
+    parser.add_argument(
+        "--visualize",
+        "-v",
+        action="store_true",
+        default=True,
+        help="Generate visualizations",
+    )
+    parser.add_argument(
+        "--no-visualize",
+        action="store_false",
+        dest="visualize",
+        help="Disable visualizations",
+    )
+    parser.add_argument(
+        "--detailed", "-d", action="store_true", help="Generate detailed metrics"
+    )
+    parser.add_argument(
+        "--cache", "-c", action="store_true", help="Cache prediction results"
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        choices=["cpu", "cuda", "mps"],
+        help="Device to use for prediction",
+    )
+    parser.add_argument(
+        "--batch",
+        "-b",
+        action="store_true",
+        help="Run in batch mode (model_path should be a directory)",
+    )
+
+    args = parser.parse_args()
+
+    # Handle batch mode
+    if args.batch:
+        model_dir = Path(args.model_path)
+        if not model_dir.is_dir():
+            print(f"Error: {args.model_path} is not a directory")
+            sys.exit(1)
+
+        model_paths = list(model_dir.glob("*.pth"))
+        if not model_paths:
+            print(f"Error: No model files found in {args.model_path}")
+            sys.exit(1)
+
+        print(f"Found {len(model_paths)} models for batch processing")
+        result = asyncio.run(
+            batch_predict(
+                model_paths=model_paths,
+                output_base_dir=args.output_dir,
+                visualize=args.visualize,
+            )
+        )
+
+    else:
+        # Run single prediction
+        result = asyncio.run(
+            run_prediction_service(
+                model_path=args.model_path,
+                output_dir=args.output_dir,
+                visualize=args.visualize,
+                cache_results=args.cache,
+                detailed_metrics=args.detailed,
+                device=args.device,
+            )
+        )
 
     # Exit with appropriate code
-    sys.exit(0 if result["success"] else 1)
+    sys.exit(0 if result.get("success", False) else 1)
 
 
 
@@ -3887,13 +4143,16 @@ __all__ = ["STGNN", "STGNNTrainer", "create_stgnn_model", "ModelRegistry"]
 ================================================
 File: src/models/registry.py
 ================================================
-# src/models/registry.py
+# src/models/registry.py - Updated version
 from typing import Dict, Type, Any, Callable
 import torch.nn as nn
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ModelRegistry:
-    """Registry for model architectures"""
+    """Registry for model architectures with improved error handling and logging"""
 
     _models: Dict[str, Type[nn.Module]] = {}
     _creators: Dict[str, Callable[..., nn.Module]] = {}
@@ -3910,7 +4169,11 @@ class ModelRegistry:
         model_class : Type[nn.Module]
             Model class to register
         """
+        if name in cls._models:
+            logger.warning(f"Overriding existing model registration for '{name}'")
+
         cls._models[name] = model_class
+        logger.debug(f"Registered model class '{name}'")
 
     @classmethod
     def register_creator(
@@ -3926,12 +4189,16 @@ class ModelRegistry:
         creator_func : Callable[..., nn.Module]
             Function that creates and returns a model instance
         """
+        if name in cls._creators:
+            logger.warning(f"Overriding existing creator function for '{name}'")
+
         cls._creators[name] = creator_func
+        logger.debug(f"Registered model creator function for '{name}'")
 
     @classmethod
     def create_model(cls, name: str, **kwargs: Any) -> nn.Module:
         """
-        Create a model instance by name.
+        Create a model instance by name with improved error handling.
 
         Parameters:
         -----------
@@ -3949,13 +4216,30 @@ class ModelRegistry:
         -------
         ValueError
             If the requested model is not registered
+        RuntimeError
+            If model creation fails
         """
-        if name in cls._creators:
-            return cls._creators[name](**kwargs)
-        elif name in cls._models:
-            return cls._models[name](**kwargs)
-        else:
-            raise ValueError(f"Unknown model architecture: {name}")
+        try:
+            if name in cls._creators:
+                logger.debug(f"Creating model '{name}' using creator function")
+                return cls._creators[name](**kwargs)
+            elif name in cls._models:
+                logger.debug(f"Creating model '{name}' using model class")
+                return cls._models[name](**kwargs)
+            else:
+                available_models = list(
+                    set(cls._models.keys()) | set(cls._creators.keys())
+                )
+                raise ValueError(
+                    f"Unknown model architecture: {name}. Available models: {available_models}"
+                )
+        except Exception as e:
+            if isinstance(e, ValueError) and "Unknown model architecture" in str(e):
+                # Re-raise ValueError for unknown model
+                raise
+            # Wrap other exceptions
+            logger.error(f"Error creating model '{name}': {str(e)}")
+            raise RuntimeError(f"Failed to create model '{name}'") from e
 
     @classmethod
     def list_models(cls) -> Dict[str, Type[nn.Module]]:
@@ -3980,6 +4264,18 @@ class ModelRegistry:
             Dictionary mapping creator names to their functions
         """
         return cls._creators.copy()
+
+    @classmethod
+    def get_available_models(cls) -> list:
+        """
+        Get a list of all available model types.
+
+        Returns:
+        --------
+        list
+            List of available model names
+        """
+        return list(set(cls._models.keys()) | set(cls._creators.keys()))
 
 
 
@@ -5985,6 +6281,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from gnn_package.config import get_config
+from gnn_package.src.utils.logging_utils import get_logger
 
 
 @dataclass
@@ -6016,20 +6313,22 @@ class TimeSeriesPreprocessor:
         config : ExperimentConfig, optional
             Centralized configuration object. If not provided, will use global config.
         """
-        # Get configuration
+
+    def __init__(self, config=None):
+        # Initialize with config or get global config
         if config is None:
-            print("TimeSeriesPreprocessor: No config provided, using global config")
+            from gnn_package.config import get_config
+
             config = get_config()
 
+        self.config = config
         self.window_size = config.data.general.window_size
         self.stride = config.data.general.stride
         self.gap_threshold = pd.Timedelta(
             minutes=config.data.general.gap_threshold_minutes
         )
         self.missing_value = config.data.general.missing_value
-
-        # Store full config for other methods
-        self.config = config
+        self.logger = get_logger(__name__)
 
     def create_windows_from_grid(
         self,
@@ -6297,31 +6596,27 @@ class TimeSeriesPreprocessor:
         -----------
         time_series_dict : dict
             Dictionary mapping sensor IDs to their time series data
-        freq : str, optional
-            Pandas frequency string (e.g., '15min', '1H'), overrides config if provided
-        fill_value : float, optional
-            Value to use for filling gaps, overrides config if provided
         config : ExperimentConfig, optional
-            Centralized configuration object. If not provided, will use global config.
+            Configuration object (defaults to self.config)
 
         Returns:
         --------
         dict
             Dictionary with resampled time series
         """
-        # Get configuration
-        if config is None:
-            config = get_config()
-
-        # Use parameters or config values
+        config = config or self.config
         freq = config.data.general.resampling_frequency
         fill_value = config.data.general.missing_value
 
         # Find global min and max dates
         all_dates = []
         for series in time_series_dict.values():
-            if len(series) > 0:
+            if series is not None and len(series) > 0:
                 all_dates.extend(series.index)
+
+        if not all_dates:
+            self.logger.warning("No valid dates found in time series data")
+            return {}
 
         global_min = min(all_dates)
         global_max = max(all_dates)
@@ -6340,9 +6635,12 @@ class TimeSeriesPreprocessor:
             # Create a Series with the full date range
             resampled = pd.Series(index=date_range, dtype=float)
 
-            # Use original values where available (handle duplicates by taking the mean)
-            grouper = series.groupby(series.index)
-            non_duplicate_series = grouper.mean()
+            # Handle potential duplicates in the index
+            non_duplicate_series = (
+                series.groupby(series.index).mean()
+                if hasattr(series, "groupby")
+                else pd.Series(series).groupby(level=0).mean()
+            )
 
             # Align with the resampled index
             resampled[non_duplicate_series.index] = non_duplicate_series
@@ -6352,28 +6650,18 @@ class TimeSeriesPreprocessor:
 
             resampled_dict[sensor_id] = resampled
 
-        print(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
-        print(f"Each sensor now has {len(date_range)} data points")
+        self.logger.info(f"Resampled {len(resampled_dict)} sensors to frequency {freq}")
 
-        # Create a new dictionary to return
-        result_dict = resampled_dict.copy()
-
-        # Apply standardization if enabled in config
+        # Extract standardization stats if enabled in config
         if config.data.general.standardize:
-            print("Applying global standardization to sensor data")
             resampled_dict, stats = self.standardize_sensor_data(resampled_dict, config)
 
-            print(
-                f"Standardization complete: mean={stats['mean']:.2f}, std={stats['std']:.2f}"
-            )
+            # Create result dict with stats
+            result_dict = resampled_dict.copy()
+            result_dict["__stats__"] = stats
+            return result_dict
 
-            # Store stats in a special key that won't interfere with sensor data
-            result_dict = resampled_dict.copy()  # Update with standardized data
-            result_dict["__stats__"] = (
-                stats  # Use a special key unlikely to conflict with sensor IDs
-            )
-
-        return result_dict
+        return resampled_dict
 
     def standardize_sensor_data(self, time_series_dict, config=None):
         """
@@ -6469,11 +6757,11 @@ def standardize_sensor_data(time_series_dict, config=None):
 ================================================
 File: src/training/__init__.py
 ================================================
+from gnn_package.src.utils.model_io import load_model
+from gnn_package.src.visualization.visualization_utils import VisualizationManager
 from .stgnn_training import preprocess_data, train_model
 from .stgnn_prediction import (
-    load_model,
     fetch_recent_data_for_validation,
-    plot_predictions_with_validation,
     predict_all_sensors_with_validation,
     predict_with_model,
     format_predictions_with_validation,
@@ -6484,7 +6772,7 @@ __all__ = [
     "train_model",
     "load_model",
     "fetch_recent_data_for_validation",
-    "plot_predictions_with_validation",
+    "VisualizationManager",
     "predict_all_sensors_with_validation",
     "predict_with_model",
     "format_predictions_with_validation",
@@ -6495,9 +6783,7 @@ __all__ = [
 ================================================
 File: src/training/stgnn_prediction.py
 ================================================
-# gnn_package/src/training/stgnn_prediction.py
-
-
+# Updated src/training/stgnn_prediction.py
 import logging
 import torch
 import numpy as np
@@ -6505,51 +6791,18 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
-from gnn_package.src.models.stgnn import create_stgnn_model
-from gnn_package.src.utils.config_utils import (
-    load_model_for_prediction,
+from gnn_package.src.utils.model_io import load_model as load_model_io
+from gnn_package.src.utils.metrics import (
+    calculate_error_metrics,
+    format_prediction_results,
+    calculate_metrics_by_horizon,
 )
 from gnn_package.config import create_prediction_config
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
 from gnn_package.src.data.data_sources import APIDataSource
-
 from gnn_package.src.utils.data_utils import validate_data_package
 
 logger = logging.getLogger(__name__)
-
-
-def load_model(model_path, config):
-    """
-    Load a trained STGNN model using parameters from config.
-
-    Parameters:
-    -----------
-    model_path : str
-        Path to the saved model
-    config : ExperimentConfig
-        Configuration object to use for model parameters
-
-    Returns:
-    --------
-    Loaded model
-    """
-    logger.info(f"Loading model using configuration from {config.config_path}")
-
-    # Create model with parameters from config
-    model = create_stgnn_model(config=config)
-
-    # Load state dict and set to eval mode
-    model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
-    model.eval()
-
-    # Log model configuration
-    logger.info(f"Loaded model with parameters:")
-    logger.info(f"  hidden_dim: {config.model.hidden_dim}")
-    logger.info(f"  num_layers: {config.model.num_layers}")
-    logger.info(f"  num_gc_layers: {getattr(config.model, 'num_gc_layers', 2)}")
-    logger.info(f"  horizon: {config.data.general.horizon}")
-
-    return model
 
 
 async def fetch_recent_data_for_validation(config):
@@ -6566,7 +6819,6 @@ async def fetch_recent_data_for_validation(config):
     dict
         Dictionary containing processed data for validation
     """
-
     # Create an API data source for the real-time data
     data_source = APIDataSource()
 
@@ -6579,221 +6831,6 @@ async def fetch_recent_data_for_validation(config):
 
     # Process data using prediction-specific logic
     return await processor.process_data()
-
-
-def plot_predictions_with_validation(predictions_dict, data, node_ids, config):
-    """
-    Plot predictions alongside actual data for validation
-
-    Parameters:
-    -----------
-    predictions_dict : dict
-        Dictionary returned by predict_with_model
-    data : dict
-        Dict containing time series data from fetch_recent_data
-    node_ids : list
-        List of node IDs
-    config : ExperimentConfig
-        Configuration object
-
-    Returns:
-    --------
-    matplotlib figure
-    """
-    # Get validation window from config
-    validation_window = config.data.general.horizon
-
-    # Get name-to-id mapping
-    name_id_map = get_sensor_name_id_map(config=config)
-    name_id_map = {v: k for k, v in name_id_map.items()}
-
-    # Get predictions array and node indices
-    pred_array = predictions_dict["predictions"]
-    node_indices = predictions_dict["node_indices"]
-    valid_nodes = [node_ids[idx] for idx in node_indices]
-
-    # Create a figure
-    n_nodes = min(len(valid_nodes), 6)  # Limit to 6 nodes
-    fig, axes = plt.subplots(n_nodes, 1, figsize=(12, 3 * n_nodes))
-    if n_nodes == 1:
-        axes = [axes]
-
-    # Get time series dictionary from data
-    time_series_dict = data["time_series"]
-
-    for i, node_id in enumerate(valid_nodes[:n_nodes]):
-        ax = axes[i]
-
-        # Get full historical data
-        if node_id not in time_series_dict:
-            logger.warning(f"No historical data found for node {node_id}")
-            continue
-
-        historical = time_series_dict[node_id]
-
-        # Split historical data into 'input' and 'validation' parts
-        input_data = historical[:-validation_window]
-        validation_data = historical[-validation_window:]
-
-        # Get prediction for this node
-        node_position = np.where(node_indices == node_ids.index(node_id))[0]
-        if len(node_position) == 0:
-            logger.warning(f"Cannot find node {node_id} in prediction data")
-            continue
-
-        node_idx = node_position[0]
-        pred = pred_array[0, node_idx, :, 0]  # [batch=0, node, time, feature=0]
-
-        # Get the last timestamp from input data
-        last_input_time = input_data.index[-1]
-
-        # Create time indices for prediction that align with validation data
-        pred_times = validation_data.index
-
-        # Plot
-        ax.plot(
-            input_data.index,
-            input_data.values,
-            label="Input Data",
-            color="blue",
-            linewidth=1.5,
-        )
-        ax.plot(
-            validation_data.index,
-            validation_data.values,
-            label="Actual Values",
-            color="green",
-            linewidth=2,
-        )
-        ax.plot(pred_times, pred, "r--", label="Predictions", linewidth=2)
-
-        # Highlight the last input point for visual clarity
-        ax.scatter(
-            [last_input_time],
-            [input_data.values[-1]],
-            color="darkblue",
-            s=50,
-            zorder=5,
-            label="Last Input Point",
-        )
-
-        # Add sensor name to title if available
-        sensor_name = name_id_map.get(node_id, node_id)
-        ax.set_title(f"Model Validation: {sensor_name} (ID: {node_id})")
-        ax.set_ylabel("Traffic Count")
-
-        # Add a grid for better readability
-        ax.grid(True, linestyle="--", alpha=0.7)
-
-        # Add a legend
-        ax.legend(loc="best", framealpha=0.9)
-
-        # Format x-axis as time
-        ax.tick_params(axis="x", rotation=45)
-
-        # Add a vertical line to separate input data and validation period
-        ax.axvline(x=last_input_time, color="gray", linestyle="--", alpha=0.8)
-
-        # Calculate and display metrics if validation data exists
-        if len(validation_data) > 0:
-            mse = ((pred - validation_data.values) ** 2).mean()
-            mae = abs(pred - validation_data.values).mean()
-            ax.text(
-                0.02,
-                0.95,
-                f"MSE: {mse:.4f}\nMAE: {mae:.4f}",
-                transform=ax.transAxes,
-                bbox=dict(facecolor="white", alpha=0.8),
-            )
-
-    plt.tight_layout()
-    return fig
-
-
-async def predict_all_sensors_with_validation(
-    model_path, config=None, output_file=None, plot=True
-):
-    """
-    Make predictions for all available sensors and validate against actual data.
-
-    Parameters:
-    -----------
-    model_path : str or Path
-        Path to the saved model file
-    config : ExperimentConfig, optional
-        Configuration object. If None, attempts to find config in model directory
-        or falls back to global config.
-    output_file : str, optional
-        Path to save the prediction results
-    plot : bool
-        Whether to create and show validation plots
-
-    Returns:
-    --------
-    dict
-        Dictionary containing predictions, actual values, and evaluation metrics
-    """
-    # Load model with appropriate configuration
-    prediction_config = create_prediction_config()
-    model, config = load_model_for_prediction(model_path, prediction_config)
-
-    logger.info(f"Using configuration from {config.config_path}")
-    logger.info(f"Loading model from: {model_path}")
-    # Load model with the config
-    model = load_model(model_path=model_path, config=config)
-    logger.info(f"Model loaded successfully")
-
-    # Fetch and preprocess recent data for validation
-    logger.info(f"Fetching and preprocessing recent data for validation")
-    data_package = await fetch_recent_data_for_validation(config=config)
-
-    # Extract components from the standardized structure
-    node_ids = data_package["graph_data"]["node_ids"]
-    time_series = data_package["time_series"]["validation"]
-
-    logger.info(f"Preprocessed data for {len(node_ids)} nodes")
-
-    # Make predictions using the validation dataloader
-    predictions_dict = predict_with_model(model, data_package, config=config)
-
-    # Format results
-    results_df = format_predictions_with_validation(
-        predictions_dict=predictions_dict,
-        data_package=data_package,
-        node_ids=node_ids,
-        config=config,
-    )
-
-    # Save to file if requested
-    if output_file and not results_df.empty:
-        results_df.to_csv(output_file, index=False)
-        logger.info(f"Predictions saved to {output_file}")
-
-    # Plot if requested
-    if plot and not results_df.empty:
-        # Create a data structure compatible with plot_predictions
-        plot_data = {"time_series": time_series}
-        fig = plot_predictions_with_validation(
-            predictions_dict, plot_data, node_ids, config=config
-        )
-        plt.show()
-
-        # Save the plot if output file is specified
-        if output_file:
-            plot_filename = (
-                output_file.replace(".csv", ".png")
-                if output_file.endswith(".csv")
-                else f"{output_file}_plot.png"
-            )
-            fig.savefig(plot_filename, dpi=300, bbox_inches="tight")
-            logger.info(f"Plot saved to {plot_filename}")
-
-    return {
-        "predictions": predictions_dict,
-        "dataframe": results_df,
-        "data": data_package,
-        "node_ids": node_ids,
-    }
 
 
 def predict_with_model(model, data_package, config):
@@ -6821,17 +6858,11 @@ def predict_with_model(model, data_package, config):
 
     # Extract components for use
     val_loader = data_package["data_loaders"]["val_loader"]
-    # Get device from config if specified, otherwise use best available
-    device_name = getattr(config.training, "device", None)
-    if device_name:
-        device = torch.device(device_name)
-    else:
-        if torch.backends.mps.is_available():
-            device = torch.device("mps")
-        elif torch.cuda.is_available():
-            device = torch.device("cuda")
-        else:
-            device = torch.device("cpu")
+
+    # Get device
+    from gnn_package.src.utils.device_utils import get_device_from_config
+
+    device = get_device_from_config(config)
 
     logger.info(f"Using device: {device}")
     model.to(device)
@@ -6878,7 +6909,6 @@ def format_predictions_with_validation(
         Dictionary returned by predict_with_model
     data_package : dict
         Complete data package containing time series data
-
     node_ids : list
         List of node IDs in the order they appear in the predictions
     config : ExperimentConfig
@@ -6898,79 +6928,121 @@ def format_predictions_with_validation(
     # Get prediction array and node indices
     predictions = predictions_dict["predictions"]
     node_indices = predictions_dict["node_indices"]
+
+    # Get window size and horizon from config
+    window_size = config.data.general.window_size
     horizon = config.data.general.horizon
 
     # Get name-to-ID mapping for sensor names
     name_id_map = get_sensor_name_id_map(config=config)
     id_to_name_map = {v: k for k, v in name_id_map.items()}
 
-    # Create rows for the DataFrame
-    rows = []
+    # Use the centralized formatting function
+    return format_prediction_results(
+        predictions=predictions,
+        time_series_dict=time_series_dict,
+        node_ids=node_ids,
+        node_indices=node_indices,
+        window_size=window_size,
+        horizon=horizon,
+        id_to_name_map=id_to_name_map,
+    )
 
-    # For each node that has predictions
-    for i, node_idx in enumerate(node_indices):
-        node_id = node_ids[node_idx]
 
-        # Skip if this node doesn't have time series data
-        if node_id not in time_series_dict:
-            continue
+async def predict_all_sensors_with_validation(
+    model_path, config=None, output_file=None, plot=True
+):
+    """
+    Make predictions for all available sensors and validate against actual data.
 
-        # Get the time series for this node
-        series = time_series_dict[node_id]
+    Parameters:
+    -----------
+    model_path : str or Path
+        Path to the saved model file
+    config : ExperimentConfig, optional
+        Configuration object. If None, attempts to find config in model directory
+        or falls back to global config.
+    output_file : str, optional
+        Path to save the prediction results
+    plot : bool
+        Whether to create and show validation plots
 
-        # Skip if not enough data
-        if len(series) <= horizon:
-            logger.warning(f"Not enough data for node {node_id} to validate")
-            continue
+    Returns:
+    --------
+    dict
+        Dictionary containing predictions, actual values, and evaluation metrics
+    """
+    # Load model with appropriate configuration
+    prediction_config = create_prediction_config()
 
-        # Get the validation data
-        validation_data = series.iloc[-horizon:]
+    # Use the centralized model loading function
+    model, _ = load_model_io(
+        model_path=model_path, model_type="stgnn", config=prediction_config
+    )
 
-        # Extract predictions for this node
-        node_preds = predictions[0, i, :, 0]
+    logger.info(f"Model loaded successfully from: {model_path}")
 
-        # Create a row for each prediction horizon
-        for h, pred_value in enumerate(node_preds):
-            if h < len(validation_data):
-                # Get the corresponding actual value and timestamp
-                actual_time = validation_data.index[h]
-                actual_value = validation_data.iloc[h]
+    # Fetch and preprocess recent data for validation
+    logger.info(f"Fetching and preprocessing recent data for validation")
+    data_package = await fetch_recent_data_for_validation(config=prediction_config)
 
-                # Create the row
-                row = {
-                    "node_id": node_id,
-                    "sensor_name": id_to_name_map.get(node_id, "Unknown"),
-                    "timestamp": actual_time,
-                    "prediction": float(pred_value),
-                    "actual": float(actual_value),
-                    "error": float(pred_value - actual_value),
-                    "abs_error": float(abs(pred_value - actual_value)),
-                    "horizon": h + 1,  # 1-based horizon index
-                }
-                rows.append(row)
+    # Extract components from the standardized structure
+    node_ids = data_package["graph_data"]["node_ids"]
+    time_series = data_package["time_series"]["validation"]
 
-    # Create DataFrame
-    if rows:
-        df = pd.DataFrame(rows)
-        # Calculate overall metrics
-        mse = (df["error"] ** 2).mean()
-        mae = df["abs_error"].mean()
-        logger.info(f"Overall MSE: {mse:.4f}, MAE: {mae:.4f}")
-        return df
-    else:
-        logger.warning("No predictions could be validated against actual data")
-        return pd.DataFrame(
-            columns=[
-                "node_id",
-                "sensor_name",
-                "timestamp",
-                "prediction",
-                "actual",
-                "error",
-                "abs_error",
-                "horizon",
-            ]
+    logger.info(f"Preprocessed data for {len(node_ids)} nodes")
+
+    # Make predictions using the validation dataloader
+    predictions_dict = predict_with_model(model, data_package, config=prediction_config)
+
+    # Format results using the centralized function
+    results_df = format_predictions_with_validation(
+        predictions_dict=predictions_dict,
+        data_package=data_package,
+        node_ids=node_ids,
+        config=prediction_config,
+    )
+
+    # Save to file if requested
+    if output_file and not results_df.empty:
+        results_df.to_csv(output_file, index=False)
+        logger.info(f"Predictions saved to {output_file}")
+
+    # Plot if requested
+    if plot and not results_df.empty:
+        # Create a data structure compatible with plot_predictions
+        plot_data = {"time_series": time_series}
+        fig = plot_predictions_with_validation(
+            predictions_dict, plot_data, node_ids, config=prediction_config
         )
+        plt.show()
+
+        # Save the plot if output file is specified
+        if output_file:
+            plot_filename = (
+                output_file.replace(".csv", ".png")
+                if output_file.endswith(".csv")
+                else f"{output_file}_plot.png"
+            )
+            fig.savefig(plot_filename, dpi=300, bbox_inches="tight")
+            logger.info(f"Plot saved to {plot_filename}")
+
+    # Calculate overall metrics
+    metrics = {}
+    if not results_df.empty and "error" in results_df.columns:
+        metrics = {
+            "mse": (results_df["error"] ** 2).mean(),
+            "mae": results_df["abs_error"].mean(),
+        }
+        logger.info(f"Overall MSE: {metrics['mse']:.4f}, MAE: {metrics['mae']:.4f}")
+
+    return {
+        "predictions": predictions_dict,
+        "dataframe": results_df,
+        "data": data_package,
+        "node_ids": node_ids,
+        "metrics": metrics,
+    }
 
 
 
@@ -8861,7 +8933,6 @@ File: src/utils/__init__.py
 # gnn_package/src/utils/__init__.py
 
 from .config_utils import (
-    load_model_for_prediction,
     create_prediction_config_from_training,
     save_model_with_config,
     get_device_from_config,
@@ -8880,7 +8951,6 @@ from .sensor_utils import (
 
 __all__ = [
     # Configuration utilities
-    "load_model_for_prediction",
     "create_prediction_config_from_training",
     "save_model_with_config",
     "get_device_from_config",
@@ -8916,63 +8986,6 @@ import torch
 
 from gnn_package.config import ExperimentConfig, get_config, ConfigurationManager
 from gnn_package.src.models.stgnn import create_stgnn_model
-
-
-def load_model_for_prediction(
-    model_path: Union[str, Path],
-    config: Optional[ExperimentConfig] = None,
-    override_params: Optional[Dict[str, Any]] = None,
-    model_creator_func: Optional[Callable] = None,
-) -> Tuple[torch.nn.Module, ExperimentConfig]:
-    """
-    Load a model with the appropriate configuration for prediction.
-
-    This function handles all the configuration setup needed for loading a model
-    for prediction, including finding and loading the right configuration file.
-
-    Parameters:
-    -----------
-    model_path : str or Path
-        Path to the saved model file
-    config : ExperimentConfig, optional
-        Configuration to use. If None, attempts to find config in model directory
-        or falls back to global config.
-    override_params : Dict[str, Any], optional
-        Parameters to override in the loaded configuration
-    model_creator_func : Callable, optional
-        Function to create model from config. If not provided, uses default creator
-
-    Returns:
-    --------
-    tuple(torch.nn.Module, ExperimentConfig)
-        The loaded model and its configuration
-    """
-    model_path = Path(model_path)
-
-    # Configuration handling
-    if config is None:
-        # Try to find config in the model directory
-        potential_config_path = model_path.parent / "config.yml"
-        if potential_config_path.exists():
-            config = ExperimentConfig(str(potential_config_path))
-        else:
-            # Fall back to global config
-            config = get_config()
-
-    # Convert to prediction config
-    prediction_config = create_prediction_config_from_training(config, override_params)
-
-    # Create model with correct architecture
-    if model_creator_func is None:
-        model_creator_func = create_stgnn_model
-
-    model = model_creator_func(prediction_config)
-
-    # Load saved weights
-    model.load_state_dict(torch.load(model_path, map_location=torch.device("cpu")))
-    model.eval()  # Set model to evaluation mode
-
-    return model, prediction_config
 
 
 def create_prediction_config_from_training(
@@ -9471,10 +9484,125 @@ def to_device(data: Any, device: torch.device) -> Any:
 File: src/utils/exceptions.py
 ================================================
 # src/utils/exceptions.py
+
+import logging
+import functools
+import inspect
+from typing import Any, Callable, Type, Optional, Union, TypeVar
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
 class GNNException(Exception):
     """Base exception class for all GNN package exceptions"""
 
     pass
+
+
+def safe_execute(
+    func: Callable[..., T],
+    error_msg: str = "Operation failed",
+    exception_type: Type[Exception] = GNNException,
+    fallback_value: Optional[T] = None,
+    log_level: int = logging.ERROR,
+) -> Union[T, Any]:
+    """
+    Execute a function with standardized error handling.
+
+    Parameters:
+    -----------
+    func : Callable
+        Function to execute
+    error_msg : str
+        Error message prefix
+    exception_type : Type[Exception]
+        Exception type to raise if an error occurs
+    fallback_value : Any
+        Value to return if an error occurs and exception_type is None
+    log_level : int
+        Logging level for error messages
+
+    Returns:
+    --------
+    Any
+        Result of the function or fallback value
+
+    Raises:
+    -------
+    exception_type
+        If an error occurs and exception_type is not None
+    """
+    try:
+        return func()
+    except Exception as e:
+        logger.log(log_level, f"{error_msg}: {str(e)}")
+        if exception_type:
+            raise exception_type(f"{error_msg}: {str(e)}") from e
+        return fallback_value
+
+
+def handle_exceptions(
+    exception_mapping: dict,
+    default_exception: Type[Exception] = GNNException,
+    error_msg: str = "Operation failed",
+):
+    """
+    Decorator for handling exceptions with mapping to custom exception types.
+
+    Parameters:
+    -----------
+    exception_mapping : dict
+        Mapping from caught exception types to raised exception types
+    default_exception : Type[Exception]
+        Default exception type for unhandled exceptions
+    error_msg : str
+        Error message prefix
+
+    Returns:
+    --------
+    Callable
+        Decorated function
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                # Find matching exception type
+                for caught_type, raised_type in exception_mapping.items():
+                    if isinstance(e, caught_type):
+                        raise raised_type(f"{error_msg}: {str(e)}") from e
+
+                # Default handling
+                if default_exception:
+                    raise default_exception(f"{error_msg}: {str(e)}") from e
+                raise
+
+        # Handle async functions
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                # Find matching exception type
+                for caught_type, raised_type in exception_mapping.items():
+                    if isinstance(e, caught_type):
+                        raise raised_type(f"{error_msg}: {str(e)}") from e
+
+                # Default handling
+                if default_exception:
+                    raise default_exception(f"{error_msg}: {str(e)}") from e
+                raise
+
+        if inspect.iscoroutinefunction(func):
+            return async_wrapper
+        return wrapper
+
+    return decorator
 
 
 # --- Data-related exceptions ---
@@ -9533,6 +9661,18 @@ class ModelLoadError(ModelException):
 
 class ModelParameterError(ModelException):
     """Error with model parameters or hyperparameters"""
+
+    pass
+
+
+class ModelPredictionError(ModelException):
+    """Error during model prediction"""
+
+    pass
+
+
+class ModelEvaluationError(ModelException):
+    """Error during model evaluation"""
 
     pass
 
@@ -9606,17 +9746,36 @@ class APIRateLimitError(APIException):
     pass
 
 
+class APIRequestError(APIException):
+    """Error with API request parameters or format"""
+
+    pass
+
+
 
 ================================================
 File: src/utils/logging_utils.py
 ================================================
-# src/utils/logging_utils.py
+# src/utils/logging_utils.py (Enhanced version)
+
 import os
 import sys
 import logging
+import time
+import asyncio
+import contextlib
 from pathlib import Path
 from typing import Optional, Union, Dict, Any
 from datetime import datetime
+
+# Standard log message patterns
+LOG_PATTERNS = {
+    "start_operation": "Starting {operation_name}",
+    "end_operation": "Completed {operation_name} in {duration:.2f}s",
+    "config_loaded": "Configuration loaded from {config_path}",
+    "data_loaded": "Loaded {num_records} records from {source}",
+    "error_occurred": "Error in {context}: {error}",
+}
 
 
 def configure_logging(
@@ -9715,11 +9874,450 @@ def get_logger(name: str, level: Optional[int] = None) -> logging.Logger:
     return logger
 
 
+@contextlib.contextmanager
+def log_operation(logger, operation_name, level=logging.INFO):
+    """
+    Context manager for logging operations with timing.
+
+    Parameters:
+    -----------
+    logger : logging.Logger
+        Logger to use
+    operation_name : str
+        Name of the operation being performed
+    level : int
+        Logging level
+
+    Yields:
+    -------
+    None
+    """
+    start_time = time.time()
+    logger.log(
+        level, LOG_PATTERNS["start_operation"].format(operation_name=operation_name)
+    )
+    try:
+        yield
+    except Exception as e:
+        logger.log(
+            logging.ERROR,
+            LOG_PATTERNS["error_occurred"].format(context=operation_name, error=str(e)),
+        )
+        raise
+    finally:
+        duration = time.time() - start_time
+        logger.log(
+            level,
+            LOG_PATTERNS["end_operation"].format(
+                operation_name=operation_name, duration=duration
+            ),
+        )
+
+
+def log_function(level=logging.INFO, show_args=False):
+    """
+    Decorator to log function calls with timing.
+
+    Parameters:
+    -----------
+    level : int
+        Logging level
+    show_args : bool
+        Whether to include function arguments in log
+
+    Returns:
+    --------
+    Callable
+        Decorated function
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            logger = get_logger(func.__module__)
+            func_name = func.__name__
+
+            if show_args:
+                args_str = ", ".join([f"{arg}" for arg in args[1:]])  # Skip self
+                kwargs_str = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
+                params = (
+                    f"{args_str}{', ' if args_str and kwargs_str else ''}{kwargs_str}"
+                )
+                operation_name = f"{func_name}({params})"
+            else:
+                operation_name = func_name
+
+            with log_operation(logger, operation_name, level=level):
+                return func(*args, **kwargs)
+
+        @functools.wraps(func)
+        async def async_wrapper(*args, **kwargs):
+            logger = get_logger(func.__module__)
+            func_name = func.__name__
+
+            if show_args:
+                args_str = ", ".join([f"{arg}" for arg in args[1:]])  # Skip self
+                kwargs_str = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
+                params = (
+                    f"{args_str}{', ' if args_str and kwargs_str else ''}{kwargs_str}"
+                )
+                operation_name = f"{func_name}({params})"
+            else:
+                operation_name = func_name
+
+            with log_operation(logger, operation_name, level=level):
+                return await func(*args, **kwargs)
+
+        if asyncio.iscoroutinefunction(func):
+            return async_wrapper
+        return wrapper
+
+    return decorator
+
+
+
+================================================
+File: src/utils/metrics.py
+================================================
+# src/utils/metrics.py
+import numpy as np
+import torch
+import pandas as pd
+from typing import Dict, Union, Tuple, List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def calculate_error_metrics(
+    predictions: Union[np.ndarray, torch.Tensor],
+    targets: Union[np.ndarray, torch.Tensor],
+    masks: Optional[Union[np.ndarray, torch.Tensor]] = None,
+    reduction: str = "mean",
+) -> Dict[str, float]:
+    """
+    Calculate standard error metrics with proper handling of masked values.
+
+    Parameters:
+    -----------
+    predictions : numpy.ndarray or torch.Tensor
+        Predicted values
+    targets : numpy.ndarray or torch.Tensor
+        Target values
+    masks : numpy.ndarray or torch.Tensor, optional
+        Binary masks for valid values (1 = valid, 0 = invalid)
+    reduction : str
+        How to reduce metrics ('mean', 'sum', 'none')
+
+    Returns:
+    --------
+    Dict[str, float]
+        Dictionary with calculated metrics (MSE, MAE, RMSE)
+    """
+    # Convert to numpy if needed
+    if isinstance(predictions, torch.Tensor):
+        predictions = predictions.detach().cpu().numpy()
+    if isinstance(targets, torch.Tensor):
+        targets = targets.detach().cpu().numpy()
+    if masks is not None and isinstance(masks, torch.Tensor):
+        masks = masks.detach().cpu().numpy()
+
+    # Create default mask if none provided
+    if masks is None:
+        masks = np.ones_like(predictions)
+
+    # Ensure shapes match
+    if predictions.shape != targets.shape:
+        raise ValueError(
+            f"Shape mismatch: predictions {predictions.shape}, targets {targets.shape}"
+        )
+    if predictions.shape != masks.shape:
+        raise ValueError(
+            f"Shape mismatch: predictions {predictions.shape}, masks {masks.shape}"
+        )
+
+    # Calculate squared errors
+    squared_errors = ((predictions - targets) ** 2) * masks
+    absolute_errors = np.abs(predictions - targets) * masks
+
+    # Apply reduction
+    if reduction == "mean":
+        # Normalize by sum of masks to only account for valid points
+        mask_sum = np.sum(masks)
+        if mask_sum == 0:
+            logger.warning("No valid points in mask, returning zero metrics")
+            return {"mse": 0.0, "mae": 0.0, "rmse": 0.0}
+
+        mse = np.sum(squared_errors) / mask_sum
+        mae = np.sum(absolute_errors) / mask_sum
+        rmse = np.sqrt(mse)
+    elif reduction == "sum":
+        mse = np.sum(squared_errors)
+        mae = np.sum(absolute_errors)
+        rmse = np.sqrt(mse)
+    elif reduction == "none":
+        # Return unreduced arrays
+        return {"squared_errors": squared_errors, "absolute_errors": absolute_errors}
+    else:
+        raise ValueError(f"Unsupported reduction: {reduction}")
+
+    return {"mse": float(mse), "mae": float(mae), "rmse": float(rmse)}
+
+
+def calculate_metrics_by_horizon(
+    predictions_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Calculate error metrics grouped by prediction horizon.
+
+    Parameters:
+    -----------
+    predictions_df : pandas.DataFrame
+        DataFrame with predictions and actual values
+        Must contain columns: 'prediction', 'actual', 'horizon'
+
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame with metrics by horizon
+    """
+    if not all(
+        col in predictions_df.columns for col in ["prediction", "actual", "horizon"]
+    ):
+        missing = [
+            col
+            for col in ["prediction", "actual", "horizon"]
+            if col not in predictions_df.columns
+        ]
+        raise ValueError(f"DataFrame missing required columns: {missing}")
+
+    # Calculate errors
+    predictions_df = predictions_df.copy()
+    predictions_df["error"] = predictions_df["prediction"] - predictions_df["actual"]
+    predictions_df["abs_error"] = predictions_df["error"].abs()
+    predictions_df["squared_error"] = predictions_df["error"] ** 2
+
+    # Group by horizon and calculate metrics
+    metrics_by_horizon = (
+        predictions_df.groupby("horizon")
+        .agg({"abs_error": "mean", "squared_error": "mean", "prediction": "count"})
+        .rename(
+            columns={"abs_error": "mae", "squared_error": "mse", "prediction": "count"}
+        )
+    )
+
+    # Add RMSE
+    metrics_by_horizon["rmse"] = np.sqrt(metrics_by_horizon["mse"])
+
+    return metrics_by_horizon
+
+
+def calculate_metrics_by_sensor(
+    predictions_df: pd.DataFrame, top_n: Optional[int] = None
+) -> pd.DataFrame:
+    """
+    Calculate error metrics grouped by sensor.
+
+    Parameters:
+    -----------
+    predictions_df : pandas.DataFrame
+        DataFrame with predictions and actual values
+        Must contain columns: 'prediction', 'actual', 'node_id' or 'sensor_name'
+    top_n : int, optional
+        If provided, return only top N sensors by error
+
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame with metrics by sensor
+    """
+    # Determine grouping column
+    if "sensor_name" in predictions_df.columns:
+        grouping_col = "sensor_name"
+    elif "node_id" in predictions_df.columns:
+        grouping_col = "node_id"
+    else:
+        raise ValueError(
+            "DataFrame must contain either 'sensor_name' or 'node_id' column"
+        )
+
+    # Calculate errors
+    predictions_df = predictions_df.copy()
+    predictions_df["error"] = predictions_df["prediction"] - predictions_df["actual"]
+    predictions_df["abs_error"] = predictions_df["error"].abs()
+    predictions_df["squared_error"] = predictions_df["error"] ** 2
+
+    # Group by sensor and calculate metrics
+    metrics_by_sensor = (
+        predictions_df.groupby(grouping_col)
+        .agg({"abs_error": "mean", "squared_error": "mean", "prediction": "count"})
+        .rename(
+            columns={"abs_error": "mae", "squared_error": "mse", "prediction": "count"}
+        )
+    )
+
+    # Add RMSE
+    metrics_by_sensor["rmse"] = np.sqrt(metrics_by_sensor["mse"])
+
+    # Sort by MAE
+    metrics_by_sensor = metrics_by_sensor.sort_values("mae", ascending=False)
+
+    # Return top N if requested
+    if top_n is not None:
+        return metrics_by_sensor.head(top_n)
+
+    return metrics_by_sensor
+
+
+def format_prediction_results(
+    predictions: np.ndarray,
+    time_series_dict: Dict[str, pd.Series],
+    node_ids: List[str],
+    node_indices: np.ndarray,
+    window_size: int,
+    horizon: int,
+    id_to_name_map: Optional[Dict[str, str]] = None,
+) -> pd.DataFrame:
+    """
+    Format model predictions into a standardized DataFrame.
+
+    Parameters:
+    -----------
+    predictions : numpy.ndarray
+        Model predictions with shape [batch, num_nodes, horizon, features]
+    time_series_dict : Dict[str, pd.Series]
+        Dictionary mapping node IDs to their time series data
+    node_ids : List[str]
+        List of all node IDs
+    node_indices : numpy.ndarray
+        Indices of nodes in the predictions
+    window_size : int
+        Size of input windows
+    horizon : int
+        Prediction horizon
+    id_to_name_map : Dict[str, str], optional
+        Mapping from node IDs to readable names
+
+    Returns:
+    --------
+    pandas.DataFrame
+        Formatted prediction results
+    """
+    rows = []
+
+    # Get valid nodes
+    valid_nodes = [node_ids[idx] for idx in node_indices]
+
+    # Process each node
+    for i, node_id in enumerate(valid_nodes):
+        # Skip if no time series data available
+        if node_id not in time_series_dict:
+            logger.warning(f"No time series data for node {node_id}")
+            continue
+
+        # Get the time series
+        series = time_series_dict[node_id]
+
+        # Split into input and validation parts
+        validation_data = series[-horizon:] if len(series) >= horizon else series
+
+        # Get node position in predictions
+        node_idx = node_indices[i]
+
+        # Get predictions for this node
+        node_preds = predictions[0, i, :, 0]  # [batch=0, node, time, feature=0]
+
+        # Get prediction timestamps (use validation data timestamps if available)
+        if len(validation_data) > 0:
+            timestamps = validation_data.index
+        else:
+            # If no validation data, use the last timestamp + increments
+            last_timestamp = series.index[-1] if len(series) > 0 else pd.Timestamp.now()
+            freq = pd.infer_freq(series.index) if len(series) > 1 else "15min"
+            if freq is None:
+                freq = "15min"  # Default if frequency can't be inferred
+            timestamps = pd.date_range(
+                start=last_timestamp, periods=horizon, freq=freq
+            )[1:]
+
+        # Create rows for each prediction horizon
+        for h, pred_value in enumerate(node_preds):
+            if h < len(validation_data):
+                # We have actual data for validation
+                actual_time = timestamps[h]
+                actual_value = validation_data.iloc[h]
+
+                # Create a row with prediction and actual value
+                row = {
+                    "node_id": node_id,
+                    "sensor_name": (
+                        id_to_name_map.get(node_id, str(node_id))
+                        if id_to_name_map
+                        else str(node_id)
+                    ),
+                    "timestamp": actual_time,
+                    "prediction": float(pred_value),
+                    "actual": float(actual_value),
+                    "error": float(pred_value - actual_value),
+                    "abs_error": float(abs(pred_value - actual_value)),
+                    "horizon": h + 1,  # 1-based horizon index
+                }
+            else:
+                # No actual data available, just store prediction
+                # Get timestamp by extrapolation if needed
+                if h < len(timestamps):
+                    pred_time = timestamps[h]
+                else:
+                    # Extrapolate timestamps if needed
+                    freq = pd.infer_freq(timestamps) if len(timestamps) > 1 else "15min"
+                    if freq is None:
+                        freq = "15min"
+                    pred_time = timestamps[-1] + pd.Timedelta(freq) * (
+                        h - len(timestamps) + 1
+                    )
+
+                row = {
+                    "node_id": node_id,
+                    "sensor_name": (
+                        id_to_name_map.get(node_id, str(node_id))
+                        if id_to_name_map
+                        else str(node_id)
+                    ),
+                    "timestamp": pred_time,
+                    "prediction": float(pred_value),
+                    "actual": None,
+                    "error": None,
+                    "abs_error": None,
+                    "horizon": h + 1,
+                }
+
+            rows.append(row)
+
+    # Create DataFrame
+    if rows:
+        return pd.DataFrame(rows)
+    else:
+        # Return empty DataFrame with expected columns
+        return pd.DataFrame(
+            columns=[
+                "node_id",
+                "sensor_name",
+                "timestamp",
+                "prediction",
+                "actual",
+                "error",
+                "abs_error",
+                "horizon",
+            ]
+        )
+
+
 
 ================================================
 File: src/utils/model_io.py
 ================================================
 # src/utils/model_io.py
+
 import os
 import json
 import yaml
@@ -9730,33 +10328,155 @@ from typing import Dict, Any, Optional, Tuple, Union, Callable
 
 from gnn_package.config import ExperimentConfig, get_config
 from gnn_package.src.models.registry import ModelRegistry
-from gnn_package.src.utils.device_utils import get_device, get_device_from_config
+from gnn_package.src.utils.device_utils import get_device
+from gnn_package.src.utils.exceptions import ModelLoadError, ModelCreationError
 
 logger = logging.getLogger(__name__)
+
+
+def load_model(
+    model_path: Union[str, Path],
+    model_type: Optional[str] = None,
+    config: Optional[ExperimentConfig] = None,
+    device: Optional[Union[str, torch.device]] = None,
+    strict: bool = True,
+    model_creator: Optional[Callable] = None,
+) -> Tuple[torch.nn.Module, Dict[str, Any]]:
+    """
+    Load a model with comprehensive error handling and device management.
+
+    This is the central model loading function that should be used throughout the codebase.
+
+    Parameters:
+    -----------
+    model_path : str or Path
+        Path to the model file (.pth)
+    model_type : str, optional
+        Type of model to load (used with ModelRegistry)
+    config : ExperimentConfig, optional
+        Configuration to use. If None, attempts to find config in model directory.
+    device : str or torch.device, optional
+        Device to load the model onto. If None, determined from config.
+    strict : bool
+        Whether to strictly enforce that the keys in state_dict match model
+    model_creator : Callable, optional
+        Function to create the model. If provided, overrides model_type.
+
+    Returns:
+    --------
+    Tuple[torch.nn.Module, Dict[str, Any]]
+        The loaded model and metadata dictionary
+
+    Raises:
+    -------
+    ModelLoadError
+        If the model cannot be loaded
+    """
+    from gnn_package.src.utils.exceptions import safe_execute
+
+    model_path = Path(model_path)
+
+    # Check if model exists
+    if not model_path.exists():
+        raise ModelLoadError(f"Model file not found: {model_path}")
+
+    # Determine model directory and try to load config if not provided
+    model_dir = model_path.parent
+    metadata = {}
+
+    # Try to load metadata if it exists
+    metadata_path = model_dir / "metadata.json"
+    if metadata_path.exists():
+        try:
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+                logger.info(f"Loaded metadata from: {metadata_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load metadata: {str(e)}")
+
+    # If model_type not specified, try to get from metadata
+    if model_type is None and "model_type" in metadata:
+        model_type = metadata["model_type"]
+        logger.info(f"Using model type from metadata: {model_type}")
+
+    # Try to load config if not provided
+    if config is None:
+        config_path = model_dir / "config.yml"
+        if config_path.exists():
+            try:
+                config = ExperimentConfig(config_path)
+                logger.info(f"Loaded configuration from: {config_path}")
+            except Exception as e:
+                logger.warning(f"Failed to load config from {config_path}: {str(e)}")
+                config = get_config()
+        else:
+            config = get_config()
+            logger.info("Using global configuration")
+
+    # Create model
+    try:
+        if model_creator is not None:
+            logger.info("Creating model with provided creator function")
+            model = model_creator(config=config)
+        elif model_type is not None:
+            logger.info(f"Creating model of type: {model_type}")
+            model = ModelRegistry.create_model(model_type, config=config)
+        else:
+            # Default to STGNN if nothing else specified
+            from gnn_package.src.models.stgnn import create_stgnn_model
+
+            logger.info("Creating default STGNN model")
+            model = create_stgnn_model(config=config)
+    except Exception as e:
+        raise ModelCreationError(f"Failed to create model: {str(e)}") from e
+
+    # Load state dict
+    try:
+        state_dict = torch.load(model_path, map_location="cpu")
+        model.load_state_dict(state_dict, strict=strict)
+        logger.info(f"Model weights loaded from: {model_path}")
+    except Exception as e:
+        logger.error(f"Error loading model weights: {str(e)}")
+        raise ModelLoadError(f"Failed to load model weights: {str(e)}") from e
+
+    # Set device
+    if device is None:
+        from gnn_package.src.utils.device_utils import get_device_from_config
+
+        device = get_device_from_config(config)
+    else:
+        device = get_device(device) if isinstance(device, str) else device
+
+    model = model.to(device)
+    model.eval()  # Set to evaluation mode by default
+
+    return model, metadata
 
 
 def save_model(
     model: torch.nn.Module,
     output_path: Union[str, Path],
+    config: Optional[ExperimentConfig] = None,
     metadata: Optional[Dict[str, Any]] = None,
     save_config: bool = True,
-    config: Optional[ExperimentConfig] = None,
 ) -> Dict[str, str]:
     """
-    Save a model with metadata and configuration.
+    Save a model with comprehensive metadata.
+
+    This is the central model saving function that should be used throughout the codebase.
 
     Parameters:
     -----------
     model : torch.nn.Module
         The model to save
     output_path : str or Path
-        Directory or file path for saving the model
-    metadata : Dict[str, Any], optional
-        Additional metadata to save with the model
-    save_config : bool
-        Whether to save the configuration alongside the model
+        Path where to save the model
     config : ExperimentConfig, optional
-        Configuration to save. If None, uses the global config.
+        Configuration to save alongside the model
+    metadata : Dict[str, Any], optional
+        Additional metadata to save
+    save_config : bool
+        Whether to save the configuration
 
     Returns:
     --------
@@ -9781,16 +10501,23 @@ def save_model(
     saved_files = {"model": str(model_path)}
 
     # Save model state dictionary
-    torch.save(model.state_dict(), model_path)
-    logger.info(f"Model saved to: {model_path}")
+    try:
+        torch.save(model.state_dict(), model_path)
+        logger.info(f"Model saved to: {model_path}")
+    except Exception as e:
+        logger.error(f"Failed to save model: {str(e)}")
+        raise
 
     # Save metadata if provided
     if metadata:
         metadata_path = output_dir / "metadata.json"
-        with open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2)
-        saved_files["metadata"] = str(metadata_path)
-        logger.info(f"Metadata saved to: {metadata_path}")
+        try:
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+            saved_files["metadata"] = str(metadata_path)
+            logger.info(f"Metadata saved to: {metadata_path}")
+        except Exception as e:
+            logger.error(f"Failed to save metadata: {str(e)}")
 
     # Save configuration if requested
     if save_config:
@@ -9798,109 +10525,132 @@ def save_model(
             config = get_config()
 
         config_path = output_dir / "config.yml"
-        config.save(config_path)
-        saved_files["config"] = str(config_path)
-        logger.info(f"Configuration saved to: {config_path}")
+        try:
+            config.save(config_path)
+            saved_files["config"] = str(config_path)
+            logger.info(f"Configuration saved to: {config_path}")
+        except Exception as e:
+            logger.error(f"Failed to save configuration: {str(e)}")
 
     return saved_files
 
 
-def load_model(
-    model_path: Union[str, Path],
-    model_type: Optional[str] = None,
-    config: Optional[ExperimentConfig] = None,
-    model_creator: Optional[Callable] = None,
-    device: Optional[Union[str, torch.device]] = None,
-    strict: bool = True,
-) -> Tuple[torch.nn.Module, Dict[str, Any]]:
+def load_model_partial(
+    model_path: Union[str, Path], model: torch.nn.Module, device
+) -> torch.nn.Module:
     """
-    Load a model with standard error handling and device management.
+    Attempt to load a model with partial state dict (for recovery).
 
     Parameters:
     -----------
     model_path : str or Path
-        Path to the model file (.pth)
-    model_type : str, optional
-        Type of model to load (used with ModelRegistry)
-    config : ExperimentConfig, optional
-        Configuration for model creation. If None, tries to load config from model directory.
-    model_creator : Callable, optional
-        Function to create the model. If provided, overrides model_type.
-    device : str or torch.device, optional
-        Device to load the model onto. If None, determined from config.
-    strict : bool
-        Whether to strictly enforce that the keys in state_dict match model
+        Path to the model file
+    model : torch.nn.Module
+        Model instance to load partial weights into
+    device : torch.device
+        Device to move model to after loading
 
     Returns:
     --------
-    Tuple[torch.nn.Module, Dict[str, Any]]
-        The loaded model and metadata dictionary
+    torch.nn.Module
+        Model with partially loaded weights
     """
-    model_path = Path(model_path)
-
-    # Check if model exists
-    if not model_path.exists():
-        raise FileNotFoundError(f"Model file not found: {model_path}")
-
-    # Determine model directory and try to load config if not provided
-    model_dir = model_path.parent
-    metadata = {}
-
-    # Try to load metadata if it exists
-    metadata_path = model_dir / "metadata.json"
-    if metadata_path.exists():
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
-            logger.info(f"Loaded metadata from: {metadata_path}")
-
-    # If model_type not specified, try to get from metadata
-    if model_type is None and "model_type" in metadata:
-        model_type = metadata["model_type"]
-        logger.info(f"Using model type from metadata: {model_type}")
-
-    # Try to load config if not provided
-    if config is None:
-        config_path = model_dir / "config.yml"
-        if config_path.exists():
-            config = ExperimentConfig(config_path)
-            logger.info(f"Loaded configuration from: {config_path}")
-        else:
-            config = get_config()
-            logger.info("Using global configuration")
-
-    # Create model
-    if model_creator is not None:
-        logger.info("Creating model with provided creator function")
-        model = model_creator(config=config)
-    elif model_type is not None:
-        logger.info(f"Creating model of type: {model_type}")
-        model = ModelRegistry.create_model(model_type, config=config)
-    else:
-        # Default to STGNN if nothing else specified
-        from gnn_package.src.models.stgnn import create_stgnn_model
-
-        logger.info("Creating default STGNN model")
-        model = create_stgnn_model(config=config)
-
-    # Load state dict
     try:
         state_dict = torch.load(model_path, map_location="cpu")
-        model.load_state_dict(state_dict, strict=strict)
-        logger.info(f"Model weights loaded from: {model_path}")
+        # Filter state_dict to only include keys that exist in the model
+        model_keys = set(model.state_dict().keys())
+        filtered_state_dict = {k: v for k, v in state_dict.items() if k in model_keys}
+
+        # Log differences
+        missing_keys = [k for k in model.state_dict().keys() if k not in state_dict]
+        extra_keys = [k for k in state_dict.keys() if k not in model_keys]
+
+        if missing_keys:
+            logger.warning(f"Missing keys in loaded model: {missing_keys}")
+        if extra_keys:
+            logger.warning(f"Extra keys in loaded model (ignored): {extra_keys}")
+
+        # Load the filtered state dict
+        model.load_state_dict(filtered_state_dict, strict=False)
+        logger.info(
+            f"Partial model loading successful with {len(filtered_state_dict)}/{len(model_keys)} keys"
+        )
+
+        return model.to(device)
     except Exception as e:
-        logger.error(f"Error loading model weights: {str(e)}")
-        raise RuntimeError(f"Failed to load model weights: {str(e)}") from e
+        logger.error(f"Failed even with partial loading: {str(e)}")
+        raise RuntimeError("Could not perform partial model loading") from e
 
-    # Move model to device
-    if device is None:
-        device = get_device_from_config(config)
-    else:
-        device = get_device(device) if isinstance(device, str) else device
 
-    model = model.to(device)
-    model.eval()  # Set to evaluation mode by default
+def get_model_config(model_path: Union[str, Path]) -> ExperimentConfig:
+    """
+    Extract configuration for a model from its directory or create a default one.
 
-    return model, metadata
+    Parameters:
+    -----------
+    model_path : str or Path
+        Path to the model file
+
+    Returns:
+    --------
+    ExperimentConfig
+        Configuration for the model
+    """
+    model_path = Path(model_path)
+    model_dir = model_path.parent
+
+    # Look for config in standard locations
+    config_paths = [
+        model_dir / "config.yml",
+        model_dir / "model_config.yml",
+        model_dir.parent / "config.yml",
+    ]
+
+    for config_path in config_paths:
+        if config_path.exists():
+            logger.info(f"Found model configuration at: {config_path}")
+            return ExperimentConfig(config_path)
+
+    # Fall back to global config
+    logger.warning(
+        f"No configuration found for model {model_path}, using global config"
+    )
+    return get_config()
+
+
+def create_model_by_type(model_type: str, config: ExperimentConfig) -> torch.nn.Module:
+    """
+    Create a model instance by type name.
+
+    Parameters:
+    -----------
+    model_type : str
+        Type of model to create
+    config : ExperimentConfig
+        Configuration to use for model creation
+
+    Returns:
+    --------
+    torch.nn.Module
+        Created model instance
+    """
+    try:
+        # Try to use model registry first
+        if model_type in ModelRegistry._models or model_type in ModelRegistry._creators:
+            return ModelRegistry.create_model(model_type, config=config)
+
+        # Fall back to direct import for backward compatibility
+        if model_type == "stgnn":
+            from gnn_package.src.models.stgnn import create_stgnn_model
+
+            return create_stgnn_model(config=config)
+
+        # Add more model types as needed
+
+        raise ValueError(f"Unknown model type: {model_type}")
+    except Exception as e:
+        logger.error(f"Error creating model of type {model_type}: {str(e)}")
+        raise RuntimeError(f"Failed to create model of type {model_type}") from e
 
 
 
@@ -10100,702 +10850,432 @@ def get_sensor_name_id_map(config=None):
 
 
 ================================================
-File: src/visualization/dashboard.py
+File: src/visualization/visualization_utils.py
 ================================================
-# gnn_package/src/visualization/dashboard.py
-
-from pathlib import Path
-import os
-import pandas as pd
-from datetime import datetime
-import base64
-import io
-from typing import List, Dict, Any, Optional, Union
-
-
-def encode_image_to_base64(image_path):
-    """Convert an image to a base64 string for embedding in HTML"""
-    with open(image_path, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
-    return encoded_string
-
-
-def generate_dashboard(
-    results_path: Union[str, Path],
-    prediction_results: Dict[str, Any],
-    include_images: bool = True,
-) -> str:
-    """
-    Generate an HTML dashboard for prediction results.
-
-    Parameters:
-    -----------
-    results_path : str or Path
-        Directory containing prediction results
-    prediction_results : dict
-        Dictionary with prediction information
-    include_images : bool
-        Whether to embed images in the HTML
-
-    Returns:
-    --------
-    str
-        HTML content of the dashboard
-    """
-    results_path = Path(results_path)
-
-    # Get data from prediction results
-    metrics = prediction_results.get("metrics", {})
-    viz_paths = prediction_results.get("visualizations", {})
-    predictions_file = prediction_results.get("predictions_file")
-    summary_file = prediction_results.get("summary_file")
-
-    # Load summary text if available
-    summary_text = ""
-    if summary_file and os.path.exists(summary_file):
-        with open(summary_file, "r") as f:
-            summary_text = f.read()
-
-    # Create HTML content
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Traffic Prediction Dashboard</title>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                line-height: 1.6;
-                margin: 0;
-                padding: 20px;
-                color: #333;
-            }}
-            .container {{
-                max-width: 1200px;
-                margin: 0 auto;
-            }}
-            header {{
-                background-color: #4472C4;
-                color: white;
-                padding: 10px 20px;
-                margin-bottom: 20px;
-                border-radius: 5px;
-            }}
-            h1, h2, h3 {{
-                color: #4472C4;
-            }}
-            .summary-box {{
-                background-color: #f9f9f9;
-                border: 1px solid #ddd;
-                padding: 15px;
-                border-radius: 5px;
-                margin-bottom: 20px;
-                white-space: pre-wrap;
-                font-family: monospace;
-            }}
-            .metrics {{
-                display: flex;
-                justify-content: space-around;
-                margin-bottom: 20px;
-            }}
-            .metric-card {{
-                background-color: #f2f2f2;
-                border-radius: 5px;
-                padding: 15px;
-                text-align: center;
-                width: 150px;
-            }}
-            .metric-value {{
-                font-size: 24px;
-                font-weight: bold;
-                color: #4472C4;
-            }}
-            .metric-label {{
-                font-size: 14px;
-                color: #666;
-            }}
-            .viz-container {{
-                margin-bottom: 30px;
-            }}
-            img {{
-                max-width: 100%;
-                height: auto;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-            }}
-            footer {{
-                margin-top: 30px;
-                border-top: 1px solid #ddd;
-                padding-top: 10px;
-                color: #666;
-                font-size: 12px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <header>
-                <h1>Traffic Prediction Dashboard</h1>
-                <p>Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-            </header>
-
-            <section>
-                <h2>Summary</h2>
-                <div class="summary-box">
-                    {summary_text if summary_text else "No summary available"}
-                </div>
-
-                <div class="metrics">
-                    <div class="metric-card">
-                        <div class="metric-value">{metrics.get('mse', 'N/A'):.4f}</div>
-                        <div class="metric-label">MSE</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{metrics.get('mae', 'N/A'):.4f}</div>
-                        <div class="metric-label">MAE</div>
-                    </div>
-                </div>
-            </section>
-    """
-
-    # Add visualization sections if available
-    if viz_paths and include_images:
-        html_content += """
-            <section>
-                <h2>Visualizations</h2>
-        """
-
-        if "grid_plot" in viz_paths and os.path.exists(viz_paths["grid_plot"]):
-            encoded_img = encode_image_to_base64(viz_paths["grid_plot"])
-            html_content += f"""
-                <div class="viz-container">
-                    <h3>Sensor Predictions Grid</h3>
-                    <img src="data:image/png;base64,{encoded_img}" alt="Sensor Grid Plot">
-                </div>
-            """
-
-        if "error_analysis" in viz_paths and os.path.exists(
-            viz_paths["error_analysis"]
-        ):
-            encoded_img = encode_image_to_base64(viz_paths["error_analysis"])
-            html_content += f"""
-                <div class="viz-container">
-                    <h3>Error Analysis</h3>
-                    <img src="data:image/png;base64,{encoded_img}" alt="Error Analysis">
-                </div>
-            """
-
-        if "validation_plot" in viz_paths and os.path.exists(
-            viz_paths["validation_plot"]
-        ):
-            encoded_img = encode_image_to_base64(viz_paths["validation_plot"])
-            html_content += f"""
-                <div class="viz-container">
-                    <h3>Validation Plot</h3>
-                    <img src="data:image/png;base64,{encoded_img}" alt="Validation Plot">
-                </div>
-            """
-
-        html_content += """
-            </section>
-        """
-
-    # Close HTML
-    html_content += f"""
-            <footer>
-                <p>GNN Traffic Prediction Model | Model path: {prediction_results.get('model_path', 'Unknown')}</p>
-                <p>Output files directory: {results_path}</p>
-            </footer>
-        </div>
-    </body>
-    </html>
-    """
-
-    return html_content
-
-
-def save_dashboard(
-    results_path: Union[str, Path],
-    prediction_results: Dict[str, Any],
-    output_file: Optional[Union[str, Path]] = None,
-) -> str:
-    """
-    Generate and save an HTML dashboard for prediction results.
-
-    Parameters:
-    -----------
-    results_path : str or Path
-        Directory containing prediction results
-    prediction_results : dict
-        Dictionary with prediction information
-    output_file : str or Path, optional
-        File path to save the dashboard (defaults to dashboard.html in results_path)
-
-    Returns:
-    --------
-    str
-        Path to the saved dashboard
-    """
-    results_path = Path(results_path)
-
-    if output_file is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = results_path / f"dashboard_{timestamp}.html"
-    else:
-        output_file = Path(output_file)
-
-    # Generate dashboard HTML
-    html_content = generate_dashboard(results_path, prediction_results)
-
-    # Save to file
-    with open(output_file, "w") as f:
-        f.write(html_content)
-
-    return str(output_file)
-
-
-
-================================================
-File: src/visualization/prediction_plots.py
-================================================
-# gnn_package/src/visualization/prediction_plots.py
+# src/visualization/visualization_utils.py (New consolidated file)
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
 from datetime import datetime
 from matplotlib.dates import DateFormatter
-from typing import Optional, Dict, Any, List, Tuple, Union
 from pathlib import Path
 import os
-from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
+from typing import Dict, Any, List, Tuple, Optional, Union
+
+from gnn_package.src.utils.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
-def plot_predictions_with_validation(
-    predictions_dict: Dict[str, Any],
-    data: Dict[str, Any],
-    node_ids: List[str],
-    config: Any,
-    max_plots: int = 6,
-) -> plt.Figure:
-    """
-    Plot predictions alongside actual data for validation.
+class VisualizationManager:
+    """Centralized visualization manager for consistent plots across the package"""
 
-    Parameters:
-    -----------
-    predictions_dict : dict
-        Dictionary returned by predict_with_model
-    data : dict
-        Dict containing time series data
-    node_ids : list
-        List of node IDs
-    config : ExperimentConfig
-        Configuration object
-    max_plots : int
-        Maximum number of sensors to plot
+    def __init__(self, theme="default", figsize_base=(10, 6)):
+        """
+        Initialize visualization manager.
 
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        The generated figure
-    """
-    # Get validation window from config
-    validation_window = config.data.general.horizon
+        Parameters:
+        -----------
+        theme : str
+            Visualization theme name
+        figsize_base : tuple
+            Base figure size (width, height)
+        """
+        self.theme = theme
+        self.figsize_base = figsize_base
+        self.logger = get_logger(__name__)
 
-    # Get name-to-id mapping
-    name_id_map = get_sensor_name_id_map(config=config)
-    name_id_map = {v: k for k, v in name_id_map.items()}
+        # Set up plotting style based on theme
+        if theme == "default":
+            plt.style.use("seaborn-v0_8-whitegrid")
+        elif theme == "dark":
+            plt.style.use("dark_background")
+        elif theme == "minimal":
+            plt.style.use("seaborn-v0_8-white")
 
-    # Get predictions array and node indices
-    pred_array = predictions_dict["predictions"]
-    node_indices = predictions_dict["node_indices"]
-    valid_nodes = [node_ids[idx] for idx in node_indices]
+        # Theme-specific colors
+        self.theme_colors = {
+            "default": {
+                "primary": "#1f77b4",
+                "secondary": "#ff7f0e",
+                "tertiary": "#2ca02c",
+                "quaternary": "#d62728",
+                "highlight": "#9467bd",
+            },
+            "dark": {
+                "primary": "#56b4e9",
+                "secondary": "#f0e442",
+                "tertiary": "#009e73",
+                "quaternary": "#e69f00",
+                "highlight": "#cc79a7",
+            },
+            "minimal": {
+                "primary": "#4e79a7",
+                "secondary": "#f28e2c",
+                "tertiary": "#59a14f",
+                "quaternary": "#e15759",
+                "highlight": "#b07aa1",
+            },
+        }
 
-    # Create a figure
-    n_nodes = min(len(valid_nodes), max_plots)  # Limit to max_plots nodes
-    fig, axes = plt.subplots(n_nodes, 1, figsize=(12, 3 * n_nodes))
-    if n_nodes == 1:
-        axes = [axes]
+        # Use default theme colors if theme not found
+        self.colors = self.theme_colors.get(theme, self.theme_colors["default"])
 
-    # Get time series dictionary from data
-    time_series_dict = data["time_series"]["validation"]
+    def get_figure(self, width_scale=1.0, height_scale=1.0):
+        """
+        Get a figure with the theme's style.
 
-    for i, node_id in enumerate(valid_nodes[:n_nodes]):
-        ax = axes[i]
+        Parameters:
+        -----------
+        width_scale : float
+            Scale factor for width
+        height_scale : float
+            Scale factor for height
 
-        # Get full historical data
-        if node_id not in time_series_dict:
-            print(f"No historical data found for node {node_id}")
-            continue
+        Returns:
+        --------
+        matplotlib.figure.Figure
+            Figure configured with theme style
+        """
+        figsize = (
+            self.figsize_base[0] * width_scale,
+            self.figsize_base[1] * height_scale,
+        )
+        return plt.figure(figsize=figsize)
 
-        historical = time_series_dict[node_id]
+    def plot_time_series(
+        self, time_index, values, label=None, ax=None, color=None, **kwargs
+    ):
+        """
+        Plot a time series with consistent styling.
 
-        # Split historical data into 'input' and 'validation' parts
-        input_data = historical[:-validation_window]
-        validation_data = historical[-validation_window:]
+        Parameters:
+        -----------
+        time_index : array-like
+            X values (timestamps)
+        values : array-like
+            Y values
+        label : str, optional
+            Legend label
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, creates a new figure.
+        color : str, optional
+            Line color. If None, uses theme color.
+        **kwargs : dict
+            Additional keyword arguments for plot
 
-        # Get prediction for this node
-        node_position = np.where(node_indices == node_ids.index(node_id))[0]
-        if len(node_position) == 0:
-            print(f"Cannot find node {node_id} in prediction data")
-            continue
+        Returns:
+        --------
+        matplotlib.axes.Axes
+            The axes object containing the plot
+        """
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize_base)
 
-        node_idx = node_position[0]
-        pred = pred_array[0, node_idx, :, 0]  # [batch=0, node, time, feature=0]
+        if color is None:
+            color = self.colors["primary"]
 
-        # Get the last timestamp from input data
-        last_input_time = input_data.index[-1]
+        line = ax.plot(time_index, values, color=color, label=label, **kwargs)
 
-        # Create time indices for prediction that align with validation data
-        pred_times = validation_data.index
+        # Apply theme styling
+        ax.grid(True, alpha=0.3)
+        if label:
+            ax.legend()
 
-        # Plot
+        # Format time axis if using datetime
+        if pd.api.types.is_datetime64_any_dtype(time_index) or isinstance(
+            time_index[0], (datetime, pd.Timestamp)
+        ):
+            ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d %H:%M"))
+            ax.tick_params(axis="x", rotation=45)
+
+        return ax
+
+    def plot_comparison(
+        self,
+        time_index,
+        actual,
+        predicted,
+        title=None,
+        ax=None,
+        show_metrics=True,
+        **kwargs,
+    ):
+        """
+        Plot actual vs predicted values with metrics.
+
+        Parameters:
+        -----------
+        time_index : array-like
+            X values (timestamps)
+        actual : array-like
+            Actual values
+        predicted : array-like
+            Predicted values
+        title : str, optional
+            Plot title
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, creates a new figure.
+        show_metrics : bool
+            Whether to show error metrics on plot
+        **kwargs : dict
+            Additional keyword arguments for plot
+
+        Returns:
+        --------
+        matplotlib.axes.Axes
+            The axes object containing the plot
+        """
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize_base)
+
+        # Plot actual and predicted
         ax.plot(
-            input_data.index,
-            input_data.values,
-            label="Input Data",
-            color="blue",
-            linewidth=1.5,
+            time_index, actual, color=self.colors["primary"], label="Actual", **kwargs
         )
         ax.plot(
-            validation_data.index,
-            validation_data.values,
-            label="Actual Values",
-            color="green",
-            linewidth=2,
-        )
-        ax.plot(pred_times, pred, "r--", label="Predictions", linewidth=2)
-
-        # Highlight the last input point for visual clarity
-        ax.scatter(
-            [last_input_time],
-            [input_data.values[-1]],
-            color="darkblue",
-            s=50,
-            zorder=5,
-            label="Last Input Point",
+            time_index,
+            predicted,
+            color=self.colors["secondary"],
+            label="Predicted",
+            linestyle="--",
+            **kwargs,
         )
 
-        # Add sensor name to title if available
-        sensor_name = name_id_map.get(node_id, node_id)
-        ax.set_title(f"Model Validation: {sensor_name} (ID: {node_id})")
-        ax.set_ylabel("Traffic Count")
+        # Apply title
+        if title:
+            ax.set_title(title)
 
-        # Add a grid for better readability
-        ax.grid(True, linestyle="--", alpha=0.7)
+        # Add metrics if requested
+        if show_metrics and len(actual) > 0 and len(predicted) > 0:
+            # Calculate metrics
+            mse = ((np.array(actual) - np.array(predicted)) ** 2).mean()
+            mae = np.abs(np.array(actual) - np.array(predicted)).mean()
 
-        # Add a legend
-        ax.legend(loc="best", framealpha=0.9)
-
-        # Format x-axis as time
-        ax.tick_params(axis="x", rotation=45)
-
-        # Add a vertical line to separate input data and validation period
-        ax.axvline(x=last_input_time, color="gray", linestyle="--", alpha=0.8)
-
-        # Calculate and display metrics if validation data exists
-        if len(validation_data) > 0:
-            mse = ((pred - validation_data.values) ** 2).mean()
-            mae = abs(pred - validation_data.values).mean()
+            # Add text box with metrics
             ax.text(
-                0.02,
+                0.05,
                 0.95,
                 f"MSE: {mse:.4f}\nMAE: {mae:.4f}",
                 transform=ax.transAxes,
-                bbox=dict(facecolor="white", alpha=0.8),
+                fontsize=10,
+                verticalalignment="top",
+                bbox={"boxstyle": "round", "alpha": 0.5},
             )
 
-    plt.tight_layout()
-    return fig
+        # Style the plot
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best")
 
+        # Format time axis if using datetime
+        if pd.api.types.is_datetime64_any_dtype(time_index) or isinstance(
+            time_index[0], (datetime, pd.Timestamp)
+        ):
+            ax.xaxis.set_major_formatter(DateFormatter("%Y-%m-%d %H:%M"))
+            ax.tick_params(axis="x", rotation=45)
 
-def plot_sensors_grid(
-    predictions_df: pd.DataFrame,
-    plots_per_row: int = 5,
-    figsize: Tuple[int, int] = (20, 25),
-) -> plt.Figure:
-    """
-    Create a grid of plots showing prediction vs actual values for all sensors.
+        return ax
 
-    Parameters:
-    -----------
-    predictions_df : pandas DataFrame
-        DataFrame containing the prediction results with columns:
-        'node_id', 'sensor_name', 'timestamp', 'prediction', 'actual', 'horizon'
-    plots_per_row : int
-        Number of plots to show in each row
-    figsize : tuple
-        Size of the overall figure (width, height)
+    def plot_error_distribution(self, errors, ax=None, bins=30):
+        """
+        Plot error distribution histogram.
 
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        The figure containing the grid of plots
-    """
-    # Get unique sensors
-    unique_sensors = predictions_df["node_id"].unique()
-    num_sensors = len(unique_sensors)
+        Parameters:
+        -----------
+        errors : array-like
+            Error values
+        ax : matplotlib.axes.Axes, optional
+            Axes to plot on. If None, creates a new figure.
+        bins : int
+            Number of histogram bins
 
-    # Calculate grid dimensions
-    num_rows = int(np.ceil(num_sensors / plots_per_row))
+        Returns:
+        --------
+        matplotlib.axes.Axes
+            The axes object containing the plot
+        """
+        if ax is None:
+            fig, ax = plt.subplots(figsize=self.figsize_base)
 
-    # Create figure and axes
-    fig, axes = plt.subplots(num_rows, plots_per_row, figsize=figsize)
-    axes = axes.flatten()  # Flatten to make indexing easier
+        ax.hist(
+            errors,
+            bins=bins,
+            color=self.colors["primary"],
+            alpha=0.7,
+            edgecolor="black",
+        )
+        ax.set_title("Error Distribution")
+        ax.set_xlabel("Error")
+        ax.set_ylabel("Frequency")
+        ax.grid(True, alpha=0.3)
 
-    # Set overall title
-    fig.suptitle(f"Predictions vs Actual Values for {num_sensors} Sensors", fontsize=16)
-
-    # Format for dates
-    date_formatter = DateFormatter("%H:%M")
-
-    # First pass: determine global min and max values for consistent y-axis scaling
-    global_min = float("inf")
-    global_max = float("-inf")
-
-    for sensor_id in unique_sensors:
-        # Get data for this sensor
-        sensor_data = predictions_df[predictions_df["node_id"] == sensor_id]
-
-        # Check if we have data
-        if len(sensor_data) > 0:
-            # Get min and max values for both predictions and actuals
-            predictions_min = sensor_data["prediction"].min()
-            predictions_max = sensor_data["prediction"].max()
-            actuals_min = sensor_data["actual"].min()
-            actuals_max = sensor_data["actual"].max()
-
-            # Update global min and max
-            global_min = min(global_min, predictions_min)
-            global_max = max(global_max, predictions_max)
-
-    # Add a small buffer to the limits (5% padding)
-    y_range = global_max - global_min
-    global_min = global_min - 0.05 * y_range if y_range > 0 else global_min - 1
-    global_max = global_max + 0.05 * y_range if y_range > 0 else global_max + 1
-
-    # Loop through each sensor and create a plot
-    for i, sensor_id in enumerate(unique_sensors):
-        if i >= len(axes):  # Safety check
-            break
-
-        # Get data for this sensor
-        sensor_data = predictions_df[predictions_df["node_id"] == sensor_id]
-
-        # Check if we have data
-        if len(sensor_data) > 0:
-            # Get sensor name
-            sensor_name = sensor_data["sensor_name"].iloc[0]
-
-            # Sort by timestamp to ensure correct plot order
-            sensor_data = sensor_data.sort_values("timestamp")
-
-            # Get x and y values
-            timestamps = sensor_data["timestamp"]
-            predictions = sensor_data["prediction"]
-            actuals = sensor_data["actual"]
-
-            # Plot
-            ax = axes[i]
-            ax.plot(timestamps, predictions, "r-", label="Prediction", linewidth=2)
-            ax.plot(timestamps, actuals, "b-", label="Actual", linewidth=2)
-
-            # Format plot
-            ax.set_title(f"{sensor_name.split('Ncl')[-1]}", fontsize=10)
-            ax.tick_params(axis="x", rotation=45, labelsize=8)
-            ax.tick_params(axis="y", labelsize=8)
-            ax.xaxis.set_major_formatter(date_formatter)
-
-            # Apply consistent y-axis limits to all plots
-            ax.set_ylim(global_min, global_max)
-
-            # Only show legend for the first plot
-            if i == 0:
-                ax.legend(loc="upper right", fontsize=8)
-
-            # Add grid for better readability
-            ax.grid(True, linestyle="--", alpha=0.6)
-
-            # Calculate and show error metrics
-            mse = ((predictions - actuals) ** 2).mean()
-            mae = (predictions - actuals).abs().mean()
-            ax.text(
-                0.02,
-                0.95,
-                f"MAE: {mae:.1f}",
-                transform=ax.transAxes,
-                fontsize=7,
-                bbox=dict(facecolor="white", alpha=0.7),
+        # Add mean and std lines
+        if len(errors) > 0:
+            mean = np.mean(errors)
+            std = np.std(errors)
+            ax.axvline(
+                mean,
+                color=self.colors["secondary"],
+                linestyle="--",
+                label=f"Mean: {mean:.4f}",
             )
-        else:
-            # No data case
-            ax.text(
-                0.5,
-                0.5,
-                f"No data for {sensor_id}",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
+            ax.axvline(
+                mean + std,
+                color=self.colors["tertiary"],
+                linestyle=":",
+                label=f"±1 Std: {std:.4f}",
             )
-            ax.axis("off")
+            ax.axvline(mean - std, color=self.colors["tertiary"], linestyle=":")
+            ax.legend()
 
-    # Turn off unused subplots
-    for j in range(i + 1, len(axes)):
-        axes[j].axis("off")
+        return ax
 
-    # Adjust spacing
-    plt.tight_layout(rect=[0, 0, 1, 0.97])  # Make room for suptitle
+    def create_sensor_grid(
+        self, predictions_df, plots_per_row=4, max_sensors=16, figsize=None
+    ):
+        """
+        Create a grid of plots showing predictions for multiple sensors.
 
-    return fig
+        Parameters:
+        -----------
+        predictions_df : pandas.DataFrame
+            DataFrame with prediction results
+        plots_per_row : int
+            Number of plots per row
+        max_sensors : int
+            Maximum number of sensors to show
+        figsize : tuple, optional
+            Figure size. If None, calculated based on grid size.
 
+        Returns:
+        --------
+        matplotlib.figure.Figure
+            Figure containing the grid of plots
+        """
+        # Get unique sensors (limit to max_sensors)
+        unique_sensors = predictions_df["node_id"].unique()[:max_sensors]
+        num_sensors = len(unique_sensors)
 
-def plot_error_distribution(
-    predictions_df: pd.DataFrame, figsize: Tuple[int, int] = (15, 10)
-) -> plt.Figure:
-    """
-    Create plots showing the error distribution and patterns.
+        # Calculate grid dimensions
+        num_rows = (num_sensors + plots_per_row - 1) // plots_per_row
 
-    Parameters:
-    -----------
-    predictions_df : pandas DataFrame
-        DataFrame containing prediction results
-    figsize : tuple
-        Size of the figure
+        # Calculate figure size if not provided
+        if figsize is None:
+            width = self.figsize_base[0] * (plots_per_row / 2)
+            height = self.figsize_base[1] * (num_rows / 2)
+            figsize = (width, height)
 
-    Returns:
-    --------
-    matplotlib.figure.Figure
-        The figure with error distribution plots
-    """
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
+        # Create figure and axes
+        fig, axes = plt.subplots(num_rows, plots_per_row, figsize=figsize)
+        if num_rows == 1 and plots_per_row == 1:
+            axes = np.array([axes])
+        axes = axes.flatten()
 
-    # Plot 1: Error histogram
-    axes[0, 0].hist(
-        predictions_df["error"], bins=30, color="skyblue", edgecolor="black"
-    )
-    axes[0, 0].set_title("Prediction Error Distribution")
-    axes[0, 0].set_xlabel("Error")
-    axes[0, 0].set_ylabel("Frequency")
-    axes[0, 0].grid(True, linestyle="--", alpha=0.7)
+        # Plot each sensor
+        for i, sensor_id in enumerate(unique_sensors):
+            if i >= len(axes):
+                break
 
-    # Plot 2: Error by prediction horizon
-    horizon_errors = predictions_df.groupby("horizon")["abs_error"].mean()
-    axes[0, 1].bar(horizon_errors.index, horizon_errors.values, color="lightgreen")
-    axes[0, 1].set_title("Mean Absolute Error by Prediction Horizon")
-    axes[0, 1].set_xlabel("Horizon (steps ahead)")
-    axes[0, 1].set_ylabel("Mean Absolute Error")
-    axes[0, 1].grid(True, linestyle="--", alpha=0.7)
+            # Get data for this sensor
+            sensor_data = predictions_df[predictions_df["node_id"] == sensor_id]
 
-    # Plot 3: Scatter plot of predicted vs actual
-    axes[1, 0].scatter(
-        predictions_df["actual"],
-        predictions_df["prediction"],
-        alpha=0.5,
-        s=10,
-        color="blue",
-    )
+            if len(sensor_data) > 0:
+                # Get sensor name
+                sensor_name = sensor_data["sensor_name"].iloc[0]
 
-    # Add perfect prediction line
-    max_val = max(predictions_df["actual"].max(), predictions_df["prediction"].max())
-    min_val = min(predictions_df["actual"].min(), predictions_df["prediction"].min())
-    axes[1, 0].plot([min_val, max_val], [min_val, max_val], "r--")
+                # Plot comparison
+                self.plot_comparison(
+                    sensor_data["timestamp"],
+                    sensor_data["actual"],
+                    sensor_data["prediction"],
+                    title=f"{sensor_name}",
+                    ax=axes[i],
+                    show_metrics=True,
+                )
+            else:
+                axes[i].text(
+                    0.5, 0.5, f"No data for {sensor_id}", ha="center", va="center"
+                )
+                axes[i].set_axis_off()
 
-    axes[1, 0].set_title("Predicted vs Actual Values")
-    axes[1, 0].set_xlabel("Actual Values")
-    axes[1, 0].set_ylabel("Predicted Values")
-    axes[1, 0].grid(True, linestyle="--", alpha=0.7)
+        # Turn off any unused subplots
+        for j in range(i + 1, len(axes)):
+            axes[j].set_axis_off()
 
-    # Plot 4: Top 10 sensors by error
-    sensor_errors = (
-        predictions_df.groupby(["sensor_name"])["abs_error"]
-        .mean()
-        .sort_values(ascending=False)
-        .head(10)
-    )
-    sensor_errors.plot(kind="barh", ax=axes[1, 1], color="salmon")
-    axes[1, 1].set_title("Top 10 Sensors by Mean Absolute Error")
-    axes[1, 1].set_xlabel("Mean Absolute Error")
-    axes[1, 1].set_ylabel("Sensor Name")
+        plt.tight_layout()
+        return fig
 
-    plt.tight_layout()
-    return fig
+    def save_visualization_pack(
+        self,
+        predictions_df,
+        output_dir,
+        timestamp=None,
+        include_grid=True,
+        include_error_dist=True,
+    ):
+        """
+        Save a comprehensive set of visualizations.
 
+        Parameters:
+        -----------
+        predictions_df : pandas.DataFrame
+            DataFrame with prediction results
+        output_dir : str or Path
+            Directory to save visualizations
+        timestamp : str, optional
+            Timestamp string for filenames
+        include_grid : bool
+            Whether to include sensor grid visualization
+        include_error_dist : bool
+            Whether to include error distribution visualization
 
-def save_visualization_pack(
-    predictions_df: pd.DataFrame,
-    results_dict: Dict[str, Any],
-    output_dir: Union[str, Path],
-    timestamp: Optional[str] = None,
-) -> Dict[str, str]:
-    """
-    Generate and save a comprehensive set of visualizations.
+        Returns:
+        --------
+        dict
+            Dictionary with paths to saved visualizations
+        """
+        # Create output directory if it doesn't exist
+        output_dir = Path(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
 
-    Parameters:
-    -----------
-    predictions_df : pandas DataFrame
-        DataFrame with prediction results
-    results_dict : dict
-        Dictionary with prediction results and data
-    output_dir : str or Path
-        Directory to save visualizations
-    timestamp : str, optional
-        Timestamp string for filenames
+        # Use current timestamp if not provided
+        if timestamp is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    Returns:
-    --------
-    dict
-        Dictionary with paths to all saved visualizations
-    """
-    # Create output directory if it doesn't exist
-    output_dir = Path(output_dir)
-    os.makedirs(output_dir, exist_ok=True)
+        # Dictionary to store visualization paths
+        viz_paths = {}
 
-    # Use current timestamp if not provided
-    if timestamp is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Create and save sensor grid
+        if include_grid and len(predictions_df) > 0:
+            try:
+                grid_fig = self.create_sensor_grid(predictions_df)
+                grid_path = output_dir / f"sensors_grid_{timestamp}.png"
+                grid_fig.savefig(grid_path, dpi=150, bbox_inches="tight")
+                plt.close(grid_fig)
+                viz_paths["grid_plot"] = str(grid_path)
+                self.logger.info(f"Saved sensor grid to {grid_path}")
+            except Exception as e:
+                self.logger.error(f"Error creating sensor grid: {str(e)}")
 
-    # Dictionary to store all visualization paths
-    viz_paths = {}
+        # Create and save error distribution
+        if (
+            include_error_dist
+            and len(predictions_df) > 0
+            and "error" in predictions_df.columns
+        ):
+            try:
+                fig, ax = plt.subplots(figsize=self.figsize_base)
+                self.plot_error_distribution(predictions_df["error"], ax=ax)
+                error_path = output_dir / f"error_distribution_{timestamp}.png"
+                fig.savefig(error_path, dpi=150, bbox_inches="tight")
+                plt.close(fig)
+                viz_paths["error_dist"] = str(error_path)
+                self.logger.info(f"Saved error distribution to {error_path}")
+            except Exception as e:
+                self.logger.error(f"Error creating error distribution: {str(e)}")
 
-    # 1. Create and save sensors grid plot
-    try:
-        grid_fig = plot_sensors_grid(predictions_df)
-        grid_path = output_dir / f"sensors_grid_{timestamp}.png"
-        grid_fig.savefig(grid_path, dpi=150, bbox_inches="tight")
-        plt.close(grid_fig)
-        viz_paths["grid_plot"] = str(grid_path)
-    except Exception as e:
-        print(f"Error creating sensors grid plot: {e}")
-
-    # 2. Create and save error distribution plots
-    try:
-        error_fig = plot_error_distribution(predictions_df)
-        error_path = output_dir / f"error_analysis_{timestamp}.png"
-        error_fig.savefig(error_path, dpi=150, bbox_inches="tight")
-        plt.close(error_fig)
-        viz_paths["error_analysis"] = str(error_path)
-    except Exception as e:
-        print(f"Error creating error distribution plot: {e}")
-
-    # 3. Create and save detailed validation plot
-    try:
-        if all(k in results_dict for k in ["predictions", "data", "node_ids"]):
-            validation_fig = plot_predictions_with_validation(
-                results_dict["predictions"],
-                results_dict["data"],
-                results_dict["node_ids"],
-                results_dict.get("config"),
-            )
-            validation_path = output_dir / f"validation_plot_{timestamp}.png"
-            validation_fig.savefig(validation_path, dpi=150, bbox_inches="tight")
-            plt.close(validation_fig)
-            viz_paths["validation_plot"] = str(validation_path)
-    except Exception as e:
-        print(f"Error creating validation plot: {e}")
-
-    return viz_paths
+        return viz_paths
 
 
 
@@ -11974,7 +12454,8 @@ import numpy as np
 from gnn_package.config import get_config, create_default_config
 from gnn_package.src.models.stgnn import create_stgnn_model
 from gnn_package.src.training.stgnn_training import STGNNTrainer
-from gnn_package.src.training.stgnn_prediction import load_model, predict_with_model
+from gnn_package.src.training.stgnn_prediction import predict_with_model
+from gnn_package.src.utils.model_io import load_model
 
 
 class ModelBaselineTests(unittest.TestCase):
@@ -12098,7 +12579,11 @@ class ModelBaselineTests(unittest.TestCase):
         self.config.save(config_path)
 
         # Load the model back
-        loaded_model = load_model(model_path, self.config)
+        loaded_model, metadata = load_model(
+            model_path=model_path,
+            model_type="stgnn",
+            config=self.config,
+        )
 
         # Verify model was loaded correctly by checking parameters
         for p1, p2 in zip(model.parameters(), loaded_model.parameters()):
