@@ -43,8 +43,8 @@ def compute_completeness(time_series_dict):
         config = ExperimentConfig(
             "/Users/administrator/Code/python/phd-project-gnn/config.yml"
         )
-        start_date = datetime.strptime(config.data.start_date, "%Y-%m-%d %H:%M:%S")
-        end_date = datetime.strptime(config.data.end_date, "%Y-%m-%d %H:%M:%S")
+        start_date = datetime.strptime(config.data.general.start_date, "%Y-%m-%d %H:%M:%S")
+        end_date = datetime.strptime(config.data.general.end_date, "%Y-%m-%d %H:%M:%S")
     except Exception as e:
         print(f"Warning: Could not load config file, using default dates: {e}")
         # Fallback to using min and max dates from the data

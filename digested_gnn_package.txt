@@ -21,6 +21,9 @@ Directory structure:
     │   ├── raw/
     │   │   └── timeseries/
     │   └── sensors/
+    ├── models/
+    │   └── Default_Traffic_Prediction_Experiment/
+    │       └── config.yml
     ├── results/
     ├── src/
     │   ├── data/
@@ -143,7 +146,6 @@ from datetime import datetime
 # Import gnn_package modules
 from gnn_package.config import get_config, create_default_config, ExperimentConfig
 from gnn_package import training
-from gnn_package.src.utils.sensor_utils import get_sensor_name_id_map
 
 
 def main():
@@ -304,9 +306,10 @@ data:
     bbox_crs: EPSG:4326
     buffer_factor: 1.0
     custom_filter: '["highway"~"footway|path|pedestrian|steps|corridor|track|service|living_street|residential|unclassified"]["area"!~"yes"]["access"!~"private"]'
+    end_date: null
     epsilon: 0.5
     gap_threshold_minutes: 15
-    graph_prefix: 25022025_test
+    graph_prefix: default_graph
     horizon: 6
     max_distance: 100.0
     missing_value: -999.0
@@ -318,18 +321,17 @@ data:
     sensor_id_prefix: '1'
     sigma_squared: 0.1
     standardize: true
+    start_date: null
     stride: 1
     tolerance_decimal_places: 6
     window_size: 24
   prediction:
-    days_back: 1
+    days_back: 14
   training:
     cutoff_date: null
     cv_split_index: -1
-    end_date: '2024-02-25 00:00:00'
     n_splits: 3
     split_method: rolling_window
-    start_date: '2024-02-18 00:00:00'
     train_ratio: 0.8
     use_cross_validation: true
 experiment:
@@ -341,18 +343,23 @@ experiment:
   - prediction
   version: 1.0.0
 model:
+  attention_heads: 4
   decoder_layers: 2
   dropout: 0.2
+  gcn_normalization: symmetric
   hidden_dim: 64
   input_dim: 1
+  layer_norm: false
   num_gc_layers: 2
   num_layers: 2
   output_dim: 1
+  use_self_loops: true
 paths:
   data_cache: data/cache
   model_save_path: models
   results_dir: results
 training:
+  device: null
   learning_rate: 0.001
   num_epochs: 50
   patience: 10
@@ -469,14 +476,11 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 import json
-import torch
 
 from gnn_package import training
 from gnn_package.config import ExperimentConfig, create_prediction_config
 from gnn_package.src.visualization.visualization_utils import VisualizationManager
-from gnn_package.src.utils.model_io import load_model
 from gnn_package.src.utils.metrics import (
-    calculate_error_metrics,
     calculate_metrics_by_horizon,
     calculate_metrics_by_sensor,
 )
@@ -561,7 +565,6 @@ async def run_prediction_service(
             config=prediction_config,
             output_file=output_file,
             plot=False,  # Disable internal plotting, we'll handle it separately
-            device=device,
         )
 
         # Check for valid predictions
@@ -589,9 +592,7 @@ async def run_prediction_service(
         # Generate visualizations if requested
         viz_paths = {}
         if visualize:
-            viz_paths = _generate_visualizations(
-                predictions_df, predictions, output_dir, timestamp
-            )
+            viz_paths = _generate_visualizations(predictions_df, output_dir, timestamp)
 
         # Cache results if requested
         if cache_results:
@@ -628,20 +629,23 @@ def _setup_prediction_config(model_path):
 
     if config_path.exists():
         logger.info(f"Loading configuration from model directory: {config_path}")
-        prediction_config = ExperimentConfig(str(config_path), is_prediction_mode=True)
+        # IMPORTANT: Create a fresh config directly from file WITHOUT
+        # using get_config() which might return a shared singleton
+        config = ExperimentConfig(str(config_path), is_prediction_mode=True)
+
+        # Don't use create_prediction_config() which might use the global config
+        # Instead, manually apply the minimal changes needed for prediction
+        config.data.training.use_cross_validation = False
+        config.data.prediction.days_back = max(1, config.data.prediction.days_back)
+
+        logger.info(f"Using configuration from model with prediction mode enabled")
+        return config
     else:
         logger.info("Creating default prediction configuration")
-        prediction_config = create_prediction_config()
+        # Create a fresh config without relying on the global instance
+        default_config = ExperimentConfig("config.yml", is_prediction_mode=True)
+        return default_config
 
-    # Make sure days_back is set to a reasonable value for prediction
-    if (
-        not hasattr(prediction_config.data.prediction, "days_back")
-        or prediction_config.data.prediction.days_back < 1
-    ):
-        logger.info("Setting days_back to default (7)")
-        prediction_config.data.prediction.days_back = 7
-
-    return prediction_config
 
 
 def _calculate_prediction_metrics(predictions_df):
@@ -723,7 +727,7 @@ def _save_summary_report(predictions, metrics, summary_file, start_time):
             f.write(sensor_df.to_string() + "\n")
 
 
-def _generate_visualizations(predictions_df, results_dict, output_dir, timestamp):
+def _generate_visualizations(predictions_df, output_dir, timestamp):
     """Generate and save visualizations for prediction results."""
     try:
         logger.info("Generating visualizations...")
@@ -928,7 +932,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 
-from gnn_package import training, preprocessing
+from gnn_package import training
 from gnn_package import paths
 from gnn_package.config import get_config, ExperimentConfig
 from gnn_package.src.utils.data_utils import convert_numpy_types
@@ -984,21 +988,6 @@ async def main():
         output_dir = os.path.join("experiments", experiment_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Set data file
-    if args.data:
-        raw_file_path = args.data
-    else:
-        raw_file_name = "test_data_1wk.pkl"
-        raw_dir = paths.RAW_TIMESERIES_DIR
-        raw_file_path = os.path.join(raw_dir, raw_file_name)
-
-    print(f"Using data file: {raw_file_path}")
-    runtime_stats["data_file"] = raw_file_path
-
-    # Preprocess data
-    preprocessed_file_name = f"data_loaders_{os.path.basename(raw_file_path)}"
-    preprocessed_path = os.path.join(output_dir, preprocessed_file_name)
-
     # Preprocess data
     print("Preprocessing data...")
     preprocess_start = datetime.now()
@@ -1006,10 +995,28 @@ async def main():
     # Before preprocessing
     print("\n===== Starting preprocessing =====")
 
-    # In main function
-    data_package = await training.preprocess_data(
-        data_file=raw_file_path, config=config
-    )
+    # Set data file or use API based on arguments
+    if args.data:
+        print(f"Using data file: {args.data}")
+        data_package = await training.preprocess_data(
+            data_file=args.data,
+            config=config,
+        )
+    else:
+        print(f"No data file specified, fetching data from API using dates from config:")
+        print(f"  Start date: {config.data.general.start_date}")
+        print(f"  End date: {config.data.general.end_date}")
+        data_package = await training.preprocess_data(
+            config=config,  # Only pass config, no data_file
+        )
+
+    runtime_stats["data_file"] = args.data if args.data else "API"
+
+    # Preprocess data
+    preprocessed_file_name = f"data_loaders_{os.path.basename(args.data.split('/')[-1] if args.data else 'API')}_{timestamp}.pkl"
+    preprocessed_path = os.path.join(output_dir, preprocessed_file_name)
+
+
 
     # After preprocessing
     print("\n===== Preprocessing completed =====")
@@ -1148,12 +1155,17 @@ File: tune_model.py
 #!/usr/bin/env python
 # tune_model.py - Script for hyperparameter tuning using the tuning module
 
-import os
 import argparse
 import logging
-import asyncio
 from pathlib import Path
 from datetime import datetime
+
+# Import tuning module
+from gnn_package.src.tuning import (
+    tune_hyperparameters,
+    run_multi_stage_tuning,
+)
+from gnn_package.config import get_config, ExperimentConfig
 
 # Configure logging
 logging.basicConfig(
@@ -1165,14 +1177,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger("tuning")
-
-# Import tuning module
-from gnn_package.src.tuning import (
-    tune_hyperparameters,
-    run_multi_stage_tuning,
-    get_default_param_space,
-)
-from gnn_package.config import get_config, ExperimentConfig
 
 
 def main():
@@ -1372,11 +1376,10 @@ for all package components.
 
 import os
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 import tempfile
 from typing import Dict, List, Any, Optional, Union
 import yaml
-from datetime import timedelta
 import pandas as pd
 import logging
 
@@ -1434,6 +1437,8 @@ class GeneralDataConfig:
     """
 
     # Time series-related parameters
+    start_date: str = None
+    end_date: str = None
     window_size: int = 24
     horizon: int = 6
     stride: int = 1
@@ -1481,6 +1486,19 @@ class GeneralDataConfig:
             List[str]: List of validation errors, empty if valid
         """
         errors = []
+
+        # Validate dates
+        try:
+            if self.start_date:
+                pd.to_datetime(self.start_date)
+        except ValueError:
+            errors.append(f"Invalid start_date format: {self.start_date}")
+
+        try:
+            if self.end_date:
+                pd.to_datetime(self.end_date)
+        except ValueError:
+            errors.append(f"Invalid end_date format: {self.end_date}")
 
         # Validate numeric parameters
         if self.window_size <= 0:
@@ -1533,8 +1551,6 @@ class TrainingDataConfig:
         cv_split_index (int): Index of the split to use for cross-validation
     """
 
-    start_date: str = "2024-02-18 00:00:00"
-    end_date: str = "2024-02-25 00:00:00"
     n_splits: int = 3
     use_cross_validation: bool = True
     split_method: str = "rolling_window"  # Options: "rolling_window", "time_based"
@@ -1550,19 +1566,6 @@ class TrainingDataConfig:
             List[str]: List of validation errors, empty if valid
         """
         errors = []
-
-        # Validate dates
-        try:
-            if self.start_date:
-                pd.to_datetime(self.start_date)
-        except ValueError:
-            errors.append(f"Invalid start_date format: {self.start_date}")
-
-        try:
-            if self.end_date:
-                pd.to_datetime(self.end_date)
-        except ValueError:
-            errors.append(f"Invalid end_date format: {self.end_date}")
 
         if self.cutoff_date:
             try:
@@ -1640,10 +1643,11 @@ class DataConfig:
         errors.extend(self.prediction.validate())
 
         # Validate relationships between configs
-        if pd.to_datetime(self.training.start_date) >= pd.to_datetime(
-            self.training.end_date
-        ):
-            errors.append("training.start_date must be before training.end_date")
+        if self.general.start_date and self.general.end_date:
+            if pd.to_datetime(self.general.start_date) >= pd.to_datetime(
+                self.general.end_date
+            ):
+                errors.append("general.start_date must be before general.end_date")
 
         return errors
 
@@ -2204,7 +2208,7 @@ import os
 import logging
 import tempfile
 from pathlib import Path
-from typing import Optional, Dict, Any, Union, Tuple
+from typing import Optional, Dict, Any, Union
 
 import yaml
 
@@ -2340,6 +2344,8 @@ class ConfigurationManager:
         # Default data configuration
         data = {
             "general": {
+                "start_date": None,
+                "end_date": None,
                 "window_size": 24,
                 "horizon": 6,
                 "stride": 1,
@@ -2372,8 +2378,6 @@ class ConfigurationManager:
                 '["area"!~"yes"]["access"!~"private"]',
             },
             "training": {
-                "start_date": "2024-02-18 00:00:00",
-                "end_date": "2024-02-25 00:00:00",
                 "n_splits": 3,
                 "use_cross_validation": True,
                 "split_method": "rolling_window",
@@ -2397,7 +2401,7 @@ class ConfigurationManager:
             "decoder_layers": 2,
             "use_self_loops": True,
             "gcn_normalization": "symmetric",
-            "attention_heads": 1,
+            "attention_heads": 4,
             "layer_norm": False,
         }
 
@@ -2797,7 +2801,6 @@ File: config/paths.py
 
 from pathlib import Path
 from typing import Dict
-import os
 
 # Root directory of the project
 ROOT_DIR = Path(__file__).parent.parent.parent.resolve()
@@ -2877,6 +2880,89 @@ File: data/preprocessed/.DS_Store
 
 
 
+
+
+
+================================================
+File: models/Default_Traffic_Prediction_Experiment/config.yml
+================================================
+data:
+  general:
+    batch_size: 32
+    bbox_coords:
+    - - -1.65327
+      - 54.93188
+    - - -1.54993
+      - 54.93188
+    - - -1.54993
+      - 55.02084
+    - - -1.65327
+      - 55.02084
+    bbox_crs: EPSG:4326
+    buffer_factor: 1.0
+    custom_filter: '["highway"~"footway|path|pedestrian|steps|corridor|track|service|living_street|residential|unclassified"]["area"!~"yes"]["access"!~"private"]'
+    end_date: '2025-04-25 00:00:00'
+    epsilon: 0.5
+    gap_threshold_minutes: 15
+    graph_prefix: 25022025_test
+    horizon: 6
+    max_distance: 100.0
+    missing_value: -1.0
+    network_type: walk
+    normalization_factor: 10000
+    place_name: Newcastle upon Tyne, UK
+    resampling_frequency: 15min
+    road_network_crs: EPSG:27700
+    sensor_id_prefix: '1'
+    sigma_squared: 0.1
+    standardize: true
+    start_date: '2025-01-01 00:00:00'
+    stride: 1
+    tolerance_decimal_places: 6
+    window_size: 24
+  prediction:
+    days_back: 2
+  training:
+    cutoff_date: null
+    cv_split_index: -1
+    n_splits: 6
+    split_method: rolling_window
+    train_ratio: 0.8
+    use_cross_validation: true
+experiment:
+  description: Traffic prediction using spatial-temporal GNN
+  name: Default Traffic Prediction Experiment
+  tags:
+  - traffic
+  - gnn
+  - prediction
+  version: 1.0.0
+model:
+  attention_heads: 4
+  decoder_layers: 2
+  dropout: 0.2
+  gcn_normalization: symmetric
+  hidden_dim: 64
+  input_dim: 1
+  layer_norm: false
+  num_gc_layers: 2
+  num_layers: 2
+  output_dim: 1
+  use_self_loops: true
+paths:
+  data_cache: data/cache
+  model_save_path: models
+  results_dir: results
+training:
+  device: mps
+  learning_rate: 0.001
+  num_epochs: 50
+  patience: 10
+  weight_decay: 1.0e-05
+visualization:
+  dashboard_template: dashboard.html
+  default_sensors_to_plot: 6
+  max_sensors_in_heatmap: 50
 
 
 
@@ -3175,31 +3261,27 @@ class APIDataSource(DataSource):
     async def _get_date_range_params(self, config: ExperimentConfig) -> DateRangeParams:
         """
         Create date range parameters for the API request.
-
-        Parameters:
-        -----------
-        config : ExperimentConfig
-            Configuration object containing date range parameters
-
-        Returns:
-        --------
-        DateRangeParams
-            Date range parameters for the API request
         """
-        # Get days back from config
-        days_back = config.data.prediction.days_back
+        # Use training dates if in training mode, otherwise use days_back
+        if config.is_prediction_mode:
+            # Prediction mode uses days_back
+            days_back = config.data.prediction.days_back
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days_back)
+            logger.info(f"Fetching data from {start_date} to {end_date} ({days_back} days)")
+            max_days_range = days_back + 1
+        else:
+            # Training mode uses configured dates
+            start_date = pd.to_datetime(config.data.general.start_date)
+            end_date = pd.to_datetime(config.data.general.end_date)
+            days_diff = (end_date - start_date).days
+            logger.info(f"Fetching data from {start_date} to {end_date} ({days_diff} days)")
+            max_days_range = days_diff + 1
 
-        # Calculate date range
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days_back)
-
-        logger.info(f"Fetching data from {start_date} to {end_date} ({days_back} days)")
-
-        # Create date range parameters
         return DateRangeParams(
             start_date=start_date,
             end_date=end_date,
-            max_date_range=timedelta(days=days_back + 1),
+            max_date_range=timedelta(days=max_days_range),  # Ensure adequate range
         )
 
     async def _fetch_data_from_api(self, date_range: DateRangeParams) -> Any:
@@ -3223,7 +3305,7 @@ class APIDataSource(DataSource):
         """
         try:
             logger.info(f"Fetching data from API")
-            return await self.client.get_traffic_data(date_range_params=date_range)
+            return await self.client.get_traffic_data(date_range=date_range)
         except Exception as e:
             logger.error(f"Error connecting to API: {str(e)}")
             raise DataSourceConnectionError(
@@ -3933,10 +4015,13 @@ File: src/dataloaders/dataloaders.py
 ================================================
 # gnn_package/src/preprocessing/dataloaders.py
 
+import logging
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class SpatioTemporalDataset(Dataset):
     def __init__(
@@ -4109,9 +4194,20 @@ def create_dataloader(
     """
     Create a DataLoader that can handle varying numbers of windows per sensor.
     """
+    # Check if we have any data to work with
+    if not X_by_sensor or all(len(windows) == 0 for windows in X_by_sensor.values()):
+        logger.error("No valid windows to create dataset - check data or date range")
+        raise ValueError("No valid windows available to create dataset")
+
     dataset = SpatioTemporalDataset(
         X_by_sensor, masks_by_sensor, adj_matrix, node_ids, window_size, horizon
     )
+
+    # Prevent creating dataloader with empty dataset
+    if len(dataset.sample_indices) == 0:
+        logger.error("Dataset has no samples - check date range and data availability")
+        raise ValueError("Dataset created with no samples")
+
 
     dataloader = DataLoader(
         dataset,
@@ -4444,6 +4540,131 @@ class GraphConvolution(nn.Module):
             return output
 
 
+class MultiHeadAttention(nn.Module):
+    """
+    Multi-head attention module for capturing complex dependencies across nodes or time steps.
+
+    This implementation follows the attention mechanism from "Attention Is All You Need"
+    but is adapted for spatio-temporal graph data.
+    """
+
+    def __init__(self, hidden_dim, num_heads=8, dropout=0.1):
+        """
+        Initialize the multi-head attention module.
+
+        Parameters:
+        -----------
+        hidden_dim : int
+            Dimension of input and output features
+        num_heads : int
+            Number of attention heads
+        dropout : float
+            Dropout probability
+        """
+        super(MultiHeadAttention, self).__init__()
+
+        # Ensure hidden_dim is divisible by num_heads for proper splitting
+        assert (
+            hidden_dim % num_heads == 0
+        ), "Hidden dimension must be divisible by number of heads"
+
+        self.hidden_dim = hidden_dim
+        self.num_heads = num_heads
+        self.head_dim = hidden_dim // num_heads
+
+        # Linear projections for query, key, and value
+        self.query = nn.Linear(hidden_dim, hidden_dim)
+        self.key = nn.Linear(hidden_dim, hidden_dim)
+        self.value = nn.Linear(hidden_dim, hidden_dim)
+
+        # Output projection
+        self.out = nn.Linear(hidden_dim, hidden_dim)
+
+        # Dropout for attention weights
+        self.dropout = nn.Dropout(dropout)
+
+        # Scaling factor for dot-product attention
+        self.scale = self.head_dim**-0.5
+
+    def forward(self, x, mask=None, return_attention=False):
+        """
+        Forward pass for multi-head attention.
+
+        Parameters:
+        -----------
+        x : torch.Tensor
+            Input tensor with shape [batch_size, seq_len, hidden_dim]
+            or [batch_size, num_nodes, hidden_dim]
+        mask : torch.Tensor, optional
+            Mask tensor with shape [batch_size, seq_len, seq_len]
+            or [batch_size, num_nodes, num_nodes]
+            1 indicates valid positions, 0 indicates positions to mask
+        return_attention : bool
+            Whether to return attention weights for visualization/analysis
+
+        Returns:
+        --------
+        torch.Tensor
+            Output tensor with shape [batch_size, seq_len, hidden_dim]
+            or [batch_size, num_nodes, hidden_dim]
+        torch.Tensor, optional
+            Attention weights if return_attention is True
+        """
+        batch_size = x.size(0)
+        seq_len = x.size(1)
+
+        # Linear projections and reshape for multi-head attention
+        # [batch_size, seq_len, hidden_dim] -> [batch_size, seq_len, num_heads, head_dim]
+        queries = self.query(x).view(batch_size, -1, self.num_heads, self.head_dim)
+        keys = self.key(x).view(batch_size, -1, self.num_heads, self.head_dim)
+        values = self.value(x).view(batch_size, -1, self.num_heads, self.head_dim)
+
+        # Transpose to [batch_size, num_heads, seq_len, head_dim]
+        queries = queries.transpose(1, 2)
+        keys = keys.transpose(1, 2)
+        values = values.transpose(1, 2)
+
+        # Compute scaled dot-product attention
+        # [batch_size, num_heads, seq_len, head_dim] @ [batch_size, num_heads, head_dim, seq_len]
+        # -> [batch_size, num_heads, seq_len, seq_len]
+        energy = torch.matmul(queries, keys.transpose(-2, -1)) * self.scale
+
+        # Apply mask if provided
+        if mask is not None:
+            # Expand mask for multi-head attention if needed
+            if len(mask.shape) == 3:  # [batch_size, seq_len, seq_len]
+                mask = mask.unsqueeze(1)  # [batch_size, 1, seq_len, seq_len]
+
+            # Apply mask (using -1e9 for numerical stability)
+            energy = energy.masked_fill(mask == 0, -1e9)
+
+        # Apply softmax to get attention weights
+        attention = torch.softmax(energy, dim=-1)
+
+        # Apply dropout to attention weights
+        attention = self.dropout(attention)
+
+        # Apply attention weights to values
+        # [batch_size, num_heads, seq_len, seq_len] @ [batch_size, num_heads, seq_len, head_dim]
+        # -> [batch_size, num_heads, seq_len, head_dim]
+        out = torch.matmul(attention, values)
+
+        # Reshape and concatenate heads
+        # [batch_size, num_heads, seq_len, head_dim] -> [batch_size, seq_len, num_heads, head_dim]
+        out = out.transpose(1, 2)
+        # [batch_size, seq_len, num_heads, head_dim] -> [batch_size, seq_len, hidden_dim]
+        out = out.contiguous().view(batch_size, -1, self.hidden_dim)
+
+        # Apply output projection
+        out = self.out(out)
+
+        if return_attention:
+            # Return both output and attention weights for visualization
+            return out, attention
+
+        return out
+
+
 class AttentionLayer(nn.Module):
     """
     Attention layer to focus on most relevant nodes and timestamps.
@@ -4558,9 +4779,17 @@ class TemporalGCN(nn.Module):
 
     def forward(self, x, adj, mask=None):
         """
-        x: Node features [batch_size, num_nodes, seq_len, input_dim]
+        Vectorized implementation of temporal GCN processing.
+
+        Parameters:
+        -----------
+        x: Input features [batch_size, num_nodes, seq_len, input_dim]
         adj: Adjacency matrix [num_nodes, num_nodes]
-        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim] or [batch_size, num_nodes, seq_len]
+        mask: Mask for valid values [batch_size, num_nodes, seq_len, input_dim]
+
+        Returns:
+        --------
+        Output features [batch_size, num_nodes, seq_len, hidden_dim]
         """
         batch_size, num_nodes, seq_len, features = x.size()
 
@@ -4574,53 +4803,48 @@ class TemporalGCN(nn.Module):
                 if features > 1:
                     mask = mask.expand(-1, -1, -1, features)
 
-        # Process each time step through the GCN layers
-        outputs = []
+        # Reshape to process all time steps at once
+        # [batch_size, num_nodes, seq_len, features] -> [batch_size * seq_len, num_nodes, features]
+        x_reshaped = (
+            x.permute(0, 2, 1, 3)
+            .contiguous()
+            .view(batch_size * seq_len, num_nodes, features)
+        )
 
-        for t in range(seq_len):
-            # Get features at this time step
-            x_t = x[:, :, t, :]  # [batch_size, num_nodes, features]
+        # If mask exists, reshape it the same way
+        if mask is not None:
+            mask_reshaped = (
+                mask.permute(0, 2, 1, 3)
+                .contiguous()
+                .view(batch_size * seq_len, num_nodes, features)
+            )
+        else:
+            mask_reshaped = None
 
-            # Create mask for this timestep
-            if mask is not None:
-                mask_t = mask[:, :, t, :]  # [batch_size, num_nodes, features]
-            else:
-                mask_t = None
+        # Process through GCN layers
+        h = x_reshaped
+        for gc_layer in self.gc_layers:
+            h = gc_layer(h, adj, mask_reshaped)
+            h = F.relu(h)  # Activation
+            h = self.dropout(h)  # Apply dropout
 
-            # Apply GCN layers
-            for gc_layer in self.gc_layers:
-                x_t = gc_layer(x_t, adj, mask_t)
-                x_t = F.relu(x_t)  # Activation
-                x_t = self.dropout(x_t)  # Apply dropout
-
-            # Store the processed features for this timestep
-            outputs.append(x_t)  # [batch_size, num_nodes, hidden_dim]
-
-        # Stack outputs along time dimension
-        # This gives us [batch_size, num_nodes, seq_len, hidden_dim]
-        temporal_features = torch.stack(outputs, dim=2)
+        # Reshape back to original dimensions
+        # [batch_size * seq_len, num_nodes, hidden_dim] -> [batch_size, seq_len, num_nodes, hidden_dim]
+        h = h.view(batch_size, seq_len, num_nodes, self.hidden_dim).permute(0, 2, 1, 3)
 
         # Process each node's temporal sequence with GRU
-        node_outputs = []
+        # Reshape for GRU: [batch_size, num_nodes, seq_len, hidden_dim] -> [batch_size * num_nodes, seq_len, hidden_dim]
+        gru_input = h.contiguous().view(
+            batch_size * num_nodes, seq_len, self.hidden_dim
+        )
 
-        for n in range(num_nodes):
-            # Get temporal data for this node across all batches
-            # Shape: [batch_size, seq_len, hidden_dim]
-            node_temporal_data = temporal_features[:, n, :, :]
+        # Pass through GRU
+        gru_output, _ = self.gru(gru_input)
 
-            # Pass through GRU
-            # Output shape: [batch_size, seq_len, hidden_dim]
-            node_gru_out, _ = self.gru(node_temporal_data)
-
-            # Add to collected outputs
-            node_outputs.append(node_gru_out)
-
-        # Stack back to full tensor
-        # Shape: [batch_size, num_nodes, seq_len, hidden_dim]
-        gru_output = torch.stack(node_outputs, dim=1)
+        # Reshape back: [batch_size * num_nodes, seq_len, hidden_dim] -> [batch_size, num_nodes, seq_len, hidden_dim]
+        gru_output = gru_output.view(batch_size, num_nodes, seq_len, self.hidden_dim)
 
         # Apply final FC layer for output
-        # Shape: [batch_size, num_nodes, seq_len, output_dim]
         out = self.fc_out(gru_output)
 
         # Apply mask if provided to ensure missing values stay missing
@@ -4636,9 +4860,207 @@ class TemporalGCN(nn.Module):
         return out
 
 
+class TemporalDecoder(nn.Module):
+    """
+    Temporal decoder for generating future predictions using an autoregressive approach.
+    """
+
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim,
+        output_dim,
+        horizon,
+        num_layers=1,
+        dropout=0.1,
+        use_attention=True,
+    ):
+        """
+        Initialize the temporal decoder.
+
+        Parameters:
+        -----------
+        input_dim : int
+            Dimension of input features (typically the encoder's hidden dimension)
+        hidden_dim : int
+            Dimension of decoder's hidden state
+        output_dim : int
+            Dimension of output features
+        horizon : int
+            Number of future time steps to predict
+        num_layers : int
+            Number of GRU layers
+        dropout : float
+            Dropout probability
+        use_attention : bool
+            Whether to use attention over encoder outputs
+        """
+        super(TemporalDecoder, self).__init__()
+
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.horizon = horizon
+        self.use_attention = use_attention
+        self.num_layers = num_layers  # Make sure this is stored
+
+        # GRU for processing sequential data
+        self.gru = nn.GRU(
+            input_size=input_dim,
+            hidden_size=hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0,
+        )
+
+        # Initialize attention mechanism if enabled
+        if use_attention:
+            # Either use simple attention
+            self.attention = nn.Linear(hidden_dim * 2, hidden_dim)
+            # Or use multi-head attention if you've implemented it
+            # self.attention = MultiHeadAttention(hidden_dim, num_heads=4)
+
+        # Output projection
+        self.fc_out = nn.Linear(hidden_dim, output_dim)
+
+        # Projection for input
+        self.input_proj = nn.Linear(output_dim, input_dim)
+
+        # Dropout for regularization
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(
+        self,
+        encoder_state,
+        encoder_outputs=None,
+        targets=None,
+        teacher_forcing_ratio=0.0,
+    ):
+        """
+        Forward pass for the temporal decoder.
+
+        Parameters:
+        -----------
+        encoder_state : torch.Tensor
+            Final encoder state [batch_size, num_nodes, hidden_dim] or
+            [num_layers, batch_size, num_nodes, hidden_dim]
+        encoder_outputs : torch.Tensor, optional
+            All encoder outputs for attention [batch_size, num_nodes, seq_len, hidden_dim]
+        targets : torch.Tensor, optional
+            Target values for teacher forcing [batch_size, num_nodes, horizon, output_dim]
+        teacher_forcing_ratio : float
+            Probability of using teacher forcing (0 = never, 1 = always)
+
+        Returns:
+        --------
+        torch.Tensor
+            Predicted output for future time steps [batch_size, num_nodes, horizon, output_dim]
+        """
+        # Handle different possible shapes of encoder_state
+        if len(encoder_state.shape) == 3:  # [batch_size, num_nodes, hidden_dim]
+            batch_size, num_nodes, _ = encoder_state.size()
+            # Reshape to match GRU's expected hidden state format
+            hidden = encoder_state.view(batch_size * num_nodes, -1)
+            hidden = hidden.unsqueeze(0).repeat(self.num_layers, 1, 1)
+        elif (
+            len(encoder_state.shape) == 4
+        ):  # [num_layers, batch_size, num_nodes, hidden_dim]
+            num_layers, batch_size, num_nodes, _ = encoder_state.size()
+            hidden = encoder_state.view(num_layers, batch_size * num_nodes, -1)
+        else:
+            raise ValueError(f"Unexpected encoder_state shape: {encoder_state.shape}")
+
+        device = encoder_state.device
+
+        # Initialize output tensor
+        outputs = torch.zeros(
+            batch_size, num_nodes, self.horizon, self.output_dim, device=device
+        )
+
+        # Initialize decoder input (zeros)
+        decoder_input = torch.zeros(
+            batch_size * num_nodes, 1, self.input_dim, device=device
+        )
+
+        # Auto-regressive decoding
+        for t in range(self.horizon):
+            # GRU forward pass (all nodes at once)
+            output, hidden = self.gru(decoder_input, hidden)
+
+            # Apply attention if enabled and encoder outputs are provided
+            if (
+                self.use_attention
+                and encoder_outputs is not None
+                and hasattr(self, "attention")
+            ):
+                # Reshape encoder outputs for attention
+                nodes_encoder_outputs = encoder_outputs.view(
+                    batch_size * num_nodes, -1, self.hidden_dim
+                )
+
+                # How to apply attention depends on the type of attention mechanism
+                # Simple attention using linear layer
+                if isinstance(self.attention, nn.Linear):
+                    # Concatenate current output with each encoder output
+                    # This is a simple form of attention - more sophisticated
+                    # implementations would use query-key-value calculations
+                    seq_len = nodes_encoder_outputs.size(1)
+                    output_expanded = output.repeat(1, seq_len, 1)
+                    attention_input = torch.cat(
+                        [output_expanded, nodes_encoder_outputs], dim=2
+                    )
+                    attention_weights = torch.softmax(
+                        self.attention(attention_input), dim=1
+                    )
+                    context = torch.sum(
+                        attention_weights * nodes_encoder_outputs, dim=1, keepdim=True
+                    )
+                    # Combine attention context with GRU output
+                    output = output + context
+                # If using MultiHeadAttention
+                else:
+                    # Assume self.attention is a module with a compatible interface
+                    context = self.attention(output, nodes_encoder_outputs)
+                    output = output + context
+
+            # Apply dropout
+            output = self.dropout(output)
+
+            # Generate prediction for this time step
+            prediction = self.fc_out(
+                output.squeeze(1)
+            )  # [batch_size * num_nodes, output_dim]
+
+            # Reshape prediction back to [batch_size, num_nodes, output_dim]
+            prediction = prediction.view(batch_size, num_nodes, self.output_dim)
+
+            # Store prediction
+            outputs[:, :, t, :] = prediction
+
+            # Prepare input for next time step
+            if targets is not None and torch.rand(1).item() < teacher_forcing_ratio:
+                # Teacher forcing: use ground truth as input
+                next_input = self.input_proj(targets[:, :, t, :])
+                # Reshape for GRU input
+                decoder_input = next_input.view(
+                    batch_size * num_nodes, 1, self.input_dim
+                )
+            else:
+                # Autoregressive: use own prediction as input
+                next_input = self.input_proj(prediction)
+                # Reshape for GRU input
+                decoder_input = next_input.view(
+                    batch_size * num_nodes, 1, self.input_dim
+                )
+
+        return outputs
+
+
 class STGNN(nn.Module):
     """
-    Spatio-Temporal Graph Neural Network with attention for traffic prediction
+    Spatio-Temporal Graph Neural Network with attention for traffic prediction.
+
+    Updated with vectorized processing, multi-head attention, and explicit decoder.
     """
 
     def __init__(self, config):
@@ -4658,13 +5080,14 @@ class STGNN(nn.Module):
         output_dim = config.model.output_dim
         horizon = config.data.general.horizon
         dropout = config.model.dropout
-        decoder_layers = (
-            config.model.decoder_layers
-        )  # This should be required in config
+        num_layers = config.model.num_layers
+        num_gc_layers = config.model.num_gc_layers
+        decoder_layers = config.model.decoder_layers
 
+        # Store parameters
         self.horizon = horizon
 
-        # Encoder: process historical data
+        # Encoder: using the improved TemporalGCN
         self.encoder = TemporalGCN(
             config=config,
             input_dim=input_dim,
@@ -4672,24 +5095,37 @@ class STGNN(nn.Module):
             output_dim=hidden_dim,
         )
 
-        if decoder_layers == 1:
-            # If only one layer, use a simple linear layer
-            self.decoder = nn.Linear(hidden_dim, output_dim * horizon)
-        else:
-            decoder_layers_list = []
-            decoder_layers_list.append(nn.Linear(hidden_dim, hidden_dim))
-            decoder_layers_list.append(nn.ReLU())
-            decoder_layers_list.append(nn.Dropout(dropout))
-            decoder_layers_list.append(nn.Linear(hidden_dim, output_dim * horizon))
-            self.decoder = nn.Sequential(*decoder_layers_list)
+        # Attention for node interaction
+        self.node_attention = MultiHeadAttention(
+            hidden_dim=hidden_dim,
+            num_heads=config.model.attention_heads,
+            dropout=dropout,
+        )
 
-    def forward(self, x, adj, x_mask=None):
+        # Decoder: using the new explicit TemporalDecoder
+        self.decoder = TemporalDecoder(
+            input_dim=hidden_dim,
+            hidden_dim=hidden_dim,
+            output_dim=output_dim,
+            horizon=horizon,
+            num_layers=decoder_layers,
+            dropout=dropout,
+            use_attention=True,
+        )
+
+    def forward(self, x, adj, x_mask=None, teacher_forcing_ratio=0.0):
         """
+        Forward pass for STGNN with encoder-decoder architecture.
+
+        Parameters:
+        -----------
         x: Input features [batch_size, num_nodes, seq_len, input_dim]
         adj: Adjacency matrix [num_nodes, num_nodes]
         x_mask: Mask for input [batch_size, num_nodes, seq_len, input_dim]
+        teacher_forcing_ratio: Probability of using teacher forcing during training
 
         Returns:
+        --------
         Predictions [batch_size, num_nodes, horizon, output_dim]
         """
         # Check for proper shape
@@ -4697,21 +5133,28 @@ class STGNN(nn.Module):
 
         batch_size, num_nodes, seq_len, _ = x.size()
 
-        # Encode the input sequence
+        # Encode the input sequence using the improved TemporalGCN
         # Output shape: [batch_size, num_nodes, seq_len, hidden_dim]
-        encoded = self.encoder(x, adj, x_mask)
+        encoder_outputs = self.encoder(x, adj, x_mask)
 
-        # Use the last time step for each node to predict future
-        # Shape: [batch_size, num_nodes, hidden_dim]
-        last_hidden = encoded[:, :, -1, :]
+        # Use the last hidden state as the context for each node
+        # [batch_size, num_nodes, hidden_dim]
+        last_hidden = encoder_outputs[:, :, -1, :]
 
-        # Predict future values
-        # Shape: [batch_size, num_nodes, output_dim * horizon]
-        future_flat = self.decoder(last_hidden)
+        # Apply node attention to capture inter-node dependencies
+        # [batch_size, num_nodes, hidden_dim]
+        node_context = self.node_attention(last_hidden)
 
-        # Reshape to separate time steps
-        # Shape: [batch_size, num_nodes, horizon, output_dim]
-        predictions = future_flat.reshape(batch_size, num_nodes, self.horizon, -1)
+        # No need to reshape - pass encoder state directly
+        # The decoder will handle the reshaping correctly
+
+        # Generate future predictions using the decoder
+        # [batch_size, num_nodes, horizon, output_dim]
+        predictions = self.decoder(
+            encoder_state=node_context,  # Pass as [batch_size, num_nodes, hidden_dim]
+            encoder_outputs=encoder_outputs,
+            teacher_forcing_ratio=teacher_forcing_ratio,
+        )
 
         return predictions
 
@@ -4868,6 +5311,7 @@ def create_stgnn_model(config):
     logger.info(f"  num_gc_layers: {config.model.num_gc_layers}")
     logger.info(f"  decoder_layers: {config.model.decoder_layers}")
     logger.info(f"  dropout: {config.model.dropout}")
+    logger.info(f"  attention_heads: {config.model.attention_heads}")
 
     # Create model with config
     model = STGNN(config=config)
@@ -6819,18 +7263,27 @@ async def fetch_recent_data_for_validation(config):
     dict
         Dictionary containing processed data for validation
     """
-    # Create an API data source for the real-time data
-    data_source = APIDataSource()
+    try:
+        # Create an API data source for the real-time data
+        data_source = APIDataSource()
 
-    # Create processor explicitly for prediction mode
-    processor = DataProcessorFactory.create_processor(
-        mode=ProcessorMode.PREDICTION,
-        config=config,
-        data_source=data_source,
-    )
+        # Create processor explicitly for prediction mode
+        processor = DataProcessorFactory.create_processor(
+            mode=ProcessorMode.PREDICTION,
+            config=config,
+            data_source=data_source,
+        )
 
-    # Process data using prediction-specific logic
-    return await processor.process_data()
+        # Process data using prediction-specific logic
+        result = await processor.process_data()
+
+        if result is None:
+            raise ValueError("Data processing returned no results. Check logs for details.")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching or processing data: {str(e)}")
+        raise
 
 
 def predict_with_model(model, data_package, config):
@@ -7059,7 +7512,7 @@ from gnn_package.src import preprocessing
 from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
 from gnn_package.config import get_config
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
-from gnn_package.src.data.data_sources import FileDataSource, DataSourceConnectionError
+from gnn_package.src.data.data_sources import FileDataSource, DataSourceConnectionError, APIDataSource
 from gnn_package.src.utils.data_utils import validate_data_package
 from gnn_package.src.utils.config_utils import save_model_with_config
 
@@ -7156,8 +7609,8 @@ async def preprocess_data(
         print(f"Using data file: {data_file}")
         data_source = FileDataSource(data_file)
     else:
-        print("WARNING: No data or data_file provided")
-        data_source = None  # Will be created by factory if needed
+        print("No data or data_file provided, using API data source")
+        data_source = APIDataSource()  # This will use dates from config
 
     # Create processor using factory
     print("Creating data processor...")
@@ -10999,6 +11452,7 @@ class VisualizationManager:
         predicted,
         title=None,
         ax=None,
+        y_limits=None,
         show_metrics=True,
         **kwargs,
     ):
@@ -11046,6 +11500,11 @@ class VisualizationManager:
         # Apply title
         if title:
             ax.set_title(title)
+
+        # Set y-axis limits if provided
+        if y_limits is not None:
+            global_min, global_max = y_limits
+            ax.set_ylim(global_min, global_max)
 
         # Add metrics if requested
         if show_metrics and len(actual) > 0 and len(predicted) > 0:
@@ -11172,6 +11631,47 @@ class VisualizationManager:
             axes = np.array([axes])
         axes = axes.flatten()
 
+        global_min = float("inf")
+        global_max = float("-inf")
+
+        for sensor_id in unique_sensors:
+                # Get min and max values for both predictions and actuals
+
+                sensor_data = predictions_df[predictions_df["node_id"] == sensor_id]
+
+                sensor_data = sensor_data[
+                    (sensor_data["prediction"] > -10)
+                    & (sensor_data["actual"] > -10)
+                ]
+
+                if len(sensor_data) > 0:
+                    # Update global min and max if we have valid data
+                    if 'prediction' in sensor_data.columns and 'actual' in sensor_data.columns:
+                        predictions_min = sensor_data["prediction"].min()
+                        predictions_max = sensor_data["prediction"].max()
+
+                        # Handle NaN values safely
+                        if pd.notna(predictions_min) and pd.notna(predictions_max):
+                            # Get min/max for both predictions and actuals
+                            actuals = sensor_data["actual"].dropna()
+                            if not actuals.empty:
+                                actuals_min = actuals.min()
+                                actuals_max = actuals.max()
+
+                                # Update global min and max
+                                global_min = min(global_min, predictions_min, actuals_min)
+                                global_max = max(global_max, predictions_max, actuals_max)
+
+        # Handle case where we didn't find any valid data
+        if global_min == float('inf') or global_max == float('-inf'):
+            global_min = 0
+            global_max = 1
+
+        # Add a small buffer to the limits (5% padding)
+        y_range = global_max - global_min
+        global_min = global_min - 0.05 * y_range if y_range > 0 else global_min - 1
+        global_max = global_max + 0.05 * y_range if y_range > 0 else global_max + 1
+
         # Plot each sensor
         for i, sensor_id in enumerate(unique_sensors):
             if i >= len(axes):
@@ -11191,6 +11691,7 @@ class VisualizationManager:
                     sensor_data["prediction"],
                     title=f"{sensor_name}",
                     ax=axes[i],
+                    y_limits=(global_min, global_max),
                     show_metrics=True,
                 )
             else:

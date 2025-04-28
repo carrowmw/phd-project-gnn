@@ -98,7 +98,6 @@ async def run_prediction_service(
             config=prediction_config,
             output_file=output_file,
             plot=False,  # Disable internal plotting, we'll handle it separately
-            device=device,
         )
 
         # Check for valid predictions
@@ -126,9 +125,7 @@ async def run_prediction_service(
         # Generate visualizations if requested
         viz_paths = {}
         if visualize:
-            viz_paths = _generate_visualizations(
-                predictions_df, predictions, output_dir, timestamp
-            )
+            viz_paths = _generate_visualizations(predictions_df, output_dir, timestamp)
 
         # Cache results if requested
         if cache_results:
@@ -165,20 +162,23 @@ def _setup_prediction_config(model_path):
 
     if config_path.exists():
         logger.info(f"Loading configuration from model directory: {config_path}")
-        prediction_config = ExperimentConfig(str(config_path), is_prediction_mode=True)
+        # IMPORTANT: Create a fresh config directly from file WITHOUT
+        # using get_config() which might return a shared singleton
+        config = ExperimentConfig(str(config_path), is_prediction_mode=True)
+
+        # Don't use create_prediction_config() which might use the global config
+        # Instead, manually apply the minimal changes needed for prediction
+        config.data.training.use_cross_validation = False
+        config.data.prediction.days_back = max(1, config.data.prediction.days_back)
+
+        logger.info(f"Using configuration from model with prediction mode enabled")
+        return config
     else:
         logger.info("Creating default prediction configuration")
-        prediction_config = create_prediction_config()
+        # Create a fresh config without relying on the global instance
+        default_config = ExperimentConfig("config.yml", is_prediction_mode=True)
+        return default_config
 
-    # Make sure days_back is set to a reasonable value for prediction
-    if (
-        not hasattr(prediction_config.data.prediction, "days_back")
-        or prediction_config.data.prediction.days_back < 1
-    ):
-        logger.info("Setting days_back to default (7)")
-        prediction_config.data.prediction.days_back = 7
-
-    return prediction_config
 
 
 def _calculate_prediction_metrics(predictions_df):

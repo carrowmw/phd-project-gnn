@@ -71,21 +71,6 @@ async def main():
         output_dir = os.path.join("experiments", experiment_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    # Set data file
-    if args.data:
-        raw_file_path = args.data
-    else:
-        raw_file_name = "test_data_1wk.pkl"
-        raw_dir = paths.RAW_TIMESERIES_DIR
-        raw_file_path = os.path.join(raw_dir, raw_file_name)
-
-    print(f"Using data file: {raw_file_path}")
-    runtime_stats["data_file"] = raw_file_path
-
-    # Preprocess data
-    preprocessed_file_name = f"data_loaders_{os.path.basename(raw_file_path)}"
-    preprocessed_path = os.path.join(output_dir, preprocessed_file_name)
-
     # Preprocess data
     print("Preprocessing data...")
     preprocess_start = datetime.now()
@@ -93,10 +78,28 @@ async def main():
     # Before preprocessing
     print("\n===== Starting preprocessing =====")
 
-    # In main function
-    data_package = await training.preprocess_data(
-        data_file=raw_file_path, config=config
-    )
+    # Set data file or use API based on arguments
+    if args.data:
+        print(f"Using data file: {args.data}")
+        data_package = await training.preprocess_data(
+            data_file=args.data,
+            config=config,
+        )
+    else:
+        print(f"No data file specified, fetching data from API using dates from config:")
+        print(f"  Start date: {config.data.general.start_date}")
+        print(f"  End date: {config.data.general.end_date}")
+        data_package = await training.preprocess_data(
+            config=config,  # Only pass config, no data_file
+        )
+
+    runtime_stats["data_file"] = args.data if args.data else "API"
+
+    # Preprocess data
+    preprocessed_file_name = f"data_loaders_{os.path.basename(args.data.split('/')[-1] if args.data else 'API')}_{timestamp}.pkl"
+    preprocessed_path = os.path.join(output_dir, preprocessed_file_name)
+
+
 
     # After preprocessing
     print("\n===== Preprocessing completed =====")

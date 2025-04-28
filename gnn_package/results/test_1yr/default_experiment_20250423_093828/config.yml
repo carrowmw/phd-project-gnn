@@ -1,15 +1,17 @@
 data:
   general:
+    end_date: "2024-02-25 00:00:00"
+    start_date: "2024-02-18 00:00:00"
     batch_size: 32
     bbox_coords:
-    - - -1.65327
-      - 54.93188
-    - - -1.54993
-      - 54.93188
-    - - -1.54993
-      - 55.02084
-    - - -1.65327
-      - 55.02084
+      - - -1.65327
+        - 54.93188
+      - - -1.54993
+        - 54.93188
+      - - -1.54993
+        - 55.02084
+      - - -1.65327
+        - 55.02084
     bbox_crs: EPSG:4326
     buffer_factor: 1.0
     custom_filter: '["highway"~"footway|path|pedestrian|steps|corridor|track|service|living_street|residential|unclassified"]["area"!~"yes"]["access"!~"private"]'
@@ -24,7 +26,7 @@ data:
     place_name: Newcastle upon Tyne, UK
     resampling_frequency: 15min
     road_network_crs: EPSG:27700
-    sensor_id_prefix: '1'
+    sensor_id_prefix: "1"
     sigma_squared: 0.1
     standardize: true
     stride: 1
@@ -35,19 +37,17 @@ data:
   training:
     cutoff_date: null
     cv_split_index: -1
-    end_date: '2024-02-25 00:00:00'
     n_splits: 3
     split_method: rolling_window
-    start_date: '2024-02-18 00:00:00'
     train_ratio: 0.8
     use_cross_validation: true
 experiment:
   description: Traffic prediction using spatial-temporal GNN
   name: Default Traffic Prediction Experiment
   tags:
-  - traffic
-  - gnn
-  - prediction
+    - traffic
+    - gnn
+    - prediction
   version: 1.0.0
 model:
   attention_heads: 1

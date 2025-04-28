@@ -8,7 +8,7 @@ from gnn_package.src import preprocessing
 from gnn_package.src.models.stgnn import create_stgnn_model, STGNNTrainer
 from gnn_package.config import get_config
 from gnn_package.src.data.processors import DataProcessorFactory, ProcessorMode
-from gnn_package.src.data.data_sources import FileDataSource, DataSourceConnectionError
+from gnn_package.src.data.data_sources import FileDataSource, DataSourceConnectionError, APIDataSource
 from gnn_package.src.utils.data_utils import validate_data_package
 from gnn_package.src.utils.config_utils import save_model_with_config
 
@@ -105,8 +105,8 @@ async def preprocess_data(
         print(f"Using data file: {data_file}")
         data_source = FileDataSource(data_file)
     else:
-        print("WARNING: No data or data_file provided")
-        data_source = None  # Will be created by factory if needed
+        print("No data or data_file provided, using API data source")
+        data_source = APIDataSource()  # This will use dates from config
 
     # Create processor using factory
     print("Creating data processor...")

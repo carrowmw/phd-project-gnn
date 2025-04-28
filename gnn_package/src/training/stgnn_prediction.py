@@ -34,18 +34,27 @@ async def fetch_recent_data_for_validation(config):
     dict
         Dictionary containing processed data for validation
     """
-    # Create an API data source for the real-time data
-    data_source = APIDataSource()
+    try:
+        # Create an API data source for the real-time data
+        data_source = APIDataSource()
 
-    # Create processor explicitly for prediction mode
-    processor = DataProcessorFactory.create_processor(
-        mode=ProcessorMode.PREDICTION,
-        config=config,
-        data_source=data_source,
-    )
+        # Create processor explicitly for prediction mode
+        processor = DataProcessorFactory.create_processor(
+            mode=ProcessorMode.PREDICTION,
+            config=config,
+            data_source=data_source,
+        )
 
-    # Process data using prediction-specific logic
-    return await processor.process_data()
+        # Process data using prediction-specific logic
+        result = await processor.process_data()
+
+        if result is None:
+            raise ValueError("Data processing returned no results. Check logs for details.")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching or processing data: {str(e)}")
+        raise
 
 
 def predict_with_model(model, data_package, config):

@@ -145,6 +145,8 @@ class ConfigurationManager:
         # Default data configuration
         data = {
             "general": {
+                "start_date": None,
+                "end_date": None,
                 "window_size": 24,
                 "horizon": 6,
                 "stride": 1,
@@ -177,8 +179,6 @@ class ConfigurationManager:
                 '["area"!~"yes"]["access"!~"private"]',
             },
             "training": {
-                "start_date": "2024-02-18 00:00:00",
-                "end_date": "2024-02-25 00:00:00",
                 "n_splits": 3,
                 "use_cross_validation": True,
                 "split_method": "rolling_window",
@@ -202,7 +202,7 @@ class ConfigurationManager:
             "decoder_layers": 2,
             "use_self_loops": True,
             "gcn_normalization": "symmetric",
-            "attention_heads": 1,
+            "attention_heads": 4,
             "layer_norm": False,
         }
 

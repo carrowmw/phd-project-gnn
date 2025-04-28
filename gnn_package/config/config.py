@@ -68,6 +68,8 @@ class GeneralDataConfig:
     """
 
     # Time series-related parameters
+    start_date: str = None
+    end_date: str = None
     window_size: int = 24
     horizon: int = 6
     stride: int = 1
@@ -115,6 +117,19 @@ class GeneralDataConfig:
             List[str]: List of validation errors, empty if valid
         """
         errors = []
+
+        # Validate dates
+        try:
+            if self.start_date:
+                pd.to_datetime(self.start_date)
+        except ValueError:
+            errors.append(f"Invalid start_date format: {self.start_date}")
+
+        try:
+            if self.end_date:
+                pd.to_datetime(self.end_date)
+        except ValueError:
+            errors.append(f"Invalid end_date format: {self.end_date}")
 
         # Validate numeric parameters
         if self.window_size <= 0:
@@ -167,8 +182,6 @@ class TrainingDataConfig:
         cv_split_index (int): Index of the split to use for cross-validation
     """
 
-    start_date: str = "2024-02-18 00:00:00"
-    end_date: str = "2024-02-25 00:00:00"
     n_splits: int = 3
     use_cross_validation: bool = True
     split_method: str = "rolling_window"  # Options: "rolling_window", "time_based"
@@ -184,19 +197,6 @@ class TrainingDataConfig:
             List[str]: List of validation errors, empty if valid
         """
         errors = []
-
-        # Validate dates
-        try:
-            if self.start_date:
-                pd.to_datetime(self.start_date)
-        except ValueError:
-            errors.append(f"Invalid start_date format: {self.start_date}")
-
-        try:
-            if self.end_date:
-                pd.to_datetime(self.end_date)
-        except ValueError:
-            errors.append(f"Invalid end_date format: {self.end_date}")
 
         if self.cutoff_date:
             try:
@@ -274,10 +274,11 @@ class DataConfig:
         errors.extend(self.prediction.validate())
 
         # Validate relationships between configs
-        if pd.to_datetime(self.training.start_date) >= pd.to_datetime(
-            self.training.end_date
-        ):
-            errors.append("training.start_date must be before training.end_date")
+        if self.general.start_date and self.general.end_date:
+            if pd.to_datetime(self.general.start_date) >= pd.to_datetime(
+                self.general.end_date
+            ):
+                errors.append("general.start_date must be before general.end_date")
 
         return errors
 

@@ -1,9 +1,12 @@
 # gnn_package/src/preprocessing/dataloaders.py
 
+import logging
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 
+# Set up logging
+logger = logging.getLogger(__name__)
 
 class SpatioTemporalDataset(Dataset):
     def __init__(
@@ -176,9 +179,20 @@ def create_dataloader(
     """
     Create a DataLoader that can handle varying numbers of windows per sensor.
     """
+    # Check if we have any data to work with
+    if not X_by_sensor or all(len(windows) == 0 for windows in X_by_sensor.values()):
+        logger.error("No valid windows to create dataset - check data or date range")
+        raise ValueError("No valid windows available to create dataset")
+
     dataset = SpatioTemporalDataset(
         X_by_sensor, masks_by_sensor, adj_matrix, node_ids, window_size, horizon
     )
+
+    # Prevent creating dataloader with empty dataset
+    if len(dataset.sample_indices) == 0:
+        logger.error("Dataset has no samples - check date range and data availability")
+        raise ValueError("Dataset created with no samples")
+
 
     dataloader = DataLoader(
         dataset,

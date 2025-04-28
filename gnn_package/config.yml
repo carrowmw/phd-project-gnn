@@ -13,9 +13,10 @@ data:
     bbox_crs: EPSG:4326
     buffer_factor: 1.0
     custom_filter: '["highway"~"footway|path|pedestrian|steps|corridor|track|service|living_street|residential|unclassified"]["area"!~"yes"]["access"!~"private"]'
+    end_date: null
     epsilon: 0.5
     gap_threshold_minutes: 15
-    graph_prefix: 25022025_test
+    graph_prefix: default_graph
     horizon: 6
     max_distance: 100.0
     missing_value: -999.0
@@ -27,18 +28,17 @@ data:
     sensor_id_prefix: '1'
     sigma_squared: 0.1
     standardize: true
+    start_date: null
     stride: 1
     tolerance_decimal_places: 6
     window_size: 24
   prediction:
-    days_back: 1
+    days_back: 14
   training:
     cutoff_date: null
     cv_split_index: -1
-    end_date: '2024-02-25 00:00:00'
     n_splits: 3
     split_method: rolling_window
-    start_date: '2024-02-18 00:00:00'
     train_ratio: 0.8
     use_cross_validation: true
 experiment:
@@ -50,18 +50,23 @@ experiment:
   - prediction
   version: 1.0.0
 model:
+  attention_heads: 4
   decoder_layers: 2
   dropout: 0.2
+  gcn_normalization: symmetric
   hidden_dim: 64
   input_dim: 1
+  layer_norm: false
   num_gc_layers: 2
   num_layers: 2
   output_dim: 1
+  use_self_loops: true
 paths:
   data_cache: data/cache
   model_save_path: models
   results_dir: results
 training:
+  device: null
   learning_rate: 0.001
   num_epochs: 50
   patience: 10

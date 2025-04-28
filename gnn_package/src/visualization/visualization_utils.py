@@ -145,6 +145,7 @@ class VisualizationManager:
         predicted,
         title=None,
         ax=None,
+        y_limits=None,
         show_metrics=True,
         **kwargs,
     ):
@@ -192,6 +193,11 @@ class VisualizationManager:
         # Apply title
         if title:
             ax.set_title(title)
+
+        # Set y-axis limits if provided
+        if y_limits is not None:
+            global_min, global_max = y_limits
+            ax.set_ylim(global_min, global_max)
 
         # Add metrics if requested
         if show_metrics and len(actual) > 0 and len(predicted) > 0:
@@ -318,6 +324,47 @@ class VisualizationManager:
             axes = np.array([axes])
         axes = axes.flatten()
 
+        global_min = float("inf")
+        global_max = float("-inf")
+
+        for sensor_id in unique_sensors:
+                # Get min and max values for both predictions and actuals
+
+                sensor_data = predictions_df[predictions_df["node_id"] == sensor_id]
+
+                sensor_data = sensor_data[
+                    (sensor_data["prediction"] > -10)
+                    & (sensor_data["actual"] > -10)
+                ]
+
+                if len(sensor_data) > 0:
+                    # Update global min and max if we have valid data
+                    if 'prediction' in sensor_data.columns and 'actual' in sensor_data.columns:
+                        predictions_min = sensor_data["prediction"].min()
+                        predictions_max = sensor_data["prediction"].max()
+
+                        # Handle NaN values safely
+                        if pd.notna(predictions_min) and pd.notna(predictions_max):
+                            # Get min/max for both predictions and actuals
+                            actuals = sensor_data["actual"].dropna()
+                            if not actuals.empty:
+                                actuals_min = actuals.min()
+                                actuals_max = actuals.max()
+
+                                # Update global min and max
+                                global_min = min(global_min, predictions_min, actuals_min)
+                                global_max = max(global_max, predictions_max, actuals_max)
+
+        # Handle case where we didn't find any valid data
+        if global_min == float('inf') or global_max == float('-inf'):
+            global_min = 0
+            global_max = 1
+
+        # Add a small buffer to the limits (5% padding)
+        y_range = global_max - global_min
+        global_min = global_min - 0.05 * y_range if y_range > 0 else global_min - 1
+        global_max = global_max + 0.05 * y_range if y_range > 0 else global_max + 1
+
         # Plot each sensor
         for i, sensor_id in enumerate(unique_sensors):
             if i >= len(axes):
@@ -337,6 +384,7 @@ class VisualizationManager:
                     sensor_data["prediction"],
                     title=f"{sensor_name}",
                     ax=axes[i],
+                    y_limits=(global_min, global_max),
                     show_metrics=True,
                 )
             else:

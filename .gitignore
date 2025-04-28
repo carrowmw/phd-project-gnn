@@ -8,3 +8,4 @@ __pycache__/
 *.gnn_package
 *.pth
 *.pkl
+*.txt

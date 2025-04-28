@@ -245,31 +245,27 @@ class APIDataSource(DataSource):
     async def _get_date_range_params(self, config: ExperimentConfig) -> DateRangeParams:
         """
         Create date range parameters for the API request.
-
-        Parameters:
-        -----------
-        config : ExperimentConfig
-            Configuration object containing date range parameters
-
-        Returns:
-        --------
-        DateRangeParams
-            Date range parameters for the API request
         """
-        # Get days back from config
-        days_back = config.data.prediction.days_back
+        # Use training dates if in training mode, otherwise use days_back
+        if config.is_prediction_mode:
+            # Prediction mode uses days_back
+            days_back = config.data.prediction.days_back
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=days_back)
+            logger.info(f"Fetching data from {start_date} to {end_date} ({days_back} days)")
+            max_days_range = days_back + 1
+        else:
+            # Training mode uses configured dates
+            start_date = pd.to_datetime(config.data.general.start_date)
+            end_date = pd.to_datetime(config.data.general.end_date)
+            days_diff = (end_date - start_date).days
+            logger.info(f"Fetching data from {start_date} to {end_date} ({days_diff} days)")
+            max_days_range = days_diff + 1
 
-        # Calculate date range
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days_back)
-
-        logger.info(f"Fetching data from {start_date} to {end_date} ({days_back} days)")
-
-        # Create date range parameters
         return DateRangeParams(
             start_date=start_date,
             end_date=end_date,
-            max_date_range=timedelta(days=days_back + 1),
+            max_date_range=timedelta(days=max_days_range),  # Ensure adequate range
         )
 
     async def _fetch_data_from_api(self, date_range: DateRangeParams) -> Any:
@@ -293,7 +289,7 @@ class APIDataSource(DataSource):
         """
         try:
             logger.info(f"Fetching data from API")
-            return await self.client.get_traffic_data(date_range_params=date_range)
+            return await self.client.get_traffic_data(date_range=date_range)
         except Exception as e:
             logger.error(f"Error connecting to API: {str(e)}")
             raise DataSourceConnectionError(
