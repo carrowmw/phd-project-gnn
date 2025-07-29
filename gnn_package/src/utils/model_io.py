@@ -8,9 +8,11 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple, Union, Callable
 
+from gnn_package.src.models.factory import create_model
 from gnn_package.config import ExperimentConfig, get_config
 from gnn_package.src.models.registry import ModelRegistry
 from gnn_package.src.utils.device_utils import get_device
+from gnn_package.src.utils.device_utils import get_device_from_config
 from gnn_package.src.utils.exceptions import ModelLoadError, ModelCreationError
 
 logger = logging.getLogger(__name__)
@@ -23,39 +25,40 @@ def load_model(
     device: Optional[Union[str, torch.device]] = None,
     strict: bool = True,
     model_creator: Optional[Callable] = None,
+    is_prediction_mode: bool = False
 ) -> Tuple[torch.nn.Module, Dict[str, Any]]:
     """
     Load a model with comprehensive error handling and device management.
 
-    This is the central model loading function that should be used throughout the codebase.
-
     Parameters:
     -----------
     model_path : str or Path
-        Path to the model file (.pth)
+        Path to the model file
     model_type : str, optional
-        Type of model to load (used with ModelRegistry)
+        Type of model to load (e.g., "stgnn") - inferred from metadata if not provided
     config : ExperimentConfig, optional
-        Configuration to use. If None, attempts to find config in model directory.
+        Configuration object. If None, attempts to find config in model directory
     device : str or torch.device, optional
-        Device to load the model onto. If None, determined from config.
+        Device to load the model on - if None, determined from config or auto-detected
     strict : bool
-        Whether to strictly enforce that the keys in state_dict match model
-    model_creator : Callable, optional
-        Function to create the model. If provided, overrides model_type.
+        Whether to strictly enforce all keys matching when loading state dict
+    model_creator : callable, optional
+        Custom function to create the model instance
+    is_prediction_mode : bool
+        Whether the model is being loaded for prediction (vs. training/evaluation)
 
     Returns:
     --------
-    Tuple[torch.nn.Module, Dict[str, Any]]
-        The loaded model and metadata dictionary
+    tuple
+        (loaded_model, metadata_dict)
 
     Raises:
     -------
     ModelLoadError
-        If the model cannot be loaded
+        If there's an error loading the model
+    FileNotFoundError
+        If model file or required configuration is not found
     """
-    from gnn_package.src.utils.exceptions import safe_execute
-
     model_path = Path(model_path)
 
     # Check if model exists
@@ -81,34 +84,41 @@ def load_model(
         model_type = metadata["model_type"]
         logger.info(f"Using model type from metadata: {model_type}")
 
-    # Try to load config if not provided
+    # If no config provided and in prediction mode, strictly require a config file
     if config is None:
         config_path = model_dir / "config.yml"
+
         if config_path.exists():
             try:
-                config = ExperimentConfig(config_path)
+                # Create a new configuration with prediction mode if needed
+                config = ExperimentConfig(str(config_path), is_prediction_mode=is_prediction_mode)
                 logger.info(f"Loaded configuration from: {config_path}")
             except Exception as e:
                 logger.warning(f"Failed to load config from {config_path}: {str(e)}")
-                config = get_config()
+                if is_prediction_mode:
+                    raise FileNotFoundError(f"Failed to load valid configuration from {config_path} for prediction")
+                # Otherwise, create a new default config as fallback
+                config = ExperimentConfig("config.yml")
         else:
-            config = get_config()
-            logger.info("Using global configuration")
+            # In prediction mode, we require a valid config
+            if is_prediction_mode:
+                raise FileNotFoundError(
+                    f"No configuration file found at {config_path}. "
+                    f"Please provide a configuration file for prediction."
+                )
+            # Otherwise, use default
+            config = ExperimentConfig("config.yml")
+            logger.info("Using default configuration")
 
     # Create model
     try:
-        if model_creator is not None:
-            logger.info("Creating model with provided creator function")
-            model = model_creator(config=config)
-        elif model_type is not None:
-            logger.info(f"Creating model of type: {model_type}")
+        if model_type is not None:
+            logger.debug(f"Creating model of type: {model_type}")
             model = ModelRegistry.create_model(model_type, config=config)
         else:
-            # Default to STGNN if nothing else specified
-            from gnn_package.src.models.stgnn import create_stgnn_model
-
-            logger.info("Creating default STGNN model")
-            model = create_stgnn_model(config=config)
+            # Use factory function
+            model = create_model(config)
+            logger.debug(f"Created model using factory function with architecture: {config.model.architecture}")
     except Exception as e:
         raise ModelCreationError(f"Failed to create model: {str(e)}") from e
 
@@ -123,8 +133,6 @@ def load_model(
 
     # Set device
     if device is None:
-        from gnn_package.src.utils.device_utils import get_device_from_config
-
         device = get_device_from_config(config)
     else:
         device = get_device(device) if isinstance(device, str) else device
@@ -215,121 +223,3 @@ def save_model(
             logger.error(f"Failed to save configuration: {str(e)}")
 
     return saved_files
-
-
-def load_model_partial(
-    model_path: Union[str, Path], model: torch.nn.Module, device
-) -> torch.nn.Module:
-    """
-    Attempt to load a model with partial state dict (for recovery).
-
-    Parameters:
-    -----------
-    model_path : str or Path
-        Path to the model file
-    model : torch.nn.Module
-        Model instance to load partial weights into
-    device : torch.device
-        Device to move model to after loading
-
-    Returns:
-    --------
-    torch.nn.Module
-        Model with partially loaded weights
-    """
-    try:
-        state_dict = torch.load(model_path, map_location="cpu")
-        # Filter state_dict to only include keys that exist in the model
-        model_keys = set(model.state_dict().keys())
-        filtered_state_dict = {k: v for k, v in state_dict.items() if k in model_keys}
-
-        # Log differences
-        missing_keys = [k for k in model.state_dict().keys() if k not in state_dict]
-        extra_keys = [k for k in state_dict.keys() if k not in model_keys]
-
-        if missing_keys:
-            logger.warning(f"Missing keys in loaded model: {missing_keys}")
-        if extra_keys:
-            logger.warning(f"Extra keys in loaded model (ignored): {extra_keys}")
-
-        # Load the filtered state dict
-        model.load_state_dict(filtered_state_dict, strict=False)
-        logger.info(
-            f"Partial model loading successful with {len(filtered_state_dict)}/{len(model_keys)} keys"
-        )
-
-        return model.to(device)
-    except Exception as e:
-        logger.error(f"Failed even with partial loading: {str(e)}")
-        raise RuntimeError("Could not perform partial model loading") from e
-
-
-def get_model_config(model_path: Union[str, Path]) -> ExperimentConfig:
-    """
-    Extract configuration for a model from its directory or create a default one.
-
-    Parameters:
-    -----------
-    model_path : str or Path
-        Path to the model file
-
-    Returns:
-    --------
-    ExperimentConfig
-        Configuration for the model
-    """
-    model_path = Path(model_path)
-    model_dir = model_path.parent
-
-    # Look for config in standard locations
-    config_paths = [
-        model_dir / "config.yml",
-        model_dir / "model_config.yml",
-        model_dir.parent / "config.yml",
-    ]
-
-    for config_path in config_paths:
-        if config_path.exists():
-            logger.info(f"Found model configuration at: {config_path}")
-            return ExperimentConfig(config_path)
-
-    # Fall back to global config
-    logger.warning(
-        f"No configuration found for model {model_path}, using global config"
-    )
-    return get_config()
-
-
-def create_model_by_type(model_type: str, config: ExperimentConfig) -> torch.nn.Module:
-    """
-    Create a model instance by type name.
-
-    Parameters:
-    -----------
-    model_type : str
-        Type of model to create
-    config : ExperimentConfig
-        Configuration to use for model creation
-
-    Returns:
-    --------
-    torch.nn.Module
-        Created model instance
-    """
-    try:
-        # Try to use model registry first
-        if model_type in ModelRegistry._models or model_type in ModelRegistry._creators:
-            return ModelRegistry.create_model(model_type, config=config)
-
-        # Fall back to direct import for backward compatibility
-        if model_type == "stgnn":
-            from gnn_package.src.models.stgnn import create_stgnn_model
-
-            return create_stgnn_model(config=config)
-
-        # Add more model types as needed
-
-        raise ValueError(f"Unknown model type: {model_type}")
-    except Exception as e:
-        logger.error(f"Error creating model of type {model_type}: {str(e)}")
-        raise RuntimeError(f"Failed to create model of type {model_type}") from e

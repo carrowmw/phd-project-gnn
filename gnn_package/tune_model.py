@@ -3,6 +3,7 @@
 
 import argparse
 import logging
+import asyncio
 from pathlib import Path
 from datetime import datetime
 
@@ -12,6 +13,7 @@ from gnn_package.src.tuning import (
     run_multi_stage_tuning,
 )
 from gnn_package.config import get_config, ExperimentConfig
+from gnn_package.src.training.preprocessing import prepare_data_for_experiment
 
 # Configure logging
 logging.basicConfig(
@@ -25,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger("tuning")
 
 
-def main():
+async def main():
     """Run hyperparameter tuning"""
     # Parse command line arguments
     parser = argparse.ArgumentParser(
@@ -62,6 +64,11 @@ def main():
         action="store_true",
         help="Run a quick tuning with fewer trials and epochs (for testing)",
     )
+    parser.add_argument(
+        "--cache",
+        type=str,
+        help="Path to cache processed data",
+    )
 
     args = parser.parse_args()
 
@@ -93,6 +100,18 @@ def main():
     else:
         output_dir = Path(f"results/tuning/{experiment_name}")
 
+    # Prepare data with caching
+    logger.info("Preparing data for tuning...")
+    cache_path = args.cache or str(output_dir / "data_cache.pkl")
+
+    data_package = await prepare_data_for_experiment(
+        data_file=args.data,
+        output_cache=cache_path,
+        config=config,
+        use_cross_validation=True,  # Always use CV for tuning
+        force_refresh=False
+    )
+
     # Run tuning
     if args.quick:
         logger.info("Running quick tuning (reduced trials and epochs for testing)")
@@ -120,7 +139,7 @@ def main():
             data_fraction_stages = [0.25, 0.5, 1.0]
 
         results = run_multi_stage_tuning(
-            data_file=data_path,
+            data_package=data_package,  # Pass data_package instead of data_file
             experiment_name=experiment_name,
             output_dir=output_dir,
             config=config,
@@ -140,7 +159,7 @@ def main():
         )
 
         results = tune_hyperparameters(
-            data_file=data_path,
+            data_package=data_package,  # Pass data_package instead of data_file
             experiment_name=experiment_name,
             n_trials=n_trials,
             n_epochs=n_epochs,
@@ -157,4 +176,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

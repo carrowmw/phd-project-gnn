@@ -268,6 +268,19 @@ class APIDataSource(DataSource):
             max_date_range=timedelta(days=max_days_range),  # Ensure adequate range
         )
 
+    async def _get_veh_class_params(self, config: ExperimentConfig) -> List[str]:
+        """
+        Get vehicle class parameters for filtering returned data.
+        """
+        veh_class = config.data.general.veh_class
+        if veh_class is None:
+            logger.info("No vehicle class specified, using all classes")
+            return []
+        if isinstance(veh_class, str):
+            veh_class = [veh_class]
+        logger.info(f"Filtering data for vehicle classes: {veh_class}")
+        return veh_class
+
     async def _fetch_data_from_api(self, date_range: DateRangeParams) -> Any:
         """
         Fetch data from the API.
@@ -322,6 +335,14 @@ class APIDataSource(DataSource):
         try:
             # Convert to DataFrame
             counts_df = convert_to_dataframe(count_data)
+
+            # Filter for vehicle classes
+            veh_class = await self._get_veh_class_params(config)
+            if veh_class:
+                counts_df = counts_df[counts_df["veh_class"].isin(veh_class)]
+                logger.info(f"Filtered data for vehicle classes: {veh_class}")
+            else:
+                logger.info("No vehicle class specified, using all classes")
 
             # Get sensor name to ID mapping
             name_id_map = get_sensor_name_id_map(config=config)

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# digester.sh - Script to ingest codebase while excluding large files and data files
-# Dependencies: gitingest, nbstripout
+# digester.sh - Script to ingest only Python files from codebase recursively
+# This is a simpler implementation that doesn't rely on gitingest's recursive behavior
 
 set -e  # Exit on error
 
@@ -12,75 +12,50 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 OUTPUT_FILE="$PROJECT_ROOT/digested_gnn_package.txt"
 
-# Check if gitingest is installed
-if ! command -v gitingest &> /dev/null; then
-    echo "Error: gitingest is not installed. Please install it first."
-    echo "Install with: pip install gitingest"
-    exit 1
-fi
-
-# Check if nbstripout is installed
-if ! command -v nbstripout &> /dev/null; then
-    echo "Warning: nbstripout is not installed. Notebooks will not be processed."
-    echo "Consider installing with: pip install nbstripout"
-    PROCESS_NOTEBOOKS=false
-else
-    PROCESS_NOTEBOOKS=true
-fi
-
-# Process notebooks if nbstripout is available
-if [ "$PROCESS_NOTEBOOKS" = true ]; then
-    echo "Processing notebooks with nbstripout..."
-    find "$SCRIPT_DIR" -name "*.ipynb" -exec nbstripout {} \;
-fi
-
-echo "Starting codebase ingestion from gnn_package directory..."
+echo "Starting recursive Python codebase ingestion from gnn_package directory..."
 echo "- Max file size: ${MAX_FILE_SIZE_KB}KB"
 echo "- Output will be saved to: ${OUTPUT_FILE}"
 
-# Run gitingest on the gnn_package directory
-gitingest "$SCRIPT_DIR" \
-    -s "${MAX_FILE_SIZE_BYTES}" \
-    --exclude-pattern="*.pkl" \
-    --exclude-pattern="*.npy" \
-    --exclude-pattern="*.csv" \
-    --exclude-pattern="*.parquet" \
-    --exclude-pattern="*.json" \
-    --exclude-pattern="*.gz" \
-    --exclude-pattern="*.zip" \
-    --exclude-pattern="*.tar" \
-    --exclude-pattern="*.h5" \
-    --exclude-pattern="*.hdf5" \
-    --exclude-pattern="*.pyc" \
-    --exclude-pattern="__pycache__/" \
-    --exclude-pattern=".ipynb_checkpoints/" \
-    --exclude-pattern="cache/" \
-    --exclude-pattern="*/cache/*" \
-    --exclude-pattern="*.so" \
-    --exclude-pattern="*.o" \
-    --exclude-pattern="*.a" \
-    --exclude-pattern="*.dll" \
-    --exclude-pattern="*.geojson" \
-    --exclude-pattern="*.shp" \
-    --exclude-pattern="*.shx" \
-    --exclude-pattern="*.dbf" \
-    --exclude-pattern="*.prj" \
-    --exclude-pattern="*.cpg" \
-    --exclude-pattern="*.pth" \
-    --exclude-pattern="*.pt" \
-    --exclude-pattern="*.ckpt" \
-    --exclude-pattern="*.bin" \
-    --exclude-pattern="*.png" \
-    --exclude-pattern="*.jpg" \
-    --exclude-pattern="*.jpeg" \
-    --exclude-pattern="*.gif" \
-    --exclude-pattern="*.svg" \
-    --exclude-pattern="*.ico" \
-    --exclude-pattern="*.pdf" \
-    --exclude-pattern=results/ \
-    --exclude-pattern=logs/ \
-    --exclude-pattern=*.log \
-    --exclude-pattern=reports/ \
-    --output="$OUTPUT_FILE"
+# Create/clear the output file
+> "$OUTPUT_FILE"
 
-echo "Nom nom, digestion complete! Output saved to $OUTPUT_FILE"
+# Add header
+echo "# GNN Package Python Files" > "$OUTPUT_FILE"
+echo "Generated on $(date)" >> "$OUTPUT_FILE"
+echo "" >> "$OUTPUT_FILE"
+
+# Find all Python files, excluding __pycache__ directories
+PYTHON_FILES=$(find "$SCRIPT_DIR" -type f -name "*.py" -not -path "*/__pycache__/*")
+TOTAL_FILES=$(echo "$PYTHON_FILES" | wc -l)
+echo "Found $TOTAL_FILES Python files to process"
+
+# Process each Python file
+for file in $PYTHON_FILES; do
+    # Get file size in bytes
+    file_size=$(stat -f%z "$file" 2>/dev/null || stat --format="%s" "$file")
+
+    # Skip files larger than max size
+    if [ "$file_size" -gt "$MAX_FILE_SIZE_BYTES" ]; then
+        echo "Skipping large file: $file ($(($file_size / 1024)) KB)"
+        continue
+    fi
+
+    # Get relative path for display
+    rel_path=${file#$PROJECT_ROOT/}
+
+    # Add file separator and header
+    echo -e "\n================================================" >> "$OUTPUT_FILE"
+    echo "File: $rel_path" >> "$OUTPUT_FILE"
+    echo -e "================================================\n" >> "$OUTPUT_FILE"
+
+    # Append file content
+    cat "$file" >> "$OUTPUT_FILE"
+done
+
+# Add summary at the end
+echo -e "\n\n# Summary" >> "$OUTPUT_FILE"
+echo "Total Python files processed: $(grep -c "^File: " "$OUTPUT_FILE")" >> "$OUTPUT_FILE"
+echo "Total size: $(du -h "$OUTPUT_FILE" | cut -f1)" >> "$OUTPUT_FILE"
+
+echo "Digestion complete! Output saved to $OUTPUT_FILE"
+echo "Processed $(grep -c "^File: " "$OUTPUT_FILE") Python files"

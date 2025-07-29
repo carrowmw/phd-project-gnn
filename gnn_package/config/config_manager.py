@@ -18,10 +18,6 @@ from .config import ExperimentConfig
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Singleton pattern for global configuration
-_CONFIG_INSTANCE = None
-
-
 class ConfigurationManager:
     """
     Central manager for all configuration operations.
@@ -147,6 +143,7 @@ class ConfigurationManager:
             "general": {
                 "start_date": None,
                 "end_date": None,
+                "veh_class": "person", # 'pc', 'ogv1', 'car', 'mc', 'lgv', 'psv', 'ogv2', 'buggy', 'person', 'scooter'
                 "window_size": 24,
                 "horizon": 6,
                 "stride": 1,
@@ -185,14 +182,16 @@ class ConfigurationManager:
                 "train_ratio": 0.8,
                 "cutoff_date": None,
                 "cv_split_index": -1,
+                "train_final_model": True,
             },
             "prediction": {
-                "days_back": 14,
+                "days_back": 2,
             },
         }
 
         # Default model configuration
         model = {
+            "architecture": None,
             "input_dim": 1,
             "hidden_dim": 64,
             "output_dim": 1,
@@ -203,6 +202,8 @@ class ConfigurationManager:
             "use_self_loops": True,
             "gcn_normalization": "symmetric",
             "attention_heads": 4,
+            "use_temporal_attention": True,
+            "use_gru": True,
             "layer_norm": False,
         }
 
@@ -460,13 +461,12 @@ def get_config(
     verbose: bool = False,
 ) -> ExperimentConfig:
     """
-    Get or create the global configuration instance.
+    Get a new configuration instance (no longer a singleton).
 
     Parameters:
     -----------
     config_path : str or Path, optional
-        Path to the configuration file. If not provided, will use the existing
-        instance or look for a default config.yml in the current directory.
+        Path to the configuration file. If not provided, will look for a default config.yml.
     create_if_missing : bool
         Whether to create a default configuration if the specified file doesn't exist.
     is_prediction_mode : bool
@@ -479,43 +479,29 @@ def get_config(
     Returns:
     --------
     ExperimentConfig
-        The global configuration instance.
+        A new configuration instance.
     """
-    global _CONFIG_INSTANCE
-
-    # Return existing instance if available and no new path provided
-    if _CONFIG_INSTANCE is not None and config_path is None and not override_params:
-        if verbose:
-            logger.info(
-                f"Using existing configuration from: {_CONFIG_INSTANCE.config_path}"
-            )
-        return _CONFIG_INSTANCE
-
-    # Create new instance if path provided or no instance exists
+    # Always create a new instance - no singleton pattern
     try:
-        _CONFIG_INSTANCE = ConfigurationManager.load_config(
+        return ConfigurationManager.load_config(
             config_path=config_path,
             create_if_missing=create_if_missing,
             is_prediction_mode=is_prediction_mode,
             override_params=override_params,
             verbose=verbose,
         )
-        return _CONFIG_INSTANCE
     except Exception as e:
         logger.error(f"Error getting configuration: {str(e)}")
         raise
 
-
+# For backward compatibility, keep reset_config but make it a no-op
 def reset_config() -> None:
     """
-    Reset the global configuration instance.
-
-    This is primarily used for testing and situations where you need
-    to ensure a fresh configuration state.
+    Previously reset the global configuration instance.
+    Now a no-op for backward compatibility.
     """
-    global _CONFIG_INSTANCE
-    logger.debug("Resetting global config instance.")
-    _CONFIG_INSTANCE = None
+    logger.debug("reset_config() called - no longer necessary as singleton was removed")
+    pass
 
 
 def create_default_config(

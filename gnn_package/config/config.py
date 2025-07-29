@@ -70,24 +70,25 @@ class GeneralDataConfig:
     # Time series-related parameters
     start_date: str = None
     end_date: str = None
-    window_size: int = 24
-    horizon: int = 6
-    stride: int = 1
-    gap_threshold_minutes: int = 15
-    missing_value: float = -1.0
-    resampling_frequency: str = "15min"
-    standardize: bool = True
-    batch_size: int = 32
-    buffer_factor: float = 1.0
+    veh_class: List[str] = field(default_factory=lambda: [None])
+    window_size: int = None
+    horizon: int = None
+    stride: int = None
+    gap_threshold_minutes: int = None
+    missing_value: float = None
+    resampling_frequency: str = None # "15min"
+    standardize: bool = None
+    batch_size: int = None
+    buffer_factor: float = None
 
     # Graph-related parameters
-    graph_prefix: str = "default_graph"
-    sigma_squared: float = 0.1
-    epsilon: float = 0.5
-    normalization_factor: int = 10000
-    max_distance: float = 100.0
-    tolerance_decimal_places: int = 6
-    sensor_id_prefix: str = "1"
+    graph_prefix: str = None # "default_graph"
+    sigma_squared: float = None # 0.1
+    epsilon: float = None # 0.5
+    normalization_factor: int = None # 10000
+    max_distance: float = None # 100.0
+    tolerance_decimal_places: int = None #6
+    sensor_id_prefix: str = None # "1"
     bbox_coords: List[List[float]] = field(
         default_factory=lambda: [
             [-1.65327, 54.93188],
@@ -182,12 +183,13 @@ class TrainingDataConfig:
         cv_split_index (int): Index of the split to use for cross-validation
     """
 
-    n_splits: int = 3
-    use_cross_validation: bool = True
-    split_method: str = "rolling_window"  # Options: "rolling_window", "time_based"
-    train_ratio: float = 0.8
+    n_splits: int = None # 3
+    use_cross_validation: bool = None
+    split_method: str = None  # Options: "rolling_window", "time_based"
+    train_ratio: float = None # 0.8
     cutoff_date: Optional[str] = None
-    cv_split_index: int = -1
+    cv_split_index: int = None # -1
+    train_final_model: bool = None # True
 
     def validate(self) -> List[str]:
         """
@@ -227,7 +229,7 @@ class PredictionDataConfig:
         days_back (int): How many days of historical data to use for prediction
     """
 
-    days_back: int = 14
+    days_back: int = None
 
     def validate(self) -> List[str]:
         """
@@ -302,17 +304,20 @@ class ModelConfig:
         layer_norm (bool): Whether to use layer normalization
     """
 
-    input_dim: int = 1
-    hidden_dim: int = 64
-    output_dim: int = 1
-    num_layers: int = 2
-    dropout: float = 0.2
-    num_gc_layers: int = 2
-    use_self_loops: bool = True
-    gcn_normalization: str = "symmetric"  # "symmetric", "random_walk", or "none"
-    decoder_layers: int = 2
-    attention_heads: int = 1
-    layer_norm: bool = False
+    architecture: str = None  # "stgnn", "improved_stgnn", "gat_stgnn"
+    input_dim: int = None
+    hidden_dim: int = None
+    output_dim: int = None
+    num_layers: int = None
+    dropout: float = None
+    num_gc_layers: int = None
+    use_self_loops: bool = None
+    gcn_normalization: str = None  # "symmetric", "random_walk", or "none"
+    decoder_layers: int = None
+    attention_heads: int = None
+    use_temporal_attention: bool = None
+    use_gru: bool = None
+    layer_norm: bool = None
 
     def validate(self) -> List[str]:
         """
@@ -362,10 +367,10 @@ class TrainingConfig:
         device (str): Device to use for training (e.g., "cpu", "cuda", "mps")
     """
 
-    learning_rate: float = 0.001
-    weight_decay: float = 1e-5
-    num_epochs: int = 50
-    patience: int = 10
+    learning_rate: float = None # 0.001
+    weight_decay: float = None # 1e-5
+    num_epochs: int = None # 50
+    patience: int = None # 10
     device: Optional[str] = None
 
     def validate(self) -> List[str]:

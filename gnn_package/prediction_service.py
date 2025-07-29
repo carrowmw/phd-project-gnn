@@ -10,14 +10,8 @@ from datetime import datetime
 from pathlib import Path
 import json
 
-from gnn_package import training
 from gnn_package.config import ExperimentConfig, create_prediction_config
-from gnn_package.src.visualization.visualization_utils import VisualizationManager
-from gnn_package.src.utils.metrics import (
-    calculate_metrics_by_horizon,
-    calculate_metrics_by_sensor,
-)
-from gnn_package.src.utils.device_utils import get_device
+from gnn_package.src.training.prediction import predict_and_evaluate
 from gnn_package.src.utils.retry_utils import retry
 from gnn_package.src.utils.exceptions import ModelLoadError, APIConnectionError
 
@@ -41,105 +35,75 @@ async def run_prediction_service(
     cache_results=True,
     detailed_metrics=True,
     device=None,
+    config_path=None,
 ):
     """
-    Run the prediction service with enhanced features.
-
-    Parameters:
-    -----------
-    model_path : str or Path
-        Path to the trained model or directory containing models
-    output_dir : str or Path, optional
-        Directory to save predictions (defaults to 'predictions/YYYY-MM-DD')
-    visualize : bool
-        Whether to generate plots and visualizations
-    cache_results : bool
-        Whether to cache prediction results for future reuse
-    detailed_metrics : bool
-        Whether to calculate and save detailed metrics by sensor and horizon
-    device : str, optional
-        Device to run predictions on (auto-detected if None)
-
-    Returns:
-    --------
-    dict
-        Dictionary containing prediction results and metadata
+    Run the prediction service using the new prediction framework.
     """
     try:
         start_time = datetime.now()
 
         # Create prediction configuration
         logger.info("Setting up prediction configuration")
-        prediction_config = _setup_prediction_config(model_path)
+        try:
+            if config_path is not None:
+                config_path = Path(config_path)
+                config = ExperimentConfig(str(config_path), is_prediction_mode=True)
+                logger.info(f"Using configuration from specified path: {config_path}")
+            else:
+                # Try to find config in model directory
+                model_dir = Path(model_path).parent
+                config_path = model_dir / "config.yml"
+                if config_path.exists():
+                    config = ExperimentConfig(str(config_path), is_prediction_mode=True)
+                    logger.info(f"Using configuration from model directory: {config_path}")
+                else:
+                    raise FileNotFoundError(
+                        f"No configuration file found. "
+                        f"Please provide a configuration file using the --config parameter."
+                    )
+        except FileNotFoundError as e:
+            logger.error(f"Configuration error: {str(e)}")
+            return {"success": False, "error": str(e)}
 
         # Set up output directory
         if output_dir is None:
             today = datetime.now().strftime("%Y-%m-%d")
             output_dir = f"predictions/{today}"
 
-        output_dir = Path(output_dir)
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Create timestamps for consistent file naming
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = output_dir / f"predictions_{timestamp}.csv"
-
-        # Set up device
-        if device is None:
-            device = get_device(prediction_config.training.device)
-        logger.info(f"Using device: {device}")
-
-        # Run prediction
-        logger.info(f"Running prediction using model: {model_path}")
-        logger.info(f"Output will be saved to: {output_file}")
-
-        predictions = await training.predict_all_sensors_with_validation(
+        # Use the new predict_and_evaluate function
+        prediction_results = await predict_and_evaluate(
             model_path=model_path,
-            config=prediction_config,
-            output_file=output_file,
-            plot=False,  # Disable internal plotting, we'll handle it separately
+            output_dir=output_dir,
+            config=config,
+            visualize=visualize
         )
 
-        # Check for valid predictions
-        if not predictions or "dataframe" not in predictions:
-            logger.error("Prediction failed or returned no results")
-            return {"success": False, "error": "No predictions generated"}
+        # Format response
+        execution_time = (datetime.now() - start_time).total_seconds()
 
-        # Process prediction results
-        predictions_df = predictions["dataframe"]
-        logger.info(
-            f"Generated {len(predictions_df)} predictions for {predictions_df['node_id'].nunique()} sensors"
-        )
+        # Get file paths from the results
+        predictions_file = None
+        for root, dirs, files in os.walk(output_dir):
+            for file in files:
+                if file.startswith("predictions_") and file.endswith(".csv"):
+                    predictions_file = os.path.join(root, file)
+                    break
 
-        # Calculate standard metrics
-        metrics = _calculate_prediction_metrics(predictions_df)
+        summary_file = None
+        for root, dirs, files in os.walk(output_dir):
+            for file in files:
+                if file.startswith("summary_") and file.endswith(".txt"):
+                    summary_file = os.path.join(root, file)
+                    break
 
-        # Calculate detailed metrics if requested
-        if detailed_metrics:
-            metrics.update(_calculate_detailed_metrics(predictions_df))
-
-        # Create and save summary report
-        summary_file = output_dir / f"summary_{timestamp}.txt"
-        _save_summary_report(predictions, metrics, summary_file, start_time)
-
-        # Generate visualizations if requested
-        viz_paths = {}
-        if visualize:
-            viz_paths = _generate_visualizations(predictions_df, output_dir, timestamp)
-
-        # Cache results if requested
-        if cache_results:
-            cache_file = output_dir / f"cache_{timestamp}.pkl"
-            _cache_prediction_results(predictions, cache_file)
-
-        # Return combined results
         return {
             "success": True,
-            "predictions_file": str(output_file),
-            "summary_file": str(summary_file),
-            "metrics": metrics,
-            "visualizations": viz_paths if visualize else None,
-            "execution_time": (datetime.now() - start_time).total_seconds(),
+            "predictions_file": predictions_file,
+            "summary_file": summary_file,
+            "metrics": prediction_results.get("metrics", {}),
+            "visualizations": prediction_results.get("visualization_paths", {}),
+            "execution_time": execution_time,
         }
 
     except ModelLoadError as e:
@@ -153,173 +117,9 @@ async def run_prediction_service(
         return {"success": False, "error": str(e)}
 
 
-def _setup_prediction_config(model_path):
-    """Set up prediction configuration from model path."""
-    model_path = Path(model_path)
-
-    # Try to load config from model directory first
-    config_path = model_path.parent / "config.yml"
-
-    if config_path.exists():
-        logger.info(f"Loading configuration from model directory: {config_path}")
-        # IMPORTANT: Create a fresh config directly from file WITHOUT
-        # using get_config() which might return a shared singleton
-        config = ExperimentConfig(str(config_path), is_prediction_mode=True)
-
-        # Don't use create_prediction_config() which might use the global config
-        # Instead, manually apply the minimal changes needed for prediction
-        config.data.training.use_cross_validation = False
-        config.data.prediction.days_back = max(1, config.data.prediction.days_back)
-
-        logger.info(f"Using configuration from model with prediction mode enabled")
-        return config
-    else:
-        logger.info("Creating default prediction configuration")
-        # Create a fresh config without relying on the global instance
-        default_config = ExperimentConfig("config.yml", is_prediction_mode=True)
-        return default_config
-
-
-
-def _calculate_prediction_metrics(predictions_df):
-    """Calculate standard prediction metrics."""
-    metrics = {}
-
-    if "error" in predictions_df.columns:
-        # Basic metrics
-        metrics["mse"] = (predictions_df["error"] ** 2).mean()
-        metrics["mae"] = predictions_df["abs_error"].mean()
-        metrics["rmse"] = metrics["mse"] ** 0.5
-
-        # Additional statistics
-        metrics["max_error"] = predictions_df["abs_error"].max()
-        metrics["min_error"] = predictions_df["abs_error"].min()
-        metrics["median_error"] = predictions_df["abs_error"].median()
-
-    return metrics
-
-
-def _calculate_detailed_metrics(predictions_df):
-    """Calculate detailed metrics by horizon and sensor."""
-    detailed_metrics = {}
-
-    # Calculate metrics by horizon
-    horizon_metrics = calculate_metrics_by_horizon(predictions_df)
-    detailed_metrics["horizon_metrics"] = horizon_metrics.to_dict()
-
-    # Calculate metrics by sensor (top 10 worst performing)
-    sensor_metrics = calculate_metrics_by_sensor(predictions_df, top_n=10)
-    detailed_metrics["sensor_metrics"] = sensor_metrics.to_dict()
-
-    return detailed_metrics
-
-
-def _save_summary_report(predictions, metrics, summary_file, start_time):
-    """Create and save a detailed summary report."""
-    with open(summary_file, "w") as f:
-        f.write(f"Prediction Summary\n")
-        f.write(f"=================\n\n")
-        f.write(f"Date/Time: {datetime.now()}\n")
-        f.write(
-            f"Execution time: {(datetime.now() - start_time).total_seconds():.2f} seconds\n\n"
-        )
-
-        # Extract standardization stats if available
-        standardization_stats = {}
-        if "data" in predictions and "metadata" in predictions["data"]:
-            metadata = predictions["data"]["metadata"]
-            standardization_stats = metadata.get("preprocessing_stats", {}).get(
-                "standardization", {}
-            )
-
-        # Write standardization information
-        f.write(f"Standardization mean: {standardization_stats.get('mean', 'N/A')}\n")
-        f.write(f"Standardization std: {standardization_stats.get('std', 'N/A')}\n\n")
-
-        # Write prediction statistics
-        df = predictions["dataframe"]
-        f.write(f"Total predictions: {len(df)}\n")
-        f.write(f"Total sensors: {df['node_id'].nunique()}\n\n")
-
-        # Write error metrics
-        f.write(f"Overall metrics:\n")
-        f.write(f"  MSE: {metrics['mse']:.4f}\n")
-        f.write(f"  MAE: {metrics['mae']:.4f}\n")
-        f.write(f"  RMSE: {metrics['rmse']:.4f}\n\n")
-
-        # Write horizon-specific metrics if available
-        if "horizon_metrics" in metrics:
-            f.write("Metrics by prediction horizon:\n")
-            horizon_df = pd.DataFrame(metrics["horizon_metrics"])
-            f.write(horizon_df.to_string() + "\n\n")
-
-        # Write sensor-specific metrics if available
-        if "sensor_metrics" in metrics:
-            f.write("Top 10 sensors by error:\n")
-            sensor_df = pd.DataFrame(metrics["sensor_metrics"])
-            f.write(sensor_df.to_string() + "\n")
-
-
-def _generate_visualizations(predictions_df, output_dir, timestamp):
-    """Generate and save visualizations for prediction results."""
-    try:
-        logger.info("Generating visualizations...")
-        viz_manager = VisualizationManager()
-        viz_paths = viz_manager.save_visualization_pack(
-            predictions_df=predictions_df,
-            output_dir=output_dir,
-            timestamp=timestamp,
-        )
-
-        logger.info(f"Visualizations saved to: {output_dir}")
-        for viz_type, path in viz_paths.items():
-            logger.info(f"  - {viz_type}: {path}")
-
-        return viz_paths
-    except Exception as e:
-        logger.error(f"Error generating visualizations: {e}")
-        return {}
-
-
-def _cache_prediction_results(predictions, cache_file):
-    """Cache prediction results for future reuse."""
-    try:
-        # Extract and save essential components only
-        cache_data = {
-            "dataframe": predictions["dataframe"],
-            "metadata": predictions.get("metadata", {}),
-            "timestamp": datetime.now().isoformat(),
-        }
-
-        with open(cache_file, "wb") as f:
-            import pickle
-
-            pickle.dump(cache_data, f)
-
-        logger.info(f"Prediction results cached to: {cache_file}")
-        return True
-    except Exception as e:
-        logger.warning(f"Failed to cache prediction results: {e}")
-        return False
-
-
-async def batch_predict(model_paths, output_base_dir=None, visualize=True):
+async def batch_predict(model_paths, output_base_dir=None, visualize=True, config_path=None):
     """
     Run predictions on multiple models in batch mode.
-
-    Parameters:
-    -----------
-    model_paths : list
-        List of paths to trained models
-    output_base_dir : str, optional
-        Base directory for outputs
-    visualize : bool
-        Whether to generate visualizations
-
-    Returns:
-    --------
-    dict
-        Dictionary with results for each model
     """
     if output_base_dir is None:
         output_base_dir = f"predictions/batch_{datetime.now().strftime('%Y%m%d')}"
@@ -333,7 +133,10 @@ async def batch_predict(model_paths, output_base_dir=None, visualize=True):
 
         output_dir = Path(output_base_dir) / model_name
         result = await run_prediction_service(
-            model_path=model_path, output_dir=output_dir, visualize=visualize
+            model_path=model_path,
+            output_dir=output_dir,
+            visualize=visualize,
+            config_path=config_path
         )
 
         results[model_name] = result
@@ -363,7 +166,6 @@ async def batch_predict(model_paths, output_base_dir=None, visualize=True):
 
     logger.info(f"Batch prediction complete. Summary saved to {summary_path}")
     return {"success": True, "results": results, "summary_path": str(summary_path)}
-
 
 if __name__ == "__main__":
     # Process command line arguments
@@ -398,6 +200,11 @@ if __name__ == "__main__":
         help="Device to use for prediction",
     )
     parser.add_argument(
+        "--config",
+        type=str,
+        help="Path to configuration file to use",
+    )
+    parser.add_argument(
         "--batch",
         "-b",
         action="store_true",
@@ -424,6 +231,7 @@ if __name__ == "__main__":
                 model_paths=model_paths,
                 output_base_dir=args.output_dir,
                 visualize=args.visualize,
+                config_path=args.config,
             )
         )
 
@@ -437,6 +245,7 @@ if __name__ == "__main__":
                 cache_results=args.cache,
                 detailed_metrics=args.detailed,
                 device=args.device,
+                config_path=args.config,
             )
         )
 

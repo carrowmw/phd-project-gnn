@@ -15,7 +15,7 @@ import yaml
 import torch
 
 from gnn_package.config import ExperimentConfig, get_config, ConfigurationManager
-from gnn_package.src.models.stgnn import create_stgnn_model
+from gnn_package.src.models.factory import create_model
 
 
 def create_prediction_config_from_training(

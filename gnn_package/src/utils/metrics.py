@@ -4,6 +4,7 @@ import torch
 import pandas as pd
 from typing import Dict, Union, Tuple, List, Optional
 import logging
+from scipy import stats
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +13,11 @@ def calculate_error_metrics(
     predictions: Union[np.ndarray, torch.Tensor],
     targets: Union[np.ndarray, torch.Tensor],
     masks: Optional[Union[np.ndarray, torch.Tensor]] = None,
+    missing_value: float = None,
     reduction: str = "mean",
 ) -> Dict[str, float]:
     """
-    Calculate standard error metrics with proper handling of masked values.
+    Calculate error metrics appropriate for count data.
 
     Parameters:
     -----------
@@ -25,13 +27,15 @@ def calculate_error_metrics(
         Target values
     masks : numpy.ndarray or torch.Tensor, optional
         Binary masks for valid values (1 = valid, 0 = invalid)
+    missing_value : float
+        Value to treat as missing/invalid in targets and predictions
     reduction : str
         How to reduce metrics ('mean', 'sum', 'none')
 
     Returns:
     --------
     Dict[str, float]
-        Dictionary with calculated metrics (MSE, MAE, RMSE)
+        Dictionary with calculated metrics
     """
     # Convert to numpy if needed
     if isinstance(predictions, torch.Tensor):
@@ -41,50 +45,71 @@ def calculate_error_metrics(
     if masks is not None and isinstance(masks, torch.Tensor):
         masks = masks.detach().cpu().numpy()
 
-    # Create default mask if none provided
-    if masks is None:
-        masks = np.ones_like(predictions)
+    # Create missing value mask (1 = valid, 0 = missing)
+    missing_mask_pred = (predictions != missing_value).astype(float)
+    missing_mask_targ = (targets != missing_value).astype(float)
 
-    # Ensure shapes match
-    if predictions.shape != targets.shape:
-        raise ValueError(
-            f"Shape mismatch: predictions {predictions.shape}, targets {targets.shape}"
-        )
-    if predictions.shape != masks.shape:
-        raise ValueError(
-            f"Shape mismatch: predictions {predictions.shape}, masks {masks.shape}"
-        )
+    # Combine masks - a point is valid only if both prediction and target are valid
+    valid_mask = missing_mask_pred * missing_mask_targ
 
-    # Calculate squared errors
-    squared_errors = ((predictions - targets) ** 2) * masks
-    absolute_errors = np.abs(predictions - targets) * masks
+    # Apply user-provided mask if available
+    if masks is not None:
+        valid_mask = valid_mask * masks
 
-    # Apply reduction
-    if reduction == "mean":
-        # Normalize by sum of masks to only account for valid points
-        mask_sum = np.sum(masks)
-        if mask_sum == 0:
-            logger.warning("No valid points in mask, returning zero metrics")
-            return {"mse": 0.0, "mae": 0.0, "rmse": 0.0}
+    # Ensure targets are non-negative (required for Poisson and other count metrics)
+    valid_indices = valid_mask > 0
+    valid_predictions = predictions[valid_indices]
+    valid_targets = targets[valid_indices]
+    valid_targets = np.maximum(valid_targets, 0)
 
-        mse = np.sum(squared_errors) / mask_sum
-        mae = np.sum(absolute_errors) / mask_sum
-        rmse = np.sqrt(mse)
-    elif reduction == "sum":
-        mse = np.sum(squared_errors)
-        mae = np.sum(absolute_errors)
-        rmse = np.sqrt(mse)
-    elif reduction == "none":
-        # Return unreduced arrays
-        return {"squared_errors": squared_errors, "absolute_errors": absolute_errors}
-    else:
-        raise ValueError(f"Unsupported reduction: {reduction}")
+    # Skip if no valid points
+    if len(valid_targets) == 0:
+        logger.warning("No valid points after masking, returning zero metrics")
+        return {
+            "mse": 0.0,
+            "mae": 0.0,
+            "rmse": 0.0,
+            "poisson_deviance": 0.0,
+            "mape": 0.0,
+            "wape": 0.0,
+            "rmsle": 0.0
+        }
 
-    return {"mse": float(mse), "mae": float(mae), "rmse": float(rmse)}
+    # Calculate standard metrics
+    mse = np.mean((valid_predictions - valid_targets) ** 2)
+    mae = np.mean(np.abs(valid_predictions - valid_targets))
+    rmse = np.sqrt(mse)
 
+    # Count-specific metrics
+    # 1. Poisson Deviance (2*(y*log(y/mu) - (y-mu)))
+    eps = 1e-8  # To avoid division by zero or log(0)
+    poisson_deviance = 2 * np.mean(
+        valid_targets * np.log((valid_targets + eps) / (valid_predictions + eps)) -
+        (valid_targets - valid_predictions)
+    )
+
+    # 2. Mean Absolute Percentage Error
+    mape = np.mean(np.abs((valid_predictions - valid_targets) / (valid_targets + eps))) * 100
+
+    # 3. Weighted Absolute Percentage Error (handles zero values better than MAPE)
+    wape = np.sum(np.abs(valid_predictions - valid_targets)) / np.sum(valid_targets + eps) * 100
+
+    # 4. Root Mean Squared Logarithmic Error (common for count data)
+    rmsle = np.sqrt(np.mean((np.log1p(valid_predictions) - np.log1p(valid_targets)) ** 2))
+
+    return {
+        "mse": float(mse),
+        "mae": float(mae),
+        "rmse": float(rmse),
+        "poisson_deviance": float(poisson_deviance),
+        "mape": float(mape),
+        "wape": float(wape),
+        "rmsle": float(rmsle)
+    }
 
 def calculate_metrics_by_horizon(
     predictions_df: pd.DataFrame,
+    missing_value: float = None
 ) -> pd.DataFrame:
     """
     Calculate error metrics grouped by prediction horizon.
@@ -94,6 +119,8 @@ def calculate_metrics_by_horizon(
     predictions_df : pandas.DataFrame
         DataFrame with predictions and actual values
         Must contain columns: 'prediction', 'actual', 'horizon'
+    missing_value : float
+        Value to treat as missing in predictions and actuals
 
     Returns:
     --------
@@ -110,29 +137,57 @@ def calculate_metrics_by_horizon(
         ]
         raise ValueError(f"DataFrame missing required columns: {missing}")
 
+    # Create a valid data mask (exclude missing values)
+    valid_mask = (predictions_df["prediction"] != missing_value) & (predictions_df["actual"] != missing_value)
+
+    # Use only valid data points
+    valid_df = predictions_df[valid_mask].copy()
+
     # Calculate errors
-    predictions_df = predictions_df.copy()
-    predictions_df["error"] = predictions_df["prediction"] - predictions_df["actual"]
-    predictions_df["abs_error"] = predictions_df["error"].abs()
-    predictions_df["squared_error"] = predictions_df["error"] ** 2
+    valid_df["error"] = valid_df["prediction"] - valid_df["actual"]
+    valid_df["abs_error"] = valid_df["error"].abs()
+    valid_df["squared_error"] = valid_df["error"] ** 2
+
+    # Add count-specific error calculations
+    eps = 1e-8  # For numerical stability
+    valid_df["poisson_dev"] = 2 * (
+        valid_df["actual"] * np.log((valid_df["actual"] + eps) / (valid_df["prediction"] + eps)) -
+        (valid_df["actual"] - valid_df["prediction"])
+    )
+    valid_df["log_squared_error"] = (np.log1p(valid_df["prediction"]) - np.log1p(valid_df["actual"])) ** 2
 
     # Group by horizon and calculate metrics
     metrics_by_horizon = (
-        predictions_df.groupby("horizon")
-        .agg({"abs_error": "mean", "squared_error": "mean", "prediction": "count"})
+        valid_df.groupby("horizon")
+        .agg({
+            "abs_error": "mean",
+            "squared_error": "mean",
+            "poisson_dev": "mean",
+            "log_squared_error": "mean",
+            "prediction": "count"
+        })
         .rename(
-            columns={"abs_error": "mae", "squared_error": "mse", "prediction": "count"}
+            columns={
+                "abs_error": "mae",
+                "squared_error": "mse",
+                "poisson_dev": "poisson_deviance",
+                "log_squared_error": "msle",
+                "prediction": "count"
+            }
         )
     )
 
-    # Add RMSE
+    # Add RMSE and RMSLE
     metrics_by_horizon["rmse"] = np.sqrt(metrics_by_horizon["mse"])
+    metrics_by_horizon["rmsle"] = np.sqrt(metrics_by_horizon["msle"])
 
     return metrics_by_horizon
 
 
 def calculate_metrics_by_sensor(
-    predictions_df: pd.DataFrame, top_n: Optional[int] = None
+    predictions_df: pd.DataFrame,
+    top_n: Optional[int] = None,
+    missing_value: float = None
 ) -> pd.DataFrame:
     """
     Calculate error metrics grouped by sensor.
@@ -144,6 +199,8 @@ def calculate_metrics_by_sensor(
         Must contain columns: 'prediction', 'actual', 'node_id' or 'sensor_name'
     top_n : int, optional
         If provided, return only top N sensors by error
+    missing_value : float
+        Value to treat as missing in predictions and actuals
 
     Returns:
     --------
@@ -160,23 +217,49 @@ def calculate_metrics_by_sensor(
             "DataFrame must contain either 'sensor_name' or 'node_id' column"
         )
 
+    # Create a valid data mask (exclude missing values)
+    valid_mask = (predictions_df["prediction"] != missing_value) & (predictions_df["actual"] != missing_value)
+
+    # Use only valid data points
+    valid_df = predictions_df[valid_mask].copy()
+
     # Calculate errors
-    predictions_df = predictions_df.copy()
-    predictions_df["error"] = predictions_df["prediction"] - predictions_df["actual"]
-    predictions_df["abs_error"] = predictions_df["error"].abs()
-    predictions_df["squared_error"] = predictions_df["error"] ** 2
+    valid_df["error"] = valid_df["prediction"] - valid_df["actual"]
+    valid_df["abs_error"] = valid_df["error"].abs()
+    valid_df["squared_error"] = valid_df["error"] ** 2
+
+    # Add count-specific error calculations
+    eps = 1e-8  # For numerical stability
+    valid_df["poisson_dev"] = 2 * (
+        valid_df["actual"] * np.log((valid_df["actual"] + eps) / (valid_df["prediction"] + eps)) -
+        (valid_df["actual"] - valid_df["prediction"])
+    )
+    valid_df["log_squared_error"] = (np.log1p(valid_df["prediction"]) - np.log1p(valid_df["actual"])) ** 2
 
     # Group by sensor and calculate metrics
     metrics_by_sensor = (
-        predictions_df.groupby(grouping_col)
-        .agg({"abs_error": "mean", "squared_error": "mean", "prediction": "count"})
+        valid_df.groupby(grouping_col)
+        .agg({
+            "abs_error": "mean",
+            "squared_error": "mean",
+            "poisson_dev": "mean",
+            "log_squared_error": "mean",
+            "prediction": "count"
+        })
         .rename(
-            columns={"abs_error": "mae", "squared_error": "mse", "prediction": "count"}
+            columns={
+                "abs_error": "mae",
+                "squared_error": "mse",
+                "poisson_dev": "poisson_deviance",
+                "log_squared_error": "msle",
+                "prediction": "count"
+            }
         )
     )
 
-    # Add RMSE
+    # Add RMSE and RMSLE
     metrics_by_sensor["rmse"] = np.sqrt(metrics_by_sensor["mse"])
+    metrics_by_sensor["rmsle"] = np.sqrt(metrics_by_sensor["msle"])
 
     # Sort by MAE
     metrics_by_sensor = metrics_by_sensor.sort_values("mae", ascending=False)
@@ -196,6 +279,7 @@ def format_prediction_results(
     window_size: int,
     horizon: int,
     id_to_name_map: Optional[Dict[str, str]] = None,
+    missing_value: float = None
 ) -> pd.DataFrame:
     """
     Format model predictions into a standardized DataFrame.
@@ -216,6 +300,8 @@ def format_prediction_results(
         Prediction horizon
     id_to_name_map : Dict[str, str], optional
         Mapping from node IDs to readable names
+    missing_value : float
+        Value to treat as missing in predictions and actuals
 
     Returns:
     --------
@@ -277,10 +363,16 @@ def format_prediction_results(
                     "timestamp": actual_time,
                     "prediction": float(pred_value),
                     "actual": float(actual_value),
-                    "error": float(pred_value - actual_value),
-                    "abs_error": float(abs(pred_value - actual_value)),
                     "horizon": h + 1,  # 1-based horizon index
                 }
+
+                # Only calculate error if neither value is a missing value
+                if actual_value != missing_value and pred_value != missing_value:
+                    row["error"] = float(pred_value - actual_value)
+                    row["abs_error"] = float(abs(pred_value - actual_value))
+                else:
+                    row["error"] = None
+                    row["abs_error"] = None
             else:
                 # No actual data available, just store prediction
                 # Get timestamp by extrapolation if needed

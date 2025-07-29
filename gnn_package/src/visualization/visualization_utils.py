@@ -1,4 +1,4 @@
-# src/visualization/visualization_utils.py (New consolidated file)
+# src/visualization/visualization_utils.py
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,9 +10,9 @@ import os
 from typing import Dict, Any, List, Tuple, Optional, Union
 
 from gnn_package.src.utils.logging_utils import get_logger
+from gnn_package.config import get_config
 
 logger = get_logger(__name__)
-
 
 class VisualizationManager:
     """Centralized visualization manager for consistent plots across the package"""
@@ -68,6 +68,10 @@ class VisualizationManager:
         # Use default theme colors if theme not found
         self.colors = self.theme_colors.get(theme, self.theme_colors["default"])
 
+        # Get missing value from config
+        config = get_config()
+        self.missing_value = config.data.general.missing_value
+
     def get_figure(self, width_scale=1.0, height_scale=1.0):
         """
         Get a figure with the theme's style.
@@ -122,7 +126,14 @@ class VisualizationManager:
         if color is None:
             color = self.colors["primary"]
 
-        line = ax.plot(time_index, values, color=color, label=label, **kwargs)
+        # Filter out missing values
+        mask = np.array(values) != self.missing_value
+        filtered_time = np.array(time_index)[mask]
+        filtered_values = np.array(values)[mask]
+
+        # Only plot if we have valid data
+        if len(filtered_values) > 0:
+            line = ax.plot(filtered_time, filtered_values, color=color, label=label, **kwargs)
 
         # Apply theme styling
         ax.grid(True, alpha=0.3)
@@ -177,18 +188,38 @@ class VisualizationManager:
         if ax is None:
             fig, ax = plt.subplots(figsize=self.figsize_base)
 
-        # Plot actual and predicted
-        ax.plot(
-            time_index, actual, color=self.colors["primary"], label="Actual", **kwargs
-        )
-        ax.plot(
-            time_index,
-            predicted,
-            color=self.colors["secondary"],
-            label="Predicted",
-            linestyle="--",
-            **kwargs,
-        )
+        # Filter out missing values for actual
+        actual_array = np.array(actual)
+        actual_mask = actual_array != self.missing_value
+
+        # Filter out missing values for predicted
+        predicted_array = np.array(predicted)
+        predicted_mask = predicted_array != self.missing_value
+
+        # Filter out missing values for time index (need points valid in both series)
+        time_array = np.array(time_index)
+        combined_mask = actual_mask & predicted_mask
+
+        # Filter the data
+        filtered_time = time_array[combined_mask]
+        filtered_actual = actual_array[combined_mask]
+        filtered_predicted = predicted_array[combined_mask]
+
+        # Plot actual and predicted (only valid points)
+        if len(filtered_actual) > 0:
+            ax.plot(
+                filtered_time, filtered_actual, color=self.colors["primary"], label="Actual", **kwargs
+            )
+
+        if len(filtered_predicted) > 0:
+            ax.plot(
+                filtered_time,
+                filtered_predicted,
+                color=self.colors["secondary"],
+                label="Predicted",
+                linestyle="--",
+                **kwargs,
+            )
 
         # Apply title
         if title:
@@ -200,16 +231,18 @@ class VisualizationManager:
             ax.set_ylim(global_min, global_max)
 
         # Add metrics if requested
-        if show_metrics and len(actual) > 0 and len(predicted) > 0:
-            # Calculate metrics
-            mse = ((np.array(actual) - np.array(predicted)) ** 2).mean()
-            mae = np.abs(np.array(actual) - np.array(predicted)).mean()
+        if show_metrics and len(filtered_actual) > 0 and len(filtered_predicted) > 0:
+            # Calculate metrics only on valid points
+            mse = ((filtered_actual - filtered_predicted) ** 2).mean()
+            mae = np.abs(filtered_actual - filtered_predicted).mean()
+            valid_points = len(filtered_actual)
+            total_points = len(actual)
 
             # Add text box with metrics
             ax.text(
                 0.05,
                 0.95,
-                f"MSE: {mse:.4f}\nMAE: {mae:.4f}",
+                f"MSE: {mse:.4f}\nMAE: {mae:.4f}\nValid: {valid_points}/{total_points}",
                 transform=ax.transAxes,
                 fontsize=10,
                 verticalalignment="top",
@@ -284,7 +317,7 @@ class VisualizationManager:
         return ax
 
     def create_sensor_grid(
-        self, predictions_df, plots_per_row=4, max_sensors=16, figsize=None
+        self, predictions_df, plots_per_row=5, max_sensors=60, figsize=None
     ):
         """
         Create a grid of plots showing predictions for multiple sensors.

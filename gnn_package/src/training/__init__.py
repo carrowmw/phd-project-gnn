@@ -1,20 +1,35 @@
-from gnn_package.src.utils.model_io import load_model
-from gnn_package.src.visualization.visualization_utils import VisualizationManager
-from .stgnn_training import preprocess_data, train_model
-from .stgnn_prediction import (
-    fetch_recent_data_for_validation,
-    predict_all_sensors_with_validation,
+# src/training/__init__.py
+# Import the generalized training components
+from .base_trainer import BaseTrainer
+from .trainers import TqdmTrainer
+from .cross_validation import run_cross_validation
+from .experiment_manager import run_experiment
+from .prediction import (
     predict_with_model,
-    format_predictions_with_validation,
+    format_predictions,
+    predict_and_evaluate,
+    fetch_data_for_prediction,
 )
 
+from gnn_package.src.utils.model_io import load_model, save_model
+
+# Expose key functions and classes
 __all__ = [
-    "preprocess_data",
-    "train_model",
-    "load_model",
-    "fetch_recent_data_for_validation",
-    "VisualizationManager",
-    "predict_all_sensors_with_validation",
+    # Base training classes
+    "BaseTrainer",
+    "TqdmTrainer",
+
+    # High-level training functions
+    "run_experiment",
+    "run_cross_validation",
+
+    # Prediction functions
     "predict_with_model",
-    "format_predictions_with_validation",
+    "format_predictions",
+    "predict_and_evaluate",
+    "fetch_data_for_prediction",
+
+    # Model I/O utilities
+    "load_model",
+    "save_model",
 ]

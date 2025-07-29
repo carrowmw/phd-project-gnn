@@ -1,0 +1,21 @@
+{
+  "preprocessing": {
+    "start_time": "2025-04-29T21:28:44.600835",
+    "end_time": "2025-04-29T21:28:48.488900",
+    "duration_seconds": 3.888065,
+    "standardization": {
+      "mean": 22.12330272650015,
+      "std": 33.263281733798856
+    }
+  },
+  "standardization": {},
+  "training": {
+    "start_time": "2025-04-29T21:28:48.536096",
+    "end_time": "2025-04-29T21:56:29.934166",
+    "duration_seconds": 1661.39807,
+    "epochs_trained": 50,
+    "best_epoch": 43,
+    "best_validation_loss": 0.3169247854873538
+  },
+  "data_file": "data/raw/timeseries/test_data_1mo_person.pkl"
+}

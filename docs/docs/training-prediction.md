@@ -125,6 +125,7 @@ def cross_validate_model(data=None, data_file=None, config=None):
 ```
 
 This function:
+
 1. Creates multiple time-based splits of the data
 2. Trains a model on each split
 3. Aggregates results across all splits
@@ -150,7 +151,11 @@ flowchart TD
 Prediction begins with loading a trained model:
 
 ```python
-def load_model(model_path, config):
+def load_model(
+    model_path="path/to/model.pth",
+    config=config,
+    is_prediction_mode=True
+    ):
     """Load a trained STGNN model using parameters from config."""
 ```
 
@@ -160,13 +165,6 @@ This function:
 2. Loads the saved state dictionary
 3. Sets the model to evaluation mode
 4. Returns the loaded model
-
-For more sophisticated loading needs, the package provides:
-
-```python
-def load_model_for_prediction(model_path, config=None, override_params=None, model_creator_func=None):
-    """Load a model with the appropriate configuration for prediction."""
-```
 
 This function additionally:
 
@@ -502,16 +500,19 @@ flowchart TD
 ## Key Files and Functions
 
 - `src/training/stgnn_training.py`: Main training functions
+
   - `preprocess_data`: Prepares data for training
   - `train_model`: Trains a model with the specified configuration
   - `cross_validate_model`: Performs cross-validation
 
 - `src/training/stgnn_prediction.py`: Prediction functions
+
   - `load_model`: Loads a trained model
   - `predict_with_model`: Makes predictions using a trained model
   - `predict_all_sensors_with_validation`: End-to-end prediction pipeline
 
 - `src/tuning/tuning_utils.py`: Hyperparameter tuning utilities
+
   - `tune_hyperparameters`: Runs hyperparameter optimisation
   - `run_multi_stage_tuning`: Multi-stage tuning approach
 
@@ -523,16 +524,19 @@ flowchart TD
 1. **Data Quality**: Ensure time series data is properly resampled and has minimal gaps
 
 2. **Validation Strategy**: Use appropriate validation strategies based on data characteristics:
+
    - Time-based splits for sequential data
    - Rolling window validation for robust evaluation
    - Multiple validation splits to assess stability
 
 3. **Hyperparameter Tuning**: Start with broad parameter ranges and refine:
+
    - Begin with multi-stage tuning for efficiency
    - Use parameter importance analysis to focus search
    - Balance model capacity with dataset size
 
 4. **Model Evaluation**: Assess model performance comprehensively:
+
    - Examine error distributions across sensors
    - Analyse performance by prediction horizon
    - Compare against appropriate baselines

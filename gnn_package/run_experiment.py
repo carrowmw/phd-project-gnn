@@ -2,7 +2,7 @@
 """
 Experiment runner for GNN traffic prediction
 
-Usage: python run_experiment.py [--config CONFIG_PATH] [--output OUTPUT_DIR]
+Usage: python run_experiment.py [--config CONFIG_PATH] [--data DATA_FILE] [--output OUTPUT_DIR]
 """
 import os
 import sys
@@ -14,46 +14,59 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
+from pathlib import Path
 
-from gnn_package import training
-from gnn_package import paths
-from gnn_package.config import get_config, ExperimentConfig
+from gnn_package.config import get_config, ExperimentConfig, create_default_config
+from gnn_package.src.training.experiment_manager import run_experiment
+from gnn_package.src.training.preprocessing import prepare_data_for_experiment
 from gnn_package.src.utils.data_utils import convert_numpy_types
-
-
-runtime_stats = {
-    "preprocessing": {},
-    "standardization": {},
-    "training": {},
-}
 
 
 async def main():
     """Main function to run an experiment"""
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Run a training experiment")
-    parser.add_argument("--config", type=str, help="Path to custom config file")
-    parser.add_argument(
-        "--output", type=str, help="Output directory for experiment results"
+    parser = argparse.ArgumentParser(
+        description="Train a GNN model with isolated configuration"
     )
+    parser.add_argument("--config", type=str, help="Path to config file")
     parser.add_argument("--data", type=str, help="Path to data file")
+    parser.add_argument(
+        "--create-config", action="store_true", help="Create a default config file"
+    )
+    parser.add_argument("--output", type=str, help="Output directory for results")
+    parser.add_argument(
+        "--no-cv", action="store_true", help="Disable cross-validation"
+    )
+    parser.add_argument(
+        "--cache", type=str, help="Path to cache processed data"
+    )
     args = parser.parse_args()
 
-    # Create experiment timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Create a default config if requested
+    if args.create_config:
+        config_path = args.config or "config.yml"
+        print(f"Creating default configuration at {config_path}")
+        config = create_default_config(config_path)
+        print(
+            "Default configuration created. Edit it as needed, then run the script again."
+        )
+        return
 
-    # Initialize config
-    if args.config and os.path.exists(args.config):
-        print(f"Loading configuration from: {args.config}")
+    # Load configuration
+    if args.config:
         config = ExperimentConfig(args.config)
-        experiment_name = f"{os.path.basename(args.config).split('.')[0]}_{timestamp}"
     else:
-        print("Using global configuration")
-        config = get_config()
-        experiment_name = f"default_experiment_{timestamp}"
+        # Create a default config, not using global singleton
+        config = ExperimentConfig("config.yml")
 
     # Print configuration
-    print(f"Experiment: {config.experiment.name} (v{config.experiment.version})")
+    print(
+        f"Running experiment: {config.experiment.name} (v{config.experiment.version})"
+    )
+    print(f"Description: {config.experiment.description}")
+    print(
+        f"Model architecture: {config.model.architecture}"
+    )
     print(
         f"Data config: window_size={config.data.general.window_size}, horizon={config.data.general.horizon}"
     )
@@ -64,157 +77,53 @@ async def main():
         f"Training config: epochs={config.training.num_epochs}, lr={config.training.learning_rate}"
     )
 
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     # Create output directory
     if args.output:
-        output_dir = os.path.join(args.output, experiment_name)
+        output_dir = args.output
     else:
-        output_dir = os.path.join("experiments", experiment_name)
+        output_dir = os.path.join(
+            config.paths.results_dir,
+            f"{config.experiment.name.replace(' ', '_')}_{timestamp}",
+        )
     os.makedirs(output_dir, exist_ok=True)
+    print(f"Results will be saved to: {output_dir}")
 
-    # Preprocess data
-    print("Preprocessing data...")
-    preprocess_start = datetime.now()
+    # Prepare data with cache support
+    print("Preparing data...")
+    cache_path = args.cache or os.path.join(output_dir, f"data_cache_{timestamp}.pkl")
 
-    # Before preprocessing
-    print("\n===== Starting preprocessing =====")
-
-    # Set data file or use API based on arguments
-    if args.data:
-        print(f"Using data file: {args.data}")
-        data_package = await training.preprocess_data(
-            data_file=args.data,
-            config=config,
-        )
-    else:
-        print(f"No data file specified, fetching data from API using dates from config:")
-        print(f"  Start date: {config.data.general.start_date}")
-        print(f"  End date: {config.data.general.end_date}")
-        data_package = await training.preprocess_data(
-            config=config,  # Only pass config, no data_file
-        )
-
-    runtime_stats["data_file"] = args.data if args.data else "API"
-
-    # Preprocess data
-    preprocessed_file_name = f"data_loaders_{os.path.basename(args.data.split('/')[-1] if args.data else 'API')}_{timestamp}.pkl"
-    preprocessed_path = os.path.join(output_dir, preprocessed_file_name)
-
-
-
-    # After preprocessing
-    print("\n===== Preprocessing completed =====")
-    print(f"Data package keys: {data_package.keys()}")
-
-    preprocess_end = datetime.now()
-    print(f"Preprocessing completed in {preprocess_end - preprocess_start}")
-
-    if data_package is None:
-        raise ValueError(
-            "preprocessing returned None - check the preprocessing pipeline"
-        )
-    print(f"Data loaders type: {type(data_package)}")
-    if isinstance(data_package, dict):
-        print(f"Data loaders keys: {data_package.keys()}")
-
-    # Extract standardization stats if available
-    preprocessing_stats = {}
-    if (
-        isinstance(data_package, dict)
-        and "preprocessing_stats" in data_package["metadata"]
-    ):
-        preprocessing_stats = data_package["metadata"]["preprocessing_stats"]
-
-    runtime_stats["preprocessing"] = {
-        "start_time": preprocess_start.isoformat(),
-        "end_time": preprocess_end.isoformat(),
-        "duration_seconds": (preprocess_end - preprocess_start).total_seconds(),
-        "standardization": preprocessing_stats.get("standardization", {}),
-    }
-
-    # Extract standardization stats if available (from the processor's internal data)
-    # This depends on how your DataProcessor exposes the stats
-    if hasattr(data_package["metadata"], "preprocessing_stats"):
-        runtime_stats["standardization"] = (
-            data_package.metadata.preprocessing_stats.get("standardization", {})
-        )
-
-    # Save preprocessed data
-    with open(preprocessed_path, "wb") as f:
-        pickle.dump(data_package, f)
-    print(f"Preprocessed data saved to: {preprocessed_path}")
-
-    # Train the model
-    print("Training model...")
-    training_start = datetime.now()
-    results = training.train_model(data_package=data_package, config=config)
-    training_end = datetime.now()
-
-    # Store training statistics
-    runtime_stats["training"] = {
-        "start_time": training_start.isoformat(),
-        "end_time": training_end.isoformat(),
-        "duration_seconds": (training_end - training_start).total_seconds(),
-        "epochs_trained": len(results["train_losses"]),
-        "best_epoch": np.argmin(results["val_losses"]),
-        "best_validation_loss": results["best_val_loss"],
-    }
-
-    # Save experiment outputs
-
-    # 1. Save the model
-    model_path = os.path.join(output_dir, "model.pth")
-    torch.save(results["model"].state_dict(), model_path)
-    print(f"Model saved to: {model_path}")
-
-    # 2. Save a copy of the config used
-    config_path = os.path.join(output_dir, "config.yml")
-    config.save(config_path)
-    print(f"Configuration saved to: {config_path}")
-
-    # 3. Save runtime statistics
-    stats_path = os.path.join(output_dir, "runtime_stats.json")
-    # Convert numpy types to native Python types for JSON serialization
-    runtime_stats_converted = convert_numpy_types(runtime_stats)
-
-    with open(stats_path, "w") as f:
-        json.dump(runtime_stats_converted, f, indent=2)
-    print(f"Runtime statistics saved to: {stats_path}")
-
-    # 4. Save performance metrics
-    performance_path = os.path.join(output_dir, "performance.json")
-    performance = {
-        "best_validation_loss": results["best_val_loss"],
-        "final_training_loss": results["train_losses"][-1],
-        "final_validation_loss": results["val_losses"][-1],
-        "epochs_trained": len(results["train_losses"]),
-        "early_stopping": len(results["train_losses"]) < config.training.num_epochs,
-        "training_losses": results["train_losses"],
-        "validation_losses": results["val_losses"],
-    }
-    with open(performance_path, "w") as f:
-        json.dump(performance, f, indent=2)
-    print(f"Performance metrics saved to: {performance_path}")
-
-    # 5. Generate a training curve plot
-    plt.figure(figsize=(10, 6))
-    plt.plot(results["train_losses"], label="Training Loss")
-    plt.plot(results["val_losses"], label="Validation Loss")
-    plt.axhline(
-        y=results["best_val_loss"],
-        color="r",
-        linestyle="--",
-        label=f"Best Val Loss: {results['best_val_loss']:.4f}",
+    data_package = await prepare_data_for_experiment(
+        data_file=args.data,
+        output_cache=cache_path,
+        config=config,
+        use_cross_validation=not args.no_cv,
+        force_refresh=False
     )
-    plt.title("Training and Validation Loss")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plot_path = os.path.join(output_dir, "training_curve.png")
-    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
-    print(f"Training curve plot saved to: {plot_path}")
+
+    # Run experiment
+    print("Running experiment...")
+    experiment_results = await run_experiment(
+        data_package=data_package,
+        output_dir=output_dir,
+        config=config,
+        use_cross_validation=not args.no_cv,
+        save_model_checkpoints=True,
+        plot_results=True
+    )
 
     print(f"\nExperiment completed! All results saved to: {output_dir}")
+
+    # Report final metrics
+    if "training_results" in experiment_results:
+        best_val_loss = experiment_results["training_results"]["best_val_loss"]
+        print(f"Best validation loss: {best_val_loss:.6f}")
+    elif "cv_results" in experiment_results:
+        mean_val_loss = experiment_results["cv_results"]["mean_val_loss"]
+        std_val_loss = experiment_results["cv_results"]["std_val_loss"]
+        print(f"Cross-validation loss: {mean_val_loss:.6f} ± {std_val_loss:.6f}")
+
     return output_dir
 
 
